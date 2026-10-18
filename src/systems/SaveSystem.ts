@@ -1,9 +1,9 @@
 // OWNER: A9 (progression). New character + localStorage persistence (versioned, defensive).
 import type { BaseStats, EquipSlot, ItemStack, JobId, PlayerState, QuestProgress } from '../core/types';
 import { HOTBAR_SIZE } from '../core/types';
-import { MAX_LEVEL, SAVE_KEY, START_MAP } from '../core/constants';
+import { MAX_LEVEL, SAVE_KEY, START_MAP, TOWN_MAP } from '../core/constants';
 import { Registry } from '../core/registry';
-import { computeDerived } from './progression/stats';
+import { computeDerived, deathExpLoss } from './progression/stats';
 
 const SAVE_FORMAT = 1;
 const EQUIP_SLOTS: EquipSlot[] = ['weapon', 'hat', 'robe', 'shoes', 'gloves', 'ring', 'amulet'];
@@ -165,7 +165,11 @@ export function repairState(input: unknown): PlayerState {
     if (Array.isArray(s.hotbar)) {
       for (let i = 0; i < HOTBAR_SIZE; i++) {
         const e = s.hotbar[i];
-        out.hotbar[i] = typeof e === 'string' && e ? e : null;
+        let v = typeof e === 'string' && e ? e : null;
+        // Drop entries pointing at items/skills that no longer exist (their SP was refunded above).
+        if (v?.startsWith('item:') && !Registry.item(v.slice(5))) v = null;
+        else if (v && !v.startsWith('item:') && skillsLoaded && !out.skills[v]) v = null;
+        out.hotbar[i] = v;
       }
     }
 
@@ -208,10 +212,18 @@ export function repairState(input: unknown): PlayerState {
       }
     }
 
-    // Vitals: clamp to derived max (dead saves come back alive at 1 HP).
+    // Vitals: clamp to derived max.
     const d = computeDerived(out);
     out.hp = Math.floor(num(s.hp, d.maxHp, 1, d.maxHp));
     out.mp = Math.floor(num(s.mp, d.maxMp, 0, d.maxMp));
+    // Saved while dead (closed/reloaded before pressing respawn): apply the normal respawn —
+    // EXP penalty, 50% HP/MP, back in town — instead of reviving in place on a hostile map.
+    if (typeof s.hp === 'number' && s.hp <= 0) {
+      out.exp -= deathExpLoss(out.level, out.exp);
+      out.hp = Math.max(1, Math.ceil(d.maxHp * 0.5));
+      out.mp = Math.max(out.mp, Math.ceil(d.maxMp * 0.5));
+      if (Registry.map(TOWN_MAP) || Registry.maps().length === 0) out.mapId = TOWN_MAP;
+    }
     return out;
   } catch (e) {
     console.warn('[save] repair failed, starting fresh', e);

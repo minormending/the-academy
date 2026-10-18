@@ -1,6 +1,17 @@
 // OWNER: A9 (progression). Pure derived-stat math (no services) — shared by Progression and SaveSystem.
 import type { DerivedStatKey, DerivedStats, PlayerState, StatModifier } from '../../core/types';
 import { Registry } from '../../core/registry';
+import { expToNext } from '../../core/balance';
+import { MAX_LEVEL } from '../../core/constants';
+
+/** Fraction of the current level's EXP requirement lost on death. */
+export const DEATH_EXP_PENALTY = 0.05;
+
+/** EXP lost when dying at this level/exp (never drops below 0 EXP, no penalty at max level). */
+export function deathExpLoss(level: number, exp: number): number {
+  if (level >= MAX_LEVEL) return 0;
+  return Math.max(0, Math.min(exp, Math.floor(expToNext(level) * DEATH_EXP_PENALTY)));
+}
 
 /**
  * Base formula (before equipment / passives / buffs).

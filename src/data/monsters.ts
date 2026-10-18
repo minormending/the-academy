@@ -130,16 +130,18 @@ const lichArchon: MonsterDef = {
 };
 
 export const MONSTERS: MonsterDef[] = [
+  // Early monsters run below the ref HP curve: with the starting 45% mastery the average roll is ~0.73
+  // of max, so ref HP would take 5–6 low-level Arcane Bolts instead of the intended 3–4.
   // ── whisperwood ──
   mk({ id: 'moss_snail', name: 'Moss Snail', level: 1, behavior: 'walker', speed: 34, size: { w: 36, h: 28 },
-    hpMul: 1, touchMul: 0.8, aggressive: false, etc: 'snail_shell', etcChance: 0.55 }),
+    hpMul: 0.75, touchMul: 0.8, aggressive: false, etc: 'snail_shell', etcChance: 0.55 }),
   mk({ id: 'puff_slime', name: 'Puff Slime', level: 3, behavior: 'hopper', speed: 95, size: { w: 38, h: 32 },
-    hpMul: 0.95, touchMul: 0.9, aggressive: false, etc: 'slime_jelly', etcChance: 0.5 }),
+    hpMul: 0.8, touchMul: 0.9, aggressive: false, etc: 'slime_jelly', etcChance: 0.5 }),
   mk({ id: 'cap_shroom', name: 'Cap Shroom', level: 6, behavior: 'walker', speed: 58, size: { w: 40, h: 46 },
-    hpMul: 1.05, etc: 'shroom_cap', etcChance: 0.5 }),
+    hpMul: 0.9, etc: 'shroom_cap', etcChance: 0.5 }),
   // ── shroom_hollow ──
   mk({ id: 'thorn_shroom', name: 'Thorn Shroom', level: 9, behavior: 'walker', speed: 64, size: { w: 44, h: 52 },
-    hpMul: 1.1, expMul: 1.05, touchMul: 1.15, etc: 'thorn_spore' }),
+    hpMul: 0.95, expMul: 1.05, touchMul: 1.15, etc: 'thorn_spore' }),
   mk({ id: 'stump_golem', name: 'Stump Golem', level: 13, behavior: 'walker', speed: 44, size: { w: 50, h: 62 },
     hpMul: 1.28, expMul: 1.2, touchMul: 1.1, defMul: 1.5, etc: 'stump_bark', etcChance: 0.4 }),
   // ── frostfang_cliffs ──

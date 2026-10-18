@@ -297,6 +297,8 @@ export class SkillSystem implements ISkillSystem {
 
   private onPlayerDied() {
     this.sched.clear();
+    // In-flight projectiles must not keep killing monsters (EXP/drops) after death.
+    this.runner.clear();
     for (const id of [...this.summons.keys()]) this.destroySummon(id);
     const had = this.buffs.size > 0;
     for (const b of this.buffs.values()) destroyGo(b.aura);

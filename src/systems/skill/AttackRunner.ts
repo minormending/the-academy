@@ -38,6 +38,19 @@ interface Proj {
 
 const DEFAULT_EXPLODE = { w: 100, h: 120 };
 
+/**
+ * Position + rotate a projectile visual (authored pointing +x). When heading left the rotation is ~π,
+ * which would render asymmetric art upside-down, so mirror it vertically (scaleY sign) instead.
+ */
+function poseProj(go: Phaser.GameObjects.GameObject | null | undefined, x: number, y: number, angle: number): void {
+  setPos(go, x, y, angle);
+  if (!go) return;
+  const t = go as unknown as { scaleY?: number; scene?: unknown };
+  if (!t.scene || typeof t.scaleY !== 'number' || t.scaleY === 0) return;
+  const want = Math.cos(angle) < -1e-3 ? -1 : 1;
+  if (Math.sign(t.scaleY) !== want) t.scaleY = -t.scaleY;
+}
+
 export class AttackRunner {
   private projs: Proj[] = [];
 
@@ -341,7 +354,7 @@ export class AttackRunner {
         : this.scene.add.circle(x, y, 6, 0xd8c8ff, 0.9).setDepth(DEPTH.VFX);
     }
     if (!go) go = this.scene.add.zone(x, y, 1, 1); // invisible placeholder: logic still works
-    setPos(go, x, y, angle);
+    poseProj(go, x, y, angle);
     return go;
   }
 
@@ -385,7 +398,7 @@ export class AttackRunner {
       const W = map?.widthPx ?? 1e9, H = map?.heightPx ?? 1e9;
       if (p.x < -40 || p.x > W + 40 || p.y > H + 40 || p.y < -400 || p.travelled >= p.range) { this.kill(p, 90); return; }
     }
-    if (!p.dead) setPos(p.go, p.x, p.y, Math.atan2(p.vy, p.vx));
+    if (!p.dead) poseProj(p.go, p.x, p.y, Math.atan2(p.vy, p.vx));
   }
 
   /** Returns true if the projectile was consumed. */

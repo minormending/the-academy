@@ -102,7 +102,7 @@ const shroom_hollow: MapDef = (() => {
     spawns: [
       span('cap_shroom', 300, 1060, G, 3), on('cap_shroom', A, 1), on('cap_shroom', B, 1), on('cap_shroom', F, 1),
       span('thorn_shroom', 1300, 2460, G, 3), on('thorn_shroom', Hh, 1), on('thorn_shroom', K, 1), on('thorn_shroom', L, 1),
-      span('stump_golem', 2740, 3460, G, 2), on('stump_golem', M, 1), on('stump_golem', P, 1), on('stump_golem', Q, 1), on('stump_golem', R, 1),
+      span('stump_golem', 2740, 3400, G, 2), on('stump_golem', M, 1), on('stump_golem', P, 1), on('stump_golem', Q, 1), on('stump_golem', R, 1),
       on('thorn_shroom', C, 1),
     ],
     npcs: [],
@@ -132,7 +132,7 @@ const frostfang_cliffs: MapDef = (() => {
     ],
     portals: [portal('west', 70, G, 'shroom_hollow', 'east'), portal('east', 3730, G, 'cinder_caverns', 'west')],
     spawns: [
-      span('snow_yeti', 200, 860, G, 2), span('snow_yeti', 1600, 2560, G, 3), span('snow_yeti', 2950, 3700, G, 2),
+      span('snow_yeti', 200, 860, G, 2), span('snow_yeti', 1600, 2560, G, 3), span('snow_yeti', 2950, 3600, G, 2),
       on('frost_bat', A, 1), on('frost_bat', D, 1), on('frost_bat', Gp, 2), on('frost_bat', K, 1), on('frost_bat', B, 1),
       on('ice_wisp', I, 1), on('ice_wisp', J, 1), on('ice_wisp', L, 1), on('ice_wisp', N, 1), on('ice_wisp', O, 1), on('ice_wisp', P, 1), on('ice_wisp', S, 1),
     ],
@@ -164,7 +164,7 @@ const cinder_caverns: MapDef = (() => {
     spawns: [
       span('ember_imp', 200, 1250, G, 3), on('ember_imp', A, 1), on('ember_imp', B, 1), on('ember_imp', E, 1),
       span('lava_salamander', 1600, 2650, G, 3), on('lava_salamander', C, 1), on('lava_salamander', F, 1), on('lava_salamander', I, 1), on('lava_salamander', J, 1), on('lava_salamander', K, 1),
-      span('magma_golem', 3050, 3900, G, 2), on('magma_golem', L, 1), on('magma_golem', O, 1), on('magma_golem', R, 1), on('magma_golem', Q, 1), on('magma_golem', V, 1),
+      span('magma_golem', 3050, 3800, G, 2), on('magma_golem', L, 1), on('magma_golem', O, 1), on('magma_golem', R, 1), on('magma_golem', Q, 1), on('magma_golem', V, 1),
     ],
     npcs: [],
   };
@@ -195,7 +195,7 @@ const stormspire_peak: MapDef = (() => {
     ],
     portals: [portal('west', 70, G, 'cinder_caverns', 'east'), portal('east', 3530, G, 'arcane_sanctum', 'west')],
     spawns: [
-      span('crag_golem', 250, 1550, G, 3), span('crag_golem', 2050, 3450, G, 3), on('crag_golem', B, 1), span('crag_golem', 1640, 1960, plateau.y, 1), on('crag_golem', D, 1),
+      span('crag_golem', 250, 1550, G, 3), span('crag_golem', 2050, 3400, G, 3), on('crag_golem', B, 1), span('crag_golem', 1640, 1960, plateau.y, 1), on('crag_golem', D, 1),
       on('storm_harpy', A, 1), on('storm_harpy', E, 1), on('storm_harpy', F, 1), on('storm_harpy', Gp, 1), on('storm_harpy', I, 1), on('storm_harpy', M, 1),
       on('thunder_drake', K, 1), on('thunder_drake', L, 1), on('thunder_drake', Q, 1), on('thunder_drake', R, 1), on('thunder_drake', T, 1), on('thunder_drake', U, 1), on('thunder_drake', Wp, 1),
     ],

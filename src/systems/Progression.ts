@@ -9,15 +9,14 @@ import { bus } from '../core/events';
 import { AP_PER_LEVEL, SP_PER_LEVEL, expToNext } from '../core/balance';
 import { MAX_LEVEL, TOWN_MAP } from '../core/constants';
 import { JOB_ADVANCEMENT_QUESTS } from '../data/quests';
-import { computeDerived } from './progression/stats';
+import { computeDerived, deathExpLoss } from './progression/stats';
 import { newUid, repairState, writeSave } from './SaveSystem';
 
 /** Max inventory stacks. */
 export const MAX_INVENTORY_STACKS = 48;
 /** SP granted on each job advancement. */
 export const JOB_ADVANCE_BONUS_SP = 3;
-/** Fraction of the current level's EXP requirement lost on death. */
-export const DEATH_EXP_PENALTY = 0.05;
+export { DEATH_EXP_PENALTY } from './progression/stats';
 
 const REGEN_INTERVAL_MS = 5000;
 const AUTOSAVE_MS = 30000;
@@ -25,7 +24,6 @@ const SAFE_REGEN_MULT = 3;
 const DEFAULT_ITEM_COOLDOWN_MS = 300;
 
 const LOG = {
-  exp: '#ffe98a',
   good: '#a8ff9b',
   info: '#cfe3ff',
   warn: '#ff9b9b',
@@ -102,7 +100,6 @@ export class Progression implements IProgression {
     const s = this.state;
     if (s.level >= MAX_LEVEL) { s.exp = 0; return; }
     s.exp += amount;
-    bus.emit('ui:log', { text: `+${amount} EXP`, color: LOG.exp });
     const startLevel = s.level;
     while (s.level < MAX_LEVEL && s.exp >= expToNext(s.level)) {
       s.exp -= expToNext(s.level);
@@ -114,8 +111,11 @@ export class Progression implements IProgression {
     if (s.level > startLevel) {
       this.cache = null;
       const d = this.derived();
-      s.hp = d.maxHp;
-      s.mp = d.maxMp;
+      // EXP can still land after death (burn ticks, in-flight projectiles): don't revive via level-up.
+      if (!this.dead) {
+        s.hp = d.maxHp;
+        s.mp = d.maxMp;
+      }
       const gained = s.level - startLevel;
       bus.emit('ui:log', {
         text: `Level up! You are now level ${s.level}. (+${gained * SP_PER_LEVEL} SP, +${gained * AP_PER_LEVEL} AP)`,
@@ -123,8 +123,16 @@ export class Progression implements IProgression {
       });
       bus.emit('player:levelup', { level: s.level });
       this.refreshQuests();
-      if (this.availableAdvancements().length && this.jobDef().tier === 1) {
-        bus.emit('ui:log', { text: 'You are ready to choose a path! Speak with Elder Maelis in Mistvale.', color: LOG.quest });
+      // Announce a new advancement only on the level-up that first crosses its required level.
+      const job = this.jobDef();
+      const crossed = Registry.jobs().some(j => j.parent === job.id && startLevel < j.requiredLevel && s.level >= j.requiredLevel);
+      if (crossed) {
+        bus.emit('ui:log', {
+          text: job.tier === 1
+            ? 'You are ready to choose a path! Speak with Elder Maelis in Mistvale.'
+            : 'Your instructor in Mistvale has a new trial for you.',
+          color: LOG.quest,
+        });
       }
       this.save();
     }
@@ -219,12 +227,10 @@ export class Progression implements IProgression {
   respawn() {
     if (!this.dead) return;
     const s = this.state;
-    if (s.level < MAX_LEVEL) {
-      const loss = Math.min(s.exp, Math.floor(expToNext(s.level) * DEATH_EXP_PENALTY));
-      if (loss > 0) {
-        s.exp -= loss;
-        bus.emit('ui:log', { text: `You lost ${loss} EXP.`, color: LOG.warn });
-      }
+    const loss = deathExpLoss(s.level, s.exp);
+    if (loss > 0) {
+      s.exp -= loss;
+      bus.emit('ui:log', { text: `You lost ${loss} EXP.`, color: LOG.warn });
     }
     const d = this.derived();
     s.hp = Math.max(1, Math.ceil(d.maxHp * 0.5));
@@ -331,15 +337,28 @@ export class Progression implements IProgression {
     return room;
   }
 
-  /** True if all of these could be added at once. */
-  canFit(items: { itemId: string; qty: number }[]): boolean {
-    let freeSlots = MAX_INVENTORY_STACKS - this.state.inventory.length;
+  /**
+   * True if all of these could be added at once. `removing` items are taken out first
+   * (same smallest-stack-first order as removeItem), e.g. quest collect items handed in.
+   */
+  canFit(items: { itemId: string; qty: number }[], removing: { itemId: string; qty: number }[] = []): boolean {
+    const inv = this.state.inventory.map(st => ({ itemId: st.itemId, qty: st.qty }));
+    for (const r of removing) {
+      let left = Math.floor(r.qty);
+      for (const st of inv.filter(x => x.itemId === r.itemId).sort((a, b) => a.qty - b.qty)) {
+        if (left <= 0) break;
+        const n = Math.min(left, st.qty);
+        st.qty -= n; left -= n;
+      }
+    }
+    const sim = inv.filter(st => st.qty > 0);
+    let freeSlots = MAX_INVENTORY_STACKS - sim.length;
     for (const { itemId, qty } of items) {
       const def = Registry.item(itemId);
       if (!def) continue;
       const max = Math.max(1, def.maxStack);
       let left = qty;
-      for (const st of this.state.inventory) if (st.itemId === itemId) left -= Math.max(0, max - st.qty);
+      for (const st of sim) if (st.itemId === itemId) left -= Math.max(0, max - st.qty);
       if (left > 0) freeSlots -= Math.ceil(left / max);
       if (freeSlots < 0) return false;
     }
@@ -585,12 +604,13 @@ export class Progression implements IProgression {
     this.evalQuest(q, false);
     if (prog.status !== 'complete') return false;
     const rewards = q.rewards.items ?? [];
-    if (!this.canFit(rewards)) {
+    const handIn = q.objectives.flatMap(o => o.kind === 'collect' ? [{ itemId: o.itemId, qty: o.count }] : []);
+    if (!this.canFit(rewards, handIn)) {
       bus.emit('ui:log', { text: 'Make some room in your inventory first.', color: LOG.warn });
       return false;
     }
     prog.status = 'turned_in';
-    for (const o of q.objectives) if (o.kind === 'collect') this.removeItem(o.itemId, o.count);
+    for (const h of handIn) this.removeItem(h.itemId, h.qty);
     bus.emit('ui:log', { text: `Quest complete: ${q.name}`, color: LOG.quest });
     this.sfx('quest_complete');
     if (q.rewards.mesos) this.addMesos(q.rewards.mesos);

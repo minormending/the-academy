@@ -33,6 +33,8 @@ function pretty(id: string) { return id.split('_').map(w => w[0]?.toUpperCase() 
 function monsterName(id: string) { return Registry.monster(id)?.name ?? pretty(id); }
 function itemName(id: string) { return Registry.item(id)?.name ?? pretty(id); }
 function jobName(id: JobId) { return Registry.job(id)?.name ?? pretty(id); }
+/** "a Flamebinder" / "an Inferno Sage". */
+function aJob(name: string) { return `${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name}`; }
 
 function objectivesText(p: Progression, q: QuestDef): string {
   const pr = p.state.quests[q.id];
@@ -168,7 +170,7 @@ function elderMaelis(c: Ctx) {
     ]);
     const confirmPath = (br: ElementalBranch) => {
       const target = BRANCH_ROOT_JOB[br];
-      say(c, `${PATHS[br]}\n\nOnce chosen, a path cannot be unwalked. Will you become a ${jobName(target)}?`, [
+      say(c, `${PATHS[br]}\n\nOnce chosen, a path cannot be unwalked. Will you become ${aJob(jobName(target))}?`, [
         go(`Yes — I choose ${BRANCH_LABEL[br]}!`, () => {
           if (p.advanceJob(target)) {
             say(c, `It is done. Feel that? That is ${BRANCH_LABEL[br].toLowerCase()} recognising you, ${jobName(target)}.\n\n${BRANCH_INSTRUCTOR[br]} will guide you from here. You also have 3 bonus SP — open your skills with K.`, [bye('Thank you, Elder!')]);
@@ -232,9 +234,9 @@ const INSTRUCTOR_LINES: Record<ElementalBranch, InstructorLines> = {
       'Fire hits harder on frosty foes. Frostfang Cliffs is a pyromancer\'s playground.',
       'Never fight in the Cinder Caverns with fire alone — those beasts drink flame. Bring potions.',
     ],
-    offerTrial: job => `You've grown hot enough to forge. Prove it, and I'll make you a ${job}.`,
+    offerTrial: job => `You've grown hot enough to forge. Prove it, and I'll make you ${aJob(job)}.`,
     trialProgress: 'Still working on it? Fire waits for no one — get moving!',
-    trialDone: job => `Ha! Look at that haul! You've earned it. Ready to become a ${job}?`,
+    trialDone: job => `Ha! Look at that haul! You've earned it. Ready to become ${aJob(job)}?`,
     advanced: job => `Burn bright, ${job}! New skills await — check them with K.`,
     master: ['An Inferno Sage. Honestly? I\'m a little jealous. Go melt something magnificent.'],
   },
@@ -272,9 +274,9 @@ const INSTRUCTOR_LINES: Record<ElementalBranch, InstructorLines> = {
       'Stuns buy time — and time is the one thing lightning has too much of.',
       'Stormspire Peak is our home turf. Those harpies won\'t know what hit them.',
     ],
-    offerTrial: job => `You're crackling, kid! Pass my trial and I'll make you a ${job}. Deal?`,
+    offerTrial: job => `You're crackling, kid! Pass my trial and I'll make you ${aJob(job)}. Deal?`,
     trialProgress: 'Not done yet? Speed it up! Zip zap!',
-    trialDone: job => `BOOM! That's what I'm talking about! Ready to become a ${job}?`,
+    trialDone: job => `BOOM! That's what I'm talking about! Ready to become ${aJob(job)}?`,
     advanced: job => `Say hello to the new ${job}! Go check your skills — K, quick!`,
     master: ['A Tempest Sage. You ARE the storm now. Try not to set the town on fire. That\'s Pyra\'s job.'],
   },
@@ -310,8 +312,8 @@ function instructor(c: Ctx) {
   const targetName = jobName(trial.job);
   const st = p.questStatus(trial.questId);
 
-  const confirmAdvance = () => say(c, L.trialDone(targetName), [
-    go(`Yes! Make me a ${targetName}.`, () => {
+  const confirmAdvance = (note = '') => say(c, `${L.trialDone(targetName)}${note ? `\n\n${note}` : ''}`, [
+    go(`Yes! Make me ${aJob(targetName)}.`, () => {
       if (p.advanceJob(trial.job)) say(c, L.advanced(targetName), [bye('Thank you!')]);
       else say(c, 'Something is off... come back to me in a moment.', [bye()]);
     }),
@@ -342,7 +344,7 @@ function instructor(c: Ctx) {
   if (st === 'complete') {
     say(c, `${q.name}\n${objectivesText(p, q)}\n\nYou've done it! Hand them over?`, [
       go('Here you go.', () => {
-        if (p.turnInQuest(q.id)) confirmAdvance();
+        if (p.turnInQuest(q.id)) confirmAdvance(rewardsText(q));
         else say(c, 'Your bag is too full for your reward. Clear some space first.', [bye('Okay.')]);
       }),
       bye('One moment.'),
@@ -396,15 +398,25 @@ function smithTilda(c: Ctx) {
   ]);
 }
 
+const FINN_TIPS = [
+  'Hold Z to scoop up loot and mesos. Monsters drop the goods; you just have to grab them.',
+  'Press Up at a glowing portal to travel. East leads deeper into the wilds — and tougher monsters.',
+  'Spend your AP in the Stats window (P). INT makes your spells hit harder; LUK helps you crit.',
+  'Put potions on your hotbar! Keys 1 and 2 are perfect for them.',
+  'Ropes and ladders: walk up to one and press Up to climb.',
+];
+let lastFinnTip = -1;
+
 function scoutFinn(c: Ctx) {
   const home = () => scoutFinn(c);
-  const tips = () => say(c, pick([
-    'Hold Z to scoop up loot and mesos. Monsters drop the goods; you just have to grab them.',
-    'Press Up at a glowing portal to travel. East leads deeper into the wilds — and tougher monsters.',
-    'Spend your AP in the Stats window (P). INT makes your spells hit harder; LUK helps you crit.',
-    'Put potions on your hotbar! Keys 1 and 2 are perfect for them.',
-    'Ropes and ladders: walk up to one and press Up to climb.',
-  ]), [go('Another tip?', tips), go('Back', home), bye('Thanks!')]);
+  const tips = () => {
+    // Never the same tip twice in a row ("Another tip?" should give another tip).
+    const first = lastFinnTip < 0;
+    let i = Math.floor(Math.random() * (FINN_TIPS.length - (first ? 0 : 1)));
+    if (!first && i >= lastFinnTip) i += 1;
+    lastFinnTip = i;
+    say(c, FINN_TIPS[i], [go('Another tip?', tips), go('Back', home), bye('Thanks!')]);
+  };
   const quests = questOptions(c, home);
   say(c, pick([
     'Shh — you hear that? Snails. Hundreds of them. Okay, maybe twelve. Want to help?',

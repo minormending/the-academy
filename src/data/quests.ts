@@ -20,9 +20,9 @@ export const JOB_QUEST_IDS = new Set(Object.values(JOB_ADVANCEMENT_QUESTS));
 export const QUESTS: QuestDef[] = [
   // ───────────── Job advancement trials ─────────────
   {
-    id: 'q_job_flamebinder', name: 'Trial of the Undying Spark', giver: 'pyra', minLevel: 25, requiredJobBranch: 'fire',
-    description: 'Ember Imps in the Cinder Caverns grow horns that hold a spark that never dies. Bring Pyra 20 Imp Horns to prove you can claim fire from fire.',
-    objectives: [{ kind: 'collect', itemId: 'imp_horn', count: 20 }],
+    id: 'q_job_flamebinder', name: 'Trial of the Thawing Flame', giver: 'pyra', minLevel: 25, requiredJobBranch: 'fire',
+    description: 'The Snow Yetis of Frostfang Cliffs have never felt a real fire. Teach them, and bring Pyra 20 tufts of Yeti Fur — singed is fine.',
+    objectives: [{ kind: 'collect', itemId: 'yeti_fur', count: 20 }],
     rewards: { exp: xp(25, 0.3), mesos: 3000, items: [{ itemId: 'orange_potion', qty: 20 }] },
   },
   {
@@ -32,9 +32,9 @@ export const QUESTS: QuestDef[] = [
     rewards: { exp: xp(40, 0.3), mesos: 12000, items: [{ itemId: 'elixir', qty: 5 }] },
   },
   {
-    id: 'q_job_frostbinder', name: 'Trial of Captured Light', giver: 'glacius', minLevel: 25, requiredJobBranch: 'ice',
-    description: 'Ice Wisps drift along Frostfang Cliffs, made of light that froze mid-flight. Gather 20 Wisp Essences for Glacius — gently.',
-    objectives: [{ kind: 'collect', itemId: 'wisp_essence', count: 20 }],
+    id: 'q_job_frostbinder', name: 'Trial of the Cooled Ember', giver: 'glacius', minLevel: 25, requiredJobBranch: 'ice',
+    description: 'Ember Imps in the Cinder Caverns burn hot and think little. Still their fire and bring Glacius 20 Imp Horns, frosted through.',
+    objectives: [{ kind: 'collect', itemId: 'imp_horn', count: 20 }],
     rewards: { exp: xp(25, 0.3), mesos: 3000, items: [{ itemId: 'orange_potion', qty: 20 }] },
   },
   {
@@ -44,9 +44,9 @@ export const QUESTS: QuestDef[] = [
     rewards: { exp: xp(40, 0.3), mesos: 12000, items: [{ itemId: 'elixir', qty: 5 }] },
   },
   {
-    id: 'q_job_stormbinder', name: 'Trial of Static', giver: 'voltis', minLevel: 25, requiredJobBranch: 'lightning',
-    description: 'Snow Yeti fur holds a wonderful static charge. Voltis needs 20 tufts to weave a storm-cloak. Don\'t ask how. Just bring the fur.',
-    objectives: [{ kind: 'collect', itemId: 'yeti_fur', count: 20 }],
+    id: 'q_job_stormbinder', name: 'Trial of Captured Light', giver: 'voltis', minLevel: 25, requiredJobBranch: 'lightning',
+    description: 'Ice Wisps on Frostfang Cliffs are light that froze mid-flight — a spark can wake them. Bring Voltis 20 Wisp Essences to charge a storm-cloak.',
+    objectives: [{ kind: 'collect', itemId: 'wisp_essence', count: 20 }],
     rewards: { exp: xp(25, 0.3), mesos: 3000, items: [{ itemId: 'orange_potion', qty: 20 }] },
   },
   {

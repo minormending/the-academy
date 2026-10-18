@@ -62,17 +62,19 @@ export class NpcManager implements INpcManager {
     const height = Math.max(40, sprite.displayHeight || 80);
 
     const nameTag = scene.add.text(x, y + 4, def.name, {
-      fontFamily: 'Verdana, Arial, sans-serif', fontSize: '12px', fontStyle: 'bold', color: '#ffe95a',
-      backgroundColor: 'rgba(10,12,30,0.72)', padding: { x: 5, y: 1 },
+      fontFamily: '"Kenney Mini", "Kenney Pixel", monospace', fontSize: '16px', color: '#f4eea0',
+      backgroundColor: 'rgba(20,12,28,0.8)', padding: { x: 6, y: 2 },
+      shadow: { offsetX: 2, offsetY: 2, color: '#140c1c', blur: 0, fill: true },
     }).setOrigin(0.5, 0).setDepth(DEPTH.NAMETAG);
-    const titleTag = def.title ? scene.add.text(x, y + 23, def.title, {
-      fontFamily: 'Verdana, Arial, sans-serif', fontSize: '11px', color: '#ffffff',
-      backgroundColor: 'rgba(10,12,30,0.6)', padding: { x: 4, y: 1 },
+    const titleTag = def.title ? scene.add.text(x, y + 26, def.title, {
+      fontFamily: '"Kenney Pixel", monospace', fontSize: '16px', color: '#deeed6',
+      backgroundColor: 'rgba(26,27,69,0.75)', padding: { x: 5, y: 1 },
+      shadow: { offsetX: 1, offsetY: 1, color: '#140c1c', blur: 0, fill: true },
     }).setOrigin(0.5, 0).setDepth(DEPTH.NAMETAG) : null;
 
     const notice = scene.add.text(x, y - height - 8, '!', {
-      fontFamily: 'Verdana, Arial, sans-serif', fontSize: '26px', fontStyle: 'bold', color: '#ffd400',
-      stroke: '#5a3a00', strokeThickness: 5,
+      fontFamily: '"Kenney Mini", monospace', fontSize: '32px', color: '#ffd400',
+      stroke: '#140c1c', strokeThickness: 8,
     }).setOrigin(0.5, 1).setDepth(DEPTH.NAMETAG).setVisible(false);
 
     return { id: def.id, def, x, y, height, textureKey: key, sprite, nameTag, titleTag, notice, noticeKind: null, baseFlip };
@@ -166,8 +168,9 @@ export class NpcManager implements INpcManager {
       if (near) {
         if (!this.hint) {
           this.hint = this.scene.add.text(0, 0, '▲ Talk', {
-            fontFamily: 'Verdana, Arial, sans-serif', fontSize: '12px', fontStyle: 'bold', color: '#ffffff',
-            backgroundColor: 'rgba(40,60,140,0.85)', padding: { x: 6, y: 2 },
+            fontFamily: '"Kenney Pixel", monospace', fontSize: '16px', color: '#ffffff',
+            backgroundColor: 'rgba(75,82,148,0.9)', padding: { x: 6, y: 2 },
+            shadow: { offsetX: 1, offsetY: 1, color: '#140c1c', blur: 0, fill: true },
           }).setOrigin(0.5, 1).setDepth(DEPTH.NAMETAG);
         }
         const offset = near.noticeKind ? 40 : 10;

@@ -1,11 +1,24 @@
 /** DOM icon/portrait elements built on A10's painters, with graceful CSS fallbacks. */
 import type { CharacterLook, IconSpec } from '../core/types';
-import { iconDataUrl } from '../art/icons';
+import { iconDataUrl, onPixelIconsReady } from '../art/icons';
 import { portraitDataUrl } from '../art/characters';
 import { cssColor, h, shade } from './dom';
 
 const iconCache = new Map<string, string>();
 const portraitCache = new Map<string, string>();
+/** Specs of icons currently rendered as <img data-ik>, so they can be swapped to pixel art once the sheet loads. */
+const liveSpecs = new Map<string, IconSpec>();
+
+onPixelIconsReady(() => {
+  iconCache.clear();
+  try {
+    document.querySelectorAll<HTMLImageElement>('img.ax-icon[data-ik]').forEach(img => {
+      const spec = liveSpecs.get(img.dataset.ik ?? '');
+      const size = Number(img.dataset.sz) || 32;
+      if (spec) { const url = iconUrl(spec, size); if (url) img.src = url; }
+    });
+  } catch { /* DOM unavailable */ }
+});
 
 export function iconUrl(spec: IconSpec | undefined, size: number): string {
   if (!spec) return '';
@@ -23,8 +36,10 @@ export function iconUrl(spec: IconSpec | undefined, size: number): string {
 export function iconEl(spec: IconSpec | undefined, size: number, label = '?', extraClass = ''): HTMLElement {
   const url = iconUrl(spec, size);
   const st = `width:${size}px;height:${size}px;`;
-  if (url) {
-    const img = h('img', { class: `ax-icon ${extraClass}`, src: url, draggable: false, alt: '', style: st });
+  if (url && spec) {
+    const ik = `${spec.glyph}|${spec.color}|${spec.color2 ?? ''}|${spec.bg ?? ''}`;
+    if (!liveSpecs.has(ik)) liveSpecs.set(ik, spec);
+    const img = h('img', { class: `ax-icon ${extraClass}`, src: url, draggable: false, alt: '', style: st, 'data-ik': ik, 'data-sz': String(size) });
     return img;
   }
   const c = spec?.color ?? 0x8fa0ff;

@@ -6,6 +6,10 @@ import { expToNext } from '../core/balance';
 import type { UICtx, WindowName } from './context';
 import { clear, fmtNum, fmtSec, h, safe, setText, toggleClass } from './dom';
 import { iconEl } from './uiIcons';
+import { onPixelIconsReady, pixelIconUrl, type PixelIconName } from '../art/icons';
+
+/** Pixel-art icons for the quick-menu buttons (CSS-drawn fallbacks stay for help/menu or if the sheet fails). */
+const QUICK_ICONS: Partial<Record<WindowName, PixelIconName>> = { stats: 'C_Hat01', inventory: 'I_Chest01', skills: 'W_Book06', quests: 'I_Scroll' };
 import { itemTooltip, skillTooltip, jobName } from './info';
 
 // ───────────────────────────── Gauge ─────────────────────────────
@@ -65,9 +69,16 @@ export class StatusBar {
     this.lvNum = h('div', { class: 'ax-lv-num' }, '1');
     this.nameEl = h('div', { class: 'ax-id-name' });
     this.jobEl = h('div', { class: 'ax-id-job' });
-    const btn = (label: string, key: string, win: WindowName, title: string) =>
-      h('button', { class: 'ax-quick', title: `${title} (${key})`, onclick: () => { ctx.sfx('ui_click'); ctx.toggleWindow(win); } },
-        h('span', { class: `ax-quick-ico ax-qi-${win}` }), h('span', { class: 'ax-quick-label' }, label), h('span', { class: 'ax-quick-key' }, key));
+    const btn = (label: string, key: string, win: WindowName, title: string) => {
+      const ico = h('span', { class: `ax-quick-ico ax-qi-${win}` });
+      const px = QUICK_ICONS[win];
+      if (px) onPixelIconsReady(() => {
+        const url = pixelIconUrl(px, 26);
+        if (url) { ico.style.setProperty('--qi', `url("${url}")`); ico.classList.add('ax-qi-px'); }
+      });
+      return h('button', { class: 'ax-quick', title: `${title} (${key})`, onclick: () => { ctx.sfx('ui_click'); ctx.toggleWindow(win); } },
+        ico, h('span', { class: 'ax-quick-label' }, label), h('span', { class: 'ax-quick-key' }, key));
+    };
     this.el = h('div', { class: 'ax-statusbar' },
       h('div', { class: 'ax-lv' }, h('div', { class: 'ax-lv-tag' }, 'Lv.'), this.lvNum),
       h('div', { class: 'ax-id' }, this.nameEl, this.jobEl),

@@ -1,30 +1,37 @@
-// OWNER: A2 (skill-engine). Maple-style damage numbers rendered from cached per-glyph canvas textures.
+// OWNER: A2 (skill-engine); 16-bit pixel re-skin by PX5. Maple-style damage numbers rendered from cached per-glyph canvas textures.
 import Phaser from 'phaser';
 import { DEPTH } from '../../core/constants';
 import type { DamageNumberKind } from '../../core/types';
 
 interface Style {
-  size: number;
-  stops: [number, string][];   // vertical gradient top→bottom
-  stroke: string;
-  strokeW: number;
-  shadow: string;
+  scale: number;               // integer pixel scale of the bitmap digits
+  stops: string[];             // fill colour per glyph row band, top→bottom (stepped, no smooth gradient)
+  stroke: string;              // 1-source-pixel outline
+  shadow: string;              // 1-source-pixel drop shadow (down-right)
+  size: number;                // rendered glyph height in px (derived)
   kern: number;                // overlap between glyphs (px)
   pop: number;                 // peak pop scale
   life: number;                // ms
   rise: number;                // px risen over the lifetime
 }
 
-const FONT = '"Arial Black", "Arial Rounded MT Bold", Impact, "Trebuchet MS", sans-serif';
+/**
+ * 16-bit damage digits: glyphs of the bundled CC0 pixel font "Kenney Pixel" (see public/assets/ui/CREDITS.md)
+ * are rasterised at their 16px design size, thresholded to hard 1-bit pixels, given a 1px outline + drop
+ * shadow + stepped colour bands, then integer-scaled (nearest) into a per-kind atlas.
+ */
+const FONT = '16px "Kenney Pixel", "Courier New", monospace';
 
+const mk = (scale: number, stops: string[], stroke: string, shadow: string, pop: number, life: number, rise: number): Style =>
+  ({ scale, stops, stroke, shadow, size: 0, kern: scale, pop, life, rise });
 const STYLES: Record<DamageNumberKind, Style> = {
-  monster: { size: 34, stops: [[0, '#ff7212'], [0.42, '#ffa62a'], [0.72, '#ffd23f'], [1, '#fff27a']], stroke: '#2a1000', strokeW: 6, shadow: 'rgba(20,6,0,0.55)', kern: 7, pop: 1.3, life: 900, rise: 46 },
-  crit:    { size: 42, stops: [[0, '#ff1f4f'], [0.4, '#ff5c8d'], [0.75, '#ffb3cc'], [1, '#ffffff']], stroke: '#3a0014', strokeW: 7, shadow: 'rgba(40,0,12,0.6)', kern: 8, pop: 1.55, life: 1000, rise: 52 },
-  player:  { size: 34, stops: [[0, '#8a2cff'], [0.45, '#b46bff'], [0.8, '#dcb2ff'], [1, '#f6e8ff']], stroke: '#1b0434', strokeW: 6, shadow: 'rgba(14,0,30,0.6)', kern: 7, pop: 1.3, life: 900, rise: 44 },
-  heal:    { size: 28, stops: [[0, '#16b545'], [0.5, '#58e06e'], [1, '#d8ffb0']], stroke: '#05260d', strokeW: 5, shadow: 'rgba(0,20,6,0.55)', kern: 5, pop: 1.2, life: 900, rise: 40 },
-  mp:      { size: 28, stops: [[0, '#2a62ff'], [0.5, '#5aa2ff'], [1, '#c8ecff']], stroke: '#03143a', strokeW: 5, shadow: 'rgba(0,8,30,0.55)', kern: 5, pop: 1.2, life: 900, rise: 40 },
-  miss:    { size: 26, stops: [[0, '#80858f'], [0.55, '#b9bdc6'], [1, '#f2f3f6']], stroke: '#1d2026', strokeW: 5, shadow: 'rgba(0,0,0,0.5)', kern: 3, pop: 1.2, life: 800, rise: 36 },
-  dot:     { size: 23, stops: [[0, '#ff5a12'], [0.5, '#ff8f2e'], [1, '#ffc46b']], stroke: '#2a0b00', strokeW: 5, shadow: 'rgba(20,6,0,0.5)', kern: 4, pop: 1.15, life: 800, rise: 34 },
+  monster: mk(3, ['#fff27a', '#ffd23f', '#ffa62a', '#ff7212', '#e04a0a'], '#2a1000', 'rgba(20,6,0,0.6)', 1.3, 900, 46),
+  crit:    mk(4, ['#ffffff', '#ffb3cc', '#ff5c8d', '#ff1f4f', '#b0002c'], '#3a0014', 'rgba(40,0,12,0.6)', 1.5, 1000, 52),
+  player:  mk(3, ['#f6e8ff', '#dcb2ff', '#b46bff', '#8a2cff', '#5a10c0'], '#1b0434', 'rgba(14,0,30,0.6)', 1.3, 900, 44),
+  heal:    mk(3, ['#d8ffb0', '#8ef07a', '#58e06e', '#16b545'], '#05260d', 'rgba(0,20,6,0.55)', 1.2, 900, 40),
+  mp:      mk(3, ['#c8ecff', '#8ac4ff', '#5aa2ff', '#2a62ff'], '#03143a', 'rgba(0,8,30,0.55)', 1.2, 900, 40),
+  miss:    mk(3, ['#f2f3f6', '#d0d3da', '#b9bdc6', '#80858f'], '#1d2026', 'rgba(0,0,0,0.5)', 1.2, 800, 36),
+  dot:     mk(2, ['#ffd07b', '#ffaa3e', '#ff8f2e', '#ff5a12'], '#2a0b00', 'rgba(20,6,0,0.5)', 1.15, 800, 34),
 };
 
 const GLYPHS = '0123456789+';
@@ -51,100 +58,140 @@ interface NumObj {
 
 function texKey(kind: DamageNumberKind) { return `dmgnum_${kind}`; }
 
-/** Builds (once per game) a canvas atlas per number kind. */
+interface Bitmap { w: number; h: number; on: Uint8Array; }
+
+/** Rasterise `items` with the pixel font and threshold to 1-bit; rows are a shared window so glyphs align. */
+function rasterise(items: string[]): Map<string, Bitmap> {
+  const out = new Map<string, Bitmap>();
+  const W = 64, H = 24, BASE = 18;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return out;
+  ctx.font = FONT; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = '#fff';
+  const raw = new Map<string, Uint8Array>();
+  let top = H, bot = -1;
+  for (const s of items) {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillText(s, 2, BASE);
+    const d = ctx.getImageData(0, 0, W, H).data;
+    const on = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) if (d[i * 4 + 3] >= 128) { on[i] = 1; const y = Math.floor(i / W); top = Math.min(top, y); bot = Math.max(bot, y); }
+    raw.set(s, on);
+  }
+  if (bot < top) return out;
+  for (const [s, on] of raw) {
+    let l = W, r = -1;
+    for (let y = top; y <= bot; y++) for (let x = 0; x < W; x++) if (on[y * W + x]) { l = Math.min(l, x); r = Math.max(r, x); }
+    if (r < l) { l = 0; r = 2; }
+    const w = r - l + 1, h = bot - top + 1, b = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) b[y * w + x] = on[(y + top) * W + x + l];
+    out.set(s, { w, h, on: b });
+  }
+  return out;
+}
+
+/** Paints one glyph bitmap (outline, shadow, banded fill) at 1× into ctx at (ox, oy), then the caller scales. */
+function paintGlyph(ctx: CanvasRenderingContext2D, bm: Bitmap, style: Style, ox: number, oy: number) {
+  const { w, h, on } = bm;
+  const at = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h && on[y * w + x] === 1;
+  // shadow: outline silhouette shifted 1px down-right
+  ctx.fillStyle = style.shadow;
+  for (let y = -1; y <= h; y++) for (let x = -1; x <= w; x++) {
+    let edge = false;
+    for (let dy = -1; dy <= 1 && !edge; dy++) for (let dx = -1; dx <= 1; dx++) if (at(x + dx, y + dy)) { edge = true; break; }
+    if (edge) ctx.fillRect(ox + x + 2, oy + y + 2, 1, 1);
+  }
+  // outline (8-neighbour dilation)
+  ctx.fillStyle = style.stroke;
+  for (let y = -1; y <= h; y++) for (let x = -1; x <= w; x++) {
+    if (at(x, y)) continue;
+    let edge = false;
+    for (let dy = -1; dy <= 1 && !edge; dy++) for (let dx = -1; dx <= 1; dx++) if (at(x + dx, y + dy)) { edge = true; break; }
+    if (edge) ctx.fillRect(ox + x + 1, oy + y + 1, 1, 1);
+  }
+  // fill in stepped bands
+  for (let y = 0; y < h; y++) {
+    ctx.fillStyle = style.stops[Math.min(style.stops.length - 1, Math.floor((y / h) * style.stops.length))];
+    for (let x = 0; x < w; x++) if (at(x, y)) ctx.fillRect(ox + x + 1, oy + y + 1, 1, 1);
+  }
+  // 1px white glint on each glyph's top-left pixels
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  for (let x = 0; x < w; x++) if (at(x, 0) && !at(x - 1, 0)) ctx.fillRect(ox + x + 1, oy + 1, 1, 1);
+}
+
+/** Builds (once per game) a pixel-digit canvas atlas per number kind. */
 function buildAtlas(scene: Phaser.Scene, kind: DamageNumberKind): Atlas | null {
   const style = STYLES[kind];
   const key = texKey(kind);
   const glyphs = new Map<string, GlyphInfo>();
-  const pad = style.strokeW + 4;
-  const h = Math.ceil(style.size * 1.08 + pad * 2 + 3);
-  const font = `900 ${style.size}px ${FONT}`;
-
-  // Measure first.
-  const meas = document.createElement('canvas').getContext('2d');
-  if (!meas) return null;
-  meas.font = font;
   const items = [...GLYPHS.split(''), ...(kind === 'miss' ? WORDS : [])];
-  const widths = items.map(s => Math.ceil(meas.measureText(s).width) + pad * 2);
-  const totalW = widths.reduce((a, b) => a + b + 2, 0);
 
-  let tex: Phaser.Textures.CanvasTexture | null = null;
   if (scene.textures.exists(key)) {
     const existing = scene.textures.get(key);
-    // Re-derive frame sizes from the existing texture.
     items.forEach(s => {
       const f = existing.has(s) ? existing.get(s) : null;
       if (f) glyphs.set(s, { frame: s, w: f.width, h: f.height });
     });
+    const any = glyphs.values().next().value as GlyphInfo | undefined;
+    if (any) style.size = any.h;
     return { key, glyphs, style };
   }
-  tex = scene.textures.createCanvas(key, totalW, h);
+  const bms = rasterise(items);
+  if (!bms.size) return null;
+  const S = style.scale;
+  // 1×: glyph + 1px outline each side + 1px shadow
+  const dims = items.map(s => { const b = bms.get(s); return b ? { w: b.w + 3, h: b.h + 3 } : { w: 1, h: 1 }; });
+  const h1 = Math.max(...dims.map(d => d.h));
+  const small = document.createElement('canvas');
+  small.width = dims.reduce((a, d) => a + d.w + 1, 0); small.height = h1;
+  const sctx = small.getContext('2d');
+  if (!sctx) return null;
+  const xs: number[] = [];
+  let x1 = 0;
+  items.forEach((s, i) => { xs.push(x1); const b = bms.get(s); if (b) paintGlyph(sctx, b, style, x1, 0); x1 += dims[i].w + 1; });
+
+  const tex = scene.textures.createCanvas(key, small.width * S, h1 * S);
   if (!tex) return null;
   const ctx = tex.getContext();
-  ctx.font = font;
-  ctx.textBaseline = 'alphabetic';
-  ctx.lineJoin = 'round';
-  ctx.miterLimit = 2;
-  const baseline = pad + style.size * 0.86;
-  const top = baseline - style.size * 0.76;
-
-  let x = 0;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(small, 0, 0, small.width * S, h1 * S);
   items.forEach((s, i) => {
-    const w = widths[i];
-    const gx = x + pad;
-    // Drop shadow (thick, offset).
-    ctx.strokeStyle = style.shadow;
-    ctx.lineWidth = style.strokeW + 2;
-    ctx.strokeText(s, gx, baseline + 3);
-    // Outline.
-    ctx.strokeStyle = style.stroke;
-    ctx.lineWidth = style.strokeW;
-    ctx.strokeText(s, gx, baseline);
-    // Gradient fill.
-    const g = ctx.createLinearGradient(0, top, 0, baseline + 1);
-    for (const [o, c] of style.stops) g.addColorStop(o, c);
-    ctx.fillStyle = g;
-    ctx.fillText(s, gx, baseline);
-    // Thin glossy highlight on the upper part.
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, 0, w, top + style.size * 0.28);
-    ctx.clip();
-    ctx.globalAlpha = 0.28;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(s, gx, baseline);
-    ctx.restore();
-
-    tex!.add(s, 0, x, 0, w, h);
-    glyphs.set(s, { frame: s, w, h });
-    x += w + 2;
+    const w = dims[i].w * S, hh = h1 * S;
+    tex.add(s, 0, xs[i] * S, 0, w, hh);
+    glyphs.set(s, { frame: s, w, h: hh });
   });
   tex.refresh();
+  style.size = h1 * S;
   return { key, glyphs, style };
 }
 
+/** Pixel starburst behind crits (drawn at 1/4 size, integer-upscaled so it stays chunky). */
 function buildBurst(scene: Phaser.Scene) {
   if (scene.textures.exists(BURST_KEY)) return;
-  const S = 96;
-  const tex = scene.textures.createCanvas(BURST_KEY, S, S);
-  if (!tex) return;
+  const s = 24, K = 4;
+  const small = document.createElement('canvas'); small.width = s; small.height = s;
+  const g = small.getContext('2d');
+  const tex = scene.textures.createCanvas(BURST_KEY, s * K, s * K);
+  if (!g || !tex) return;
+  const c = s / 2;
+  const star = (ro: number, ri: number, col: string) => {
+    g.fillStyle = col; g.beginPath();
+    const spikes = 8;
+    for (let i = 0; i < spikes * 2; i++) {
+      const a = (i / (spikes * 2)) * Math.PI * 2 - Math.PI / 2, r = i % 2 === 0 ? ro * (i % 4 === 0 ? 1 : 0.8) : ri;
+      const px = c + Math.cos(a) * r, py = c + Math.sin(a) * r;
+      if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+    }
+    g.closePath(); g.fill();
+  };
+  star(11.5, 4.5, '#ff3c78'); star(8, 3, '#ffa0c4'); star(4.5, 2, '#ffffff');
+  // threshold alpha so edges are hard pixels
+  const id = g.getImageData(0, 0, s, s);
+  for (let i = 3; i < id.data.length; i += 4) id.data[i] = id.data[i] >= 110 ? 255 : 0;
+  g.putImageData(id, 0, 0);
   const ctx = tex.getContext();
-  const c = S / 2;
-  const glow = ctx.createRadialGradient(c, c, 0, c, c, c);
-  glow.addColorStop(0, 'rgba(255,255,255,0.95)');
-  glow.addColorStop(0.25, 'rgba(255,160,200,0.6)');
-  glow.addColorStop(1, 'rgba(255,60,120,0)');
-  ctx.fillStyle = glow;
-  ctx.beginPath();
-  const spikes = 10;
-  for (let i = 0; i < spikes * 2; i++) {
-    const a = (i / (spikes * 2)) * Math.PI * 2 - Math.PI / 2;
-    const r = i % 2 === 0 ? c * (0.92 + (i % 4 === 0 ? 0.08 : -0.1)) : c * 0.36;
-    const px = c + Math.cos(a) * r, py = c + Math.sin(a) * r;
-    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-  }
-  ctx.closePath();
-  ctx.fill();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(small, 0, 0, s * K, s * K);
   tex.refresh();
 }
 
@@ -191,7 +238,7 @@ export class DamageNumbers {
     // Layout glyphs.
     let total = 0;
     const infos = tokens.map(t => atlas.glyphs.get(t)).filter((g): g is GlyphInfo => !!g);
-    infos.forEach((g, i) => { total += g.w - (i > 0 ? style.kern * 2 : 0); });
+    infos.forEach((g, i) => { total += g.w - (i > 0 ? style.kern : 0); });
     let cx = -total / 2;
     while (o.imgs.length < infos.length) {
       const img = this.scene.make.image({ x: 0, y: 0, key: atlas.key, add: false });
@@ -202,10 +249,10 @@ export class DamageNumbers {
       const img = o.imgs[i];
       if (i >= infos.length) { img.setVisible(false); continue; }
       const g = infos[i];
-      if (i > 0) cx -= style.kern * 2;
+      if (i > 0) cx -= style.kern;
       img.setTexture(atlas.key, g.frame).setOrigin(0, 1).setVisible(true);
       // Slight Maple-style vertical stagger between digits.
-      img.setPosition(cx, (i % 2 === 0 ? 0 : -2) + 4);
+      img.setPosition(cx, (i % 2 === 0 ? 0 : -style.scale) + style.scale);
       cx += g.w;
     }
     // Order so later glyphs draw on top (left glyph partially covered, like Maple).

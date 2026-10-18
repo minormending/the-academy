@@ -1,4 +1,7 @@
-// OWNER: A8 (ui). Title screen: animated arcane night sky + mage tower, DOM menu on top.
+// OWNER: A8 (ui); pixel pass by PX5. Title screen: animated arcane night sky + mage tower, DOM menu on top.
+// 16-bit look: the sky is drawn in stepped colour bands (no smooth gradient) and the whole backdrop camera
+// is run through Phaser's Pixelate post-FX so every shape lands on a chunky 4×4 pixel grid (WebGL only;
+// on Canvas it simply renders unpixelated). The DOM menu (pixel fonts + 9-slice frames) stays crisp on top.
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH, SCENES } from '../core/constants';
 import type { PlayerState } from '../core/types';
@@ -23,6 +26,9 @@ export class TitleScene extends Phaser.Scene {
     this.leaving = false;
     this.t = 0;
     try { this.buildBackground(); } catch (e) { console.warn('[title] background failed', e); }
+    try {
+      if (this.game.renderer.type === Phaser.WEBGL) this.cameras.main.postFX?.addPixelate(2);
+    } catch (e) { console.warn('[title] pixelate fx unavailable', e); }
 
     this.menu = new TitleMenu(this, (state) => this.startGame(state));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
@@ -86,9 +92,21 @@ export class TitleScene extends Phaser.Scene {
     const rnd = new Phaser.Math.RandomDataGenerator(['arcana']);
 
     // Sky
+    // Sky: stepped bands with a 1-row checker dither between them (16-bit style, no smooth gradient).
     const sky = this.add.graphics();
-    sky.fillGradientStyle(0x04061a, 0x04061a, 0x2c1656, 0x3a1f5e, 1);
-    sky.fillRect(0, 0, W, H);
+    const BANDS = 12, bandH = Math.ceil(H / BANDS / 8) * 8;
+    const bandCol = (i: number) => Phaser.Display.Color.Interpolate.ColorWithColor(
+      Phaser.Display.Color.ValueToColor(0x04061a), Phaser.Display.Color.ValueToColor(0x3a1f5e), BANDS - 1, i);
+    for (let i = 0; i < BANDS; i++) {
+      const c = bandCol(i);
+      sky.fillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b), 1);
+      sky.fillRect(0, i * bandH, W, bandH);
+      if (i > 0) {
+        const p = bandCol(i - 1);
+        sky.fillStyle(Phaser.Display.Color.GetColor(p.r, p.g, p.b), 1);
+        for (let x = 0; x < W; x += 16) sky.fillRect(x, i * bandH, 8, 4);
+      }
+    }
 
     // Nebula clouds
     const neb: [number, number, number, number][] = [[260, 160, 0x6a3cff, 11], [720, 90, 0x2fb8ff, 9], [1100, 300, 0xff5fae, 8], [480, 420, 0x7b4dff, 12]];

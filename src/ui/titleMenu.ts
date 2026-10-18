@@ -11,6 +11,14 @@ import { markNewCharacter } from './session';
 
 type View = 'main' | 'new' | 'delete';
 
+// Start loading the bundled pixel fonts right away so BootScene's document.fonts.ready waits for them
+// (Phaser name tags / damage numbers rasterise text into canvases and need the real font).
+try {
+  const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
+  void fonts?.load('16px "Kenney Pixel"').catch(() => undefined);
+  void fonts?.load('16px "Kenney Mini"').catch(() => undefined);
+} catch { /* FontFaceSet unavailable */ }
+
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _'-]*[A-Za-z0-9]$/;
 
 export function validateName(raw: string): string | null {

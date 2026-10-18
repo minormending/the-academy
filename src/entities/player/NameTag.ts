@@ -11,9 +11,11 @@ export class NameTag {
   constructor(scene: Phaser.Scene) {
     this.bg = scene.add.graphics();
     this.label = scene.add.text(0, 0, '', {
-      fontFamily: '"Trebuchet MS", Verdana, sans-serif',
-      fontSize: '11px',
+      // 16-bit pixel font (CC0 Kenney Mini, bundled by the UI; crisp at multiples of 8px).
+      fontFamily: '"Kenney Mini", "Kenney Pixel", monospace',
+      fontSize: '16px',
       color: '#ffffff',
+      shadow: { offsetX: 2, offsetY: 2, color: '#140c1c', blur: 0, fill: true },
     }).setOrigin(0.5, 0).setResolution(2);
     this.container = scene.add.container(0, 0, [this.bg, this.label]).setDepth(DEPTH.NAMETAG);
     this.container.setVisible(false);
@@ -23,13 +25,20 @@ export class NameTag {
     if (name === this.name) return;
     this.name = name;
     this.label.setText(name);
-    const padX = 5, padY = 2;
+    const padX = 6, padY = 2;
     const w = Math.ceil(this.label.width) + padX * 2;
     const h = Math.ceil(this.label.height) + padY * 2;
     this.label.setPosition(0, padY);
     this.bg.clear();
-    this.bg.fillStyle(0x000000, 0.55);
-    this.bg.fillRoundedRect(-w / 2, 0, w, h, 4);
+    // Square pixel plate: dark fill + 2px outline with cut corners.
+    const x0 = -Math.round(w / 2);
+    this.bg.fillStyle(0x140c1c, 0.85);
+    this.bg.fillRect(x0 + 2, 0, w - 4, 2);
+    this.bg.fillRect(x0 + 2, h - 2, w - 4, 2);
+    this.bg.fillRect(x0, 2, 2, h - 4);
+    this.bg.fillRect(x0 + w - 2, 2, 2, h - 4);
+    this.bg.fillStyle(0x1a1b45, 0.8);
+    this.bg.fillRect(x0 + 2, 2, w - 4, h - 4);
     this.container.setVisible(name.length > 0);
   }
 

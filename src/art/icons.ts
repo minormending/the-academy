@@ -1,11 +1,20 @@
-// OWNER: A10 (art-audio). Pure-canvas icon painter for every IconGlyph.
+// OWNER: A10 (art-audio); pixel-art layer by PX5 (pixel UI). Icon painter for every IconGlyph.
 //
-// Each glyph is painted in a 32×32 design space, then a uniform dark outline is produced by dilating
+// 16-bit pivot: icons now come from the CC0 "496 pixel art icons for medieval/fantasy RPG" sheet
+// (Henrique Lazarini / 7Soul1, packed into public/assets/ui/icons/rpg_icons_7soul1.png). The sheet is
+// loaded as an HTMLImageElement at import time (iconDataUrl is synchronous and used before Phaser loads
+// anything); until it arrives — or if it fails — the procedural painter below is used. On load the caches
+// are cleared, onPixelIconsReady() listeners run and 'player:changed' is emitted so the UI refreshes.
+//
+// Procedural fallback: each glyph is painted in a 32×32 design space, then a uniform dark outline is produced by dilating
 // the glyph's silhouette, giving a crisp "sticker" look at any size. Skill icons (spec.bg set) sit on a
 // rounded beveled tile; item icons have no tile but get a soft drop shadow.
 import Phaser from 'phaser';
 import type { IconGlyph, IconSpec } from '../core/types';
-import { css, makeCanvas, mix, shade } from './char/color';
+import { css, makeCanvas, mix, rgb, shade } from './char/color';
+import { assetUrl } from './assets';
+import { Registry } from '../core/registry';
+import { bus } from '../core/events';
 
 type Ctx = CanvasRenderingContext2D;
 type Painter = (ctx: Ctx, c: number, c2: number) => void;
@@ -657,6 +666,9 @@ export function iconCanvas(spec: IconSpec, size = 32): HTMLCanvasElement | null 
   if (!out || !ctx) { canvasCache.set(key, null); return null; }
   const tile = spec.bg != null;
   try {
+    if (renderPixelIcon(ctx, spec, S)) { canvasCache.set(key, out); return out; }
+  } catch (e) { console.warn('[icons] pixel icon failed', spec, e); }
+  try {
     const glyph = renderGlyphCanvas(spec, S, tile);
     if (glyph) {
       const r = Math.max(0.9, S / 32 * (tile ? 0.95 : 1.1));
@@ -689,7 +701,7 @@ export function iconDataUrl(spec: IconSpec, size = 32): string {
 /** Same icon registered as a Phaser texture (cached); returns texture key. */
 export function iconTexture(scene: Phaser.Scene, spec: IconSpec, size = 32): string {
   if (!spec) return '__DEFAULT';
-  const key = `icon_${specKey(spec, Math.max(8, Math.round(size)))}`;
+  const key = `icon_v${iconVersion}_${specKey(spec, Math.max(8, Math.round(size)))}`;
   try {
     if (scene.textures.exists(key)) return key;
     const c = iconCanvas(spec, size);
@@ -707,3 +719,299 @@ export function iconTexture(scene: Phaser.Scene, spec: IconSpec, size = 32): str
 
 /** Every glyph the painter supports (for debug galleries). */
 export const ICON_GLYPHS = Object.keys(P) as IconGlyph[];
+
+// ───────────────────────────── 16-bit pixel icons (sheet) ─────────────────────────────
+
+const SHEET_PATH = 'ui/icons/rpg_icons_7soul1.png';
+const SHEET_COLS = 12;
+const CELL = 34;   // sheet cell; the icon art sits in the centred 32×32
+const SHEET_NAMES = ['S_Fire01', 'S_Fire02', 'S_Fire03', 'S_Fire04', 'S_Fire05', 'S_Fire06', 'S_Fire07', 'S_Fire08', 'S_Light01', 'S_Light02', 'S_Light03', 'S_Light04', 'S_Holy01', 'S_Holy05', 'S_Holy08', 'S_Holy09', 'S_Ice01', 'S_Ice02', 'S_Ice03', 'S_Ice04', 'S_Ice05', 'S_Ice06', 'S_Ice07', 'S_Ice08', 'S_Ice09', 'S_Magic01', 'S_Magic02', 'S_Magic03', 'S_Magic04', 'S_Magic05', 'S_Magic06', 'S_Magic10', 'S_Thunder01', 'S_Thunder02', 'S_Thunder03', 'S_Thunder04', 'S_Thunder05', 'S_Thunder06', 'S_Thunder07', 'S_Wind01', 'S_Wind03', 'S_Wind04', 'S_Wind05', 'S_Wind06', 'S_Wind07', 'S_Water01', 'S_Water02', 'S_Water04', 'S_Water05', 'S_Water06', 'S_Water07', 'S_Shadow02', 'S_Shadow08', 'S_Shadow09', 'S_Shadow11', 'S_Shadow14', 'S_Shadow15', 'S_Physic01', 'S_Buff01', 'S_Buff09', 'S_Buff14', 'P_Red01', 'P_Red07', 'P_Blue01', 'P_Blue05', 'P_Pink01', 'P_Pink06', 'P_Orange01', 'P_Yellow01', 'P_White01', 'P_Green01', 'W_Staff01', 'W_Staff02', 'W_Staff03', 'W_Staff04', 'W_Staff05', 'W_Staff06', 'W_Staff07', 'W_Staff08', 'W_Book01', 'W_Book06', 'W_Book07', 'W_Fist001', 'W_Fist002', 'W_Fist004', 'C_Hat01', 'C_Hat02', 'A_Clothing01', 'A_Clothing02', 'A_Armour01', 'A_Shoes01', 'A_Shoes02', 'A_Shoes03', 'A_Shoes04', 'A_Shoes06', 'A_Shoes07', 'Ac_Ring01', 'Ac_Ring02', 'Ac_Necklace01', 'Ac_Necklace03', 'Ac_Necklace04', 'Ac_Necklace07', 'Ac_Medal01', 'I_GoldCoin', 'I_SilverCoin', 'I_BronzeCoin', 'I_Ruby', 'I_Sapphire', 'I_Diamond', 'I_Jade', 'I_Amethist', 'I_Opal', 'I_Agate', 'I_Scroll', 'I_Scroll02', 'I_SnailShell', 'I_SolidShell', 'I_C_Mushroom', 'I_Feather01', 'I_Feather02', 'I_WolfFur', 'I_FoxTail', 'I_Bone', 'I_Fang', 'I_Crystal01', 'I_Crystal02', 'I_Crystal03', 'I_FishTail', 'I_Eye', 'I_Book', 'I_Chest01', 'I_Map', 'I_Key01', 'I_Clock', 'I_Mirror'] as const;
+export type PixelIconName = typeof SHEET_NAMES[number];
+
+/** A sheet icon; `tint` = palette-swap it to spec.color (by luminance) instead of drawing it as-is. */
+interface Cand { n: PixelIconName; tint?: boolean }
+const A = (...n: PixelIconName[]): Cand[] => n.map(x => ({ n: x }));
+const T = (n: PixelIconName): Cand => ({ n, tint: true });
+
+/**
+ * Glyph → candidate sheet icons. Specs sharing a glyph get distinct candidates (assigned in Registry order,
+ * skills and items separately) and an untinted candidate is used only if its colour is close to spec.color;
+ * otherwise a tinted (palette-swapped) candidate is used.
+ */
+const PIXEL_ICONS: Record<IconGlyph, Cand[]> = {
+  flame: A('S_Fire03', 'S_Fire02', 'S_Fire04'),
+  fireball: [...A('S_Fire01', 'S_Fire05'), T('S_Magic03')],
+  meteor: A('S_Fire05', 'S_Fire06'),
+  phoenix: [...A('S_Fire07'), T('S_Holy05'), T('S_Holy08'), ...A('S_Fire01')],
+  ember: [T('S_Light01'), ...A('S_Fire08', 'S_Buff09'), T('S_Light02')],
+  explosion: [T('S_Physic01'), T('S_Light02'), ...A('S_Fire06')],
+  snowflake: [...A('S_Ice02'), T('S_Light01')],
+  icicle: A('S_Ice03', 'S_Ice09', 'S_Ice05'),
+  ice_shard: A('S_Ice04', 'S_Ice03'),
+  frost_nova: [...A('S_Magic02', 'S_Water02'), T('S_Ice05')],
+  blizzard: [...A('S_Water05', 'S_Ice07'), T('S_Wind05')],
+  glacier: A('S_Ice01', 'S_Water04', 'S_Ice08'),
+  bolt: A('S_Thunder01', 'S_Thunder04', 'S_Thunder05'),
+  chain: A('S_Thunder06', 'S_Thunder05', 'S_Thunder04'),
+  storm: [...A('S_Thunder07'), T('S_Water05'), T('S_Wind01')],
+  thunder_cloud: [T('S_Water01'), T('S_Wind04')],
+  spark: [...A('S_Light01', 'S_Thunder03'), T('S_Light01')],
+  orb: [...A('S_Ice06', 'S_Thunder02', 'S_Water07'), T('S_Magic04'), T('S_Shadow02')],
+  arcane_star: [T('S_Light01'), T('S_Fire08'), T('S_Holy08')],
+  missile: [T('S_Magic03'), T('S_Light04')],
+  claw: [T('S_Shadow09'), T('S_Shadow08')],
+  shield: [...A('S_Holy09'), T('S_Water07'), T('S_Holy09')],
+  teleport: [T('S_Shadow11'), T('S_Magic05'), T('S_Magic06')],
+  book: [T('S_Shadow15'), ...A('W_Book06', 'W_Book07', 'W_Book01', 'I_Book')],
+  eye: [T('S_Shadow14'), ...A('I_Eye')],
+  wind: [...A('S_Water06', 'S_Wind07', 'S_Wind03', 'S_Wind06'), T('S_Wind03')],
+  heart: [...A('S_Holy01'), T('S_Holy01')],
+  mana: [T('S_Magic04'), T('S_Light03'), T('S_Water07')],
+  potion: A('P_Red01', 'P_Blue01', 'P_Pink06', 'P_Orange01', 'P_Yellow01', 'P_White01', 'P_Green01', 'P_Red07', 'P_Blue05', 'P_Pink01'),
+  wand: [...A('W_Staff01', 'W_Staff08', 'S_Light04')],
+  staff: A('W_Staff02', 'W_Staff03', 'W_Staff04', 'W_Staff05', 'W_Staff06', 'W_Staff07', 'W_Staff08', 'W_Staff01'),
+  hat: [...A('C_Hat01', 'C_Hat02'), T('C_Hat01'), T('C_Hat02')],
+  robe: [...A('A_Clothing01', 'A_Clothing02'), T('A_Armour01'), T('A_Clothing02')],
+  shoes: A('A_Shoes01', 'A_Shoes02', 'A_Shoes03', 'A_Shoes04', 'A_Shoes06', 'A_Shoes07'),
+  gloves: [...A('W_Fist002', 'W_Fist001', 'W_Fist004'), T('W_Fist001')],
+  ring: A('Ac_Ring02', 'Ac_Ring01'),
+  amulet: A('Ac_Necklace03', 'Ac_Necklace01', 'Ac_Necklace07', 'Ac_Necklace04', 'Ac_Medal01'),
+  coin: A('I_GoldCoin', 'I_SilverCoin', 'I_BronzeCoin'),
+  gem: [...A('I_Ruby', 'I_Sapphire', 'I_Diamond', 'I_Jade', 'I_Amethist', 'I_Opal'), T('I_Diamond')],
+  scroll: A('I_Scroll', 'I_Scroll02'),
+  shell: [...A('I_SnailShell', 'I_SolidShell'), T('I_SnailShell')],
+  jelly: [T('I_Agate'), ...A('I_Agate')],
+  mushroom: [...A('I_C_Mushroom'), T('I_C_Mushroom')],
+  feather: [...A('I_Feather01', 'I_Feather02'), T('I_Feather01'), T('I_Feather02')],
+  fur: [...A('I_WolfFur', 'I_FoxTail'), T('I_WolfFur')],
+  bone: [...A('I_Bone', 'I_Fang'), T('I_Bone')],
+  crystal: [...A('I_Crystal01', 'I_Amethist', 'I_Crystal03'), T('I_Crystal03')],
+  scale: [T('I_SolidShell'), ...A('I_FishTail'), T('I_FishTail')],
+};
+
+let sheet: HTMLImageElement | null = null;
+let iconVersion = 0;
+const readyCbs: (() => void)[] = [];
+const sigCache = new Map<PixelIconName, number>();
+const assigned = new Map<string, Cand>();
+let assignedDone = false;
+
+/** True once the pixel icon sheet has loaded (icons are pixel art from then on). */
+export function pixelIconsReady(): boolean { return !!sheet; }
+/** Runs `cb` when the pixel icon sheet finishes loading (immediately if already loaded). */
+export function onPixelIconsReady(cb: () => void): void {
+  if (sheet) { try { cb(); } catch (e) { console.warn('[icons] ready cb failed', e); } }
+  else readyCbs.push(cb);
+}
+
+function loadSheet() {
+  if (typeof Image === 'undefined') return;
+  try {
+    const img = new Image();
+    img.onload = () => {
+      sheet = img;
+      iconVersion++;
+      canvasCache.clear(); urlCache.clear(); sigCache.clear(); assigned.clear(); assignedDone = false;
+      for (const cb of readyCbs.splice(0)) { try { cb(); } catch (e) { console.warn('[icons] ready cb failed', e); } }
+      try { bus.emit('player:changed', {}); } catch { /* no game yet */ }
+    };
+    img.onerror = () => console.warn('[icons] pixel icon sheet failed to load; using procedural icons');
+    img.src = assetUrl(SHEET_PATH);
+  } catch (e) { console.warn('[icons] pixel icon sheet unavailable', e); }
+}
+loadSheet();
+
+function cellXY(n: PixelIconName): [number, number] {
+  const i = SHEET_NAMES.indexOf(n);
+  return [(i % SHEET_COLS) * CELL + 1, Math.floor(i / SHEET_COLS) * CELL + 1];
+}
+
+function iconPixels(n: PixelIconName): ImageData | null {
+  if (!sheet) return null;
+  const c = makeCanvas(32, 32);
+  const x = c?.getContext('2d', { willReadFrequently: true });
+  if (!c || !x) return null;
+  const [sx, sy] = cellXY(n);
+  x.drawImage(sheet, sx, sy, 32, 32, 0, 0, 32, 32);
+  return x.getImageData(0, 0, 32, 32);
+}
+
+/** Saturation-weighted average colour of a sheet icon (its "identity" colour). */
+function signature(n: PixelIconName): number {
+  const hit = sigCache.get(n);
+  if (hit !== undefined) return hit;
+  const d = iconPixels(n)?.data;
+  let r = 0, g = 0, b = 0, w = 0, pr = 0, pg = 0, pb = 0, pn = 0;
+  if (d) for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 128) continue;
+    const R = d[i], G = d[i + 1], B = d[i + 2];
+    const mx = Math.max(R, G, B), mn = Math.min(R, G, B);
+    if (mx < 40) continue; // outline
+    const sat = mx ? (mx - mn) / mx : 0, vivid = sat * (mx / 255), wt = vivid * vivid * vivid; // bright + saturated dominates
+    r += R * wt; g += G * wt; b += B * wt; w += wt; pr += R; pg += G; pb += B; pn++;
+  }
+  const sig = w > pn * 0.04 ? ((r / w) << 16) | ((g / w) << 8) | (b / w) : pn ? ((pr / pn) << 16) | ((pg / pn) << 8) | (pb / pn) : 0x808080;
+  sigCache.set(n, sig);
+  return sig;
+}
+
+/** "Redmean" perceptual RGB distance (0..~765). */
+function cdist(a: number, b: number): number {
+  const [r1, g1, b1] = rgb(a), [r2, g2, b2] = rgb(b);
+  const rm = (r1 + r2) / 2, dr = r1 - r2, dg = g1 - g2, db = b1 - b2;
+  return Math.sqrt((2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db);
+}
+
+const MATCH = 200; // an untinted candidate within this distance of spec.color is "the right colour"
+
+/** Near-white specs (e.g. white-hot lightning) carry their hue in color2. */
+function isWhite(n: number | undefined) { return n != null && luma(n) > 0.85; }
+
+function pickCand(spec: IconSpec, cands: Cand[], used: Set<PixelIconName>): Cand {
+  const col = spec.color ?? 0x888888;
+  const ordered = spec.bg != null;          // skill tiles: candidate lists are hand-ordered, take the first that fits
+  const white = ordered && isWhite(col);    // white-hot skills fit any untinted icon: first free one in list order
+  const dist = (c: Cand) => (white ? 0 : cdist(signature(c.n), col));
+  const untinted = cands.filter(c => !c.tint), tinted = cands.filter(c => c.tint);
+  // 1. an unused untinted icon of the right colour
+  let best: Cand | null = null, bd = Infinity;
+  for (const c of untinted) {
+    if (used.has(c.n)) continue;
+    const d = dist(c);
+    if (d < MATCH && d < bd) { best = c; bd = d; if (ordered) break; }
+  }
+  if (best) return best;
+  // 2. an unused tinted icon (recoloured to spec.color)
+  const freeT = tinted.find(c => !used.has(c.n));
+  if (freeT) return freeT;
+  // 3. the closest unused untinted icon, then 4. the closest/first of anything
+  for (const pass of [true, false]) {
+    for (const c of untinted) {
+      if (pass && used.has(c.n)) continue;
+      const d = dist(c);
+      if (d < bd) { best = c; bd = d; }
+    }
+    if (best) return best;
+  }
+  return tinted[0] ?? cands[0];
+}
+
+function colorKey(spec: IconSpec) { return `${spec.glyph}_${hex(spec.color)}_${hex(spec.color2)}_${spec.bg != null ? 't' : 'i'}`; }
+
+/** Deterministic, collision-avoiding glyph→icon assignment over every skill and item in the Registry. */
+function ensureAssignments() {
+  if (assignedDone || !sheet) return;
+  assignedDone = true;
+  const used = new Map<string, Set<PixelIconName>>();
+  const specs: IconSpec[] = [];
+  try { for (const s of Registry.skills()) if (s?.icon) specs.push(s.icon); } catch { /* registry unavailable */ }
+  try { for (const it of Registry.items()) if (it?.icon) specs.push(it.icon); } catch { /* registry unavailable */ }
+  for (const spec of specs) {
+    const cands = PIXEL_ICONS[spec.glyph];
+    if (!cands?.length) continue;
+    const k = colorKey(spec);
+    if (assigned.has(k)) continue;
+    const uk = `${spec.glyph}_${spec.bg != null ? 't' : 'i'}`;
+    let u = used.get(uk);
+    if (!u) { u = new Set(); used.set(uk, u); }
+    const c = pickCand(spec, cands, u);
+    u.add(c.n);
+    assigned.set(k, c);
+  }
+}
+
+function chooseCand(spec: IconSpec): Cand | null {
+  const cands = PIXEL_ICONS[spec.glyph];
+  if (!cands?.length) return null;
+  ensureAssignments();
+  return assigned.get(colorKey(spec)) ?? pickCand(spec, cands, new Set());
+}
+
+/** Palette-swap a sheet icon to spec.color by luminance (outline pixels are kept). */
+function recolor(img: ImageData, color: number, color2: number | undefined) {
+  const hi = color2 != null && Math.abs(luma(color2) - luma(color)) > 0.12 && luma(color2) > luma(color) ? mix(color, color2, 0.6) : shade(color, 0.6);
+  const stops = [shade(color, -0.78), shade(color, -0.5), shade(color, -0.2), color, mix(color, hi, 0.55), hi, shade(hi, 0.7)];
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] === 0) continue;
+    const L = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
+    if (L < 0.12) continue;
+    const t = Math.min(0.999, (L - 0.12) / 0.88) * stops.length;
+    const [r, g, b] = rgb(stops[Math.floor(t)]);
+    d[i] = r; d[i + 1] = g; d[i + 2] = b;
+  }
+}
+function luma(n: number) { const [r, g, b] = rgb(n); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; }
+
+/** Banded 16-bit tile behind skill icons: bg colour in 3 bands, 1-unit dark outline + bevel drawn on top later. */
+function pixelTileBack(ctx: Ctx, S: number, u: number, bg: number) {
+  const bands = [shade(bg, 0.16), shade(bg, 0.06), bg, shade(bg, -0.18)];
+  const bh = Math.ceil(S / bands.length / u) * u;
+  bands.forEach((c, i) => { ctx.fillStyle = css(c); ctx.fillRect(0, i * bh, S, bh); });
+  // sparse dither between bands
+  ctx.fillStyle = css(shade(bg, 0.16));
+  for (let y = bh; y < bh + u * 2; y += u) for (let x = ((y / u) % 2) * u; x < S; x += u * 2) ctx.fillRect(x, y, u, u);
+}
+function pixelTileFrame(ctx: Ctx, S: number, u: number, bg: number) {
+  const dark = '#140c1c';
+  ctx.fillStyle = css(shade(bg, 0.5));
+  ctx.fillRect(u, u, S - 2 * u, u); ctx.fillRect(u, u, u, S - 2 * u);
+  ctx.fillStyle = css(shade(bg, -0.55));
+  ctx.fillRect(u, S - 2 * u, S - 2 * u, u); ctx.fillRect(S - 2 * u, u, u, S - 2 * u);
+  ctx.fillStyle = dark;
+  ctx.fillRect(u, 0, S - 2 * u, u); ctx.fillRect(u, S - u, S - 2 * u, u);
+  ctx.fillRect(0, u, u, S - 2 * u); ctx.fillRect(S - u, u, u, S - 2 * u);
+  ctx.clearRect(0, 0, u, u); ctx.clearRect(S - u, 0, u, u); ctx.clearRect(0, S - u, u, u); ctx.clearRect(S - u, S - u, u, u);
+}
+
+/** Draws the sheet icon for `spec` into ctx (S×S) at an integer scale. Returns false if unavailable. */
+function renderPixelIcon(ctx: Ctx, spec: IconSpec, S: number): boolean {
+  if (!sheet) return false;
+  const cand = chooseCand(spec);
+  if (!cand) return false;
+  const px = iconPixels(cand.n);
+  if (!px) return false;
+  if (cand.tint) {
+    const col = spec.color ?? 0x888888;
+    if (isWhite(col) && spec.color2 != null && !isWhite(spec.color2)) recolor(px, spec.color2, col);
+    else recolor(px, col, spec.color2);
+  }
+  const g = makeCanvas(32, 32);
+  const gx = g?.getContext('2d');
+  if (!g || !gx) return false;
+  gx.putImageData(px, 0, 0);
+  const k = Math.max(1, Math.floor((S + 4) / 32));
+  const d = 32 * k, off = Math.floor((S - d) / 2);
+  ctx.imageSmoothingEnabled = false;
+  const tile = spec.bg != null;
+  if (tile) pixelTileBack(ctx, S, k, spec.bg!);
+  else {
+    // hard pixel drop shadow (1 source px down-right)
+    const sh = makeCanvas(32, 32); const sx = sh?.getContext('2d');
+    if (sh && sx) {
+      sx.drawImage(g, 0, 0); sx.globalCompositeOperation = 'source-in'; sx.fillStyle = 'rgba(10,6,24,0.45)'; sx.fillRect(0, 0, 32, 32);
+      ctx.drawImage(sh, 0, 0, 32, 32, off + k, off + k, d, d);
+    }
+  }
+  ctx.drawImage(g, 0, 0, 32, 32, off, off, d, d);
+  if (tile) pixelTileFrame(ctx, S, k, spec.bg!);
+  return true;
+}
+
+/** Draws a named sheet icon (e.g. 'I_Chest01') as a data URL at an integer scale — for UI chrome (quick menu). */
+export function pixelIconUrl(name: PixelIconName, size = 32): string {
+  const key = `named_${name}_${size}`;
+  const hit = urlCache.get(key);
+  if (hit) return hit;
+  if (!sheet) return '';
+  const c = makeCanvas(size, size); const x = c?.getContext('2d');
+  if (!c || !x) return '';
+  x.imageSmoothingEnabled = false;
+  const k = Math.max(1, Math.floor((size + 4) / 32)), d = 32 * k, off = Math.floor((size - d) / 2);
+  const [sx, sy] = cellXY(name);
+  x.drawImage(sheet, sx, sy, 32, 32, off, off, d, d);
+  let url = '';
+  try { url = c.toDataURL('image/png'); } catch { url = ''; }
+  urlCache.set(key, url);
+  return url;
+}

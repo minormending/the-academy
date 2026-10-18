@@ -32,6 +32,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
   private keyPickup!: Phaser.Input.Keyboard.Key;
   private nextPickupAt = 0;
   /** Presses latched from key 'down' events so sub-frame taps are never lost (Phaser clears _justDown on keyup). */
+  private pendingDest: { mapId: string; portalId?: string } | null = null;
   private latched = new Set<Phaser.Input.Keyboard.Key>();
 
   constructor() { super(SCENES.GAME); }
@@ -41,6 +42,8 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     this.map = null;
     this.inputBlocked = false;
     this.transitioning = false;
+    this.pendingDest = null;
+    this.latched.clear();
   }
 
   create() {
@@ -74,15 +77,19 @@ export class GameScene extends Phaser.Scene implements IGameApi {
   // ─────────────────────────── IGameApi ───────────────────────────
 
   changeMap(mapId: string, portalId?: string) {
-    if (this.transitioning) return;
     if (!Registry.map(mapId)) { console.warn(`[game] unknown map ${mapId}`); return; }
+    // A request during an in-flight fade replaces its destination (e.g. respawn mid-portal).
+    this.pendingDest = { mapId, portalId };
+    if (this.transitioning) return;
     this.transitioning = true;
     this.s.player.setControlEnabled(false);
     this.s.audio.play('portal');
     const cam = this.cameras.main;
     cam.fadeOut(220, 0, 0, 0);
     cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
-      this.loadMapNow(mapId, portalId);
+      const dest = this.pendingDest ?? { mapId, portalId };
+      this.pendingDest = null;
+      this.loadMapNow(dest.mapId, dest.portalId);
       cam.fadeIn(320, 0, 0, 0);
       this.transitioning = false;
       this.s.player.setControlEnabled(!this.inputBlocked);
@@ -230,9 +237,14 @@ export class GameScene extends Phaser.Scene implements IGameApi {
   }
 
   private teardown() {
-    try { this.s.progression.save(); } catch { /* ignore */ }
-    this.s.ui.destroy();
-    this.map?.destroy();
+    const s = this.s;
+    try { s.progression.save(); } catch { /* ignore */ }
+    for (const fn of [() => s.ui.destroy(), () => s.skills.clearWorld(), () => s.monsters.clear(), () => s.drops.clear(),
+      () => s.npcs.clear(), () => s.player.destroy(), () => this.map?.destroy()]) {
+      try { fn(); } catch (e) { console.warn('[game] teardown step failed', e); }
+    }
+    this.map = null;
+    this.pendingDest = null;
     bus.removeAll();
     setServices(null);
     this.input.keyboard?.removeAllKeys(true);

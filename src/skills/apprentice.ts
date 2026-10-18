@@ -470,7 +470,8 @@ function vfxShieldCast(scene: Phaser.Scene, o: VfxOptions) {
   if (!pxFx(scene, 'cm_shield', o.x, cy, { v: 'arcane', scale: PIXEL_SCALE, add: true, dur: 520, depth: DEPTH.VFX_TOP })) {
     flash(scene, T.bubble, o.x, cy, { tint: CYAN_LT, from: 1.4, to: 0.62, dur: 380, ease: 'Back.easeOut', alpha: 0.9 });
   }
-  pxFx(scene, 'sf_heal', o.x, cy, { v: 'arcane', scale: 4, add: true, dur: 420 });
+  // The heal-burst frames are filled pale discs; at full alpha (additive, over the ward) they blank out the caster.
+  pxFx(scene, 'sf_heal', o.x, cy, { v: 'arcane', scale: 4, add: true, dur: 320, alpha: 0.35 });
   burst(scene, tex(scene, 'px_star', T.star), o.x, o.y, 10, {
     x: { min: -26, max: 26 }, speedY: { min: -160, max: -60 }, speedX: { min: -20, max: 20 },
     lifespan: { min: 450, max: 800 }, scale: { start: 1, end: 0.5 }, alpha: { start: 1, end: 0 },

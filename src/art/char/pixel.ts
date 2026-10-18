@@ -409,7 +409,9 @@ export function renderPixelFrame(base: BaseId, ref: FrameRef, look: CharacterLoo
     if (v !== undefined) { out[o] = (v >> 16) & 255; out[o + 1] = (v >> 8) & 255; out[o + 2] = v & 255; }
   }
   if (base === 'witch') decorateHat(out, bf.cls, pal, opts.deco);
-  if (base === 'sage') addOutline(out, pal.outline, 255);
+  // 1px dark outline on both bodies (the Foozle witch ships without one); never below the feet row,
+  // so feet stay exactly on the ground line.
+  addOutline(out, pal.outline, 255, false, FOOT_ROW);
   if (opts.aura) addOutline(out, pal.aura, 150, true);
   return out;
 }
@@ -459,10 +461,10 @@ function decorateHat(d: Uint8ClampedArray, cls: Uint8Array, pal: Palette, deco: 
 }
 
 /** 1-px ring around the silhouette (outline or aura). */
-function addOutline(d: Uint8ClampedArray, color: number, alpha: number, diag = false) {
+function addOutline(d: Uint8ClampedArray, color: number, alpha: number, diag = false, maxY = SRC_H - 1) {
   const src = new Uint8Array(SRC_W * SRC_H);
   for (let p = 0; p < src.length; p++) src[p] = d[p * 4 + 3] > 0 ? 1 : 0;
-  for (let y = 0; y < SRC_H; y++) for (let x = 0; x < SRC_W; x++) {
+  for (let y = 0; y <= Math.min(maxY, SRC_H - 1); y++) for (let x = 0; x < SRC_W; x++) {
     if (src[y * SRC_W + x]) continue;
     let near = false;
     for (let oy = -1; oy <= 1 && !near; oy++) for (let ox = -1; ox <= 1; ox++) {

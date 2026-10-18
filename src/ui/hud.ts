@@ -64,6 +64,8 @@ export class StatusBar {
   private mp = new Gauge('mp', 'MP');
   private exp = new Gauge('exp', 'EXP');
   private sig = '';
+  /** Unsubscribers for the pixel-icon-sheet ready callbacks (released in destroy). */
+  private iconSubs: (() => void)[] = [];
 
   constructor(private ctx: UICtx) {
     this.lvNum = h('div', { class: 'ax-lv-num' }, '1');
@@ -72,10 +74,10 @@ export class StatusBar {
     const btn = (label: string, key: string, win: WindowName, title: string) => {
       const ico = h('span', { class: `ax-quick-ico ax-qi-${win}` });
       const px = QUICK_ICONS[win];
-      if (px) onPixelIconsReady(() => {
+      if (px) this.iconSubs.push(onPixelIconsReady(() => {
         const url = pixelIconUrl(px, 26);
         if (url) { ico.style.setProperty('--qi', `url("${url}")`); ico.classList.add('ax-qi-px'); }
-      });
+      }));
       return h('button', { class: 'ax-quick', title: `${title} (${key})`, onclick: () => { ctx.sfx('ui_click'); ctx.toggleWindow(win); } },
         ico, h('span', { class: 'ax-quick-label' }, label), h('span', { class: 'ax-quick-key' }, key));
     };
@@ -115,7 +117,10 @@ export class StatusBar {
     }
   }
 
-  destroy() { this.el.remove(); this.expEl.remove(); }
+  destroy() {
+    for (const off of this.iconSubs.splice(0)) { try { off(); } catch { /* ignore */ } }
+    this.el.remove(); this.expEl.remove();
+  }
 }
 
 // ───────────────────────────── Hotbar ─────────────────────────────

@@ -1888,6 +1888,9 @@ function buildPixelSpecs(): Record<string, PixelSpec> {
   const batFly = grid(MSRC.batFly, 64, 64, 4, 32, 44);
   const batHit = grid(MSRC.batHit, 64, 64, 4, 32, 44);
   const batDie = grid(MSRC.batDeath, 64, 64, 4, 32, 44);
+  // Death frames 8–10 fall to source row 47 (below the fly anchor 44) and were clipped by the cell's foot pad;
+  // anchor just those at 48 so they stay in the cell, while 0–7 keep 44 (no 8px jump when the death anim starts).
+  const batDieLow = grid(MSRC.batDeath, 64, 64, 4, 32, 48);
   const wartaur = grid(MSRC.wartaur, 80, 80, 4, 48, 80);
   const sparky = grid(MSRC.sparky, 16, 16, 5, 8, 16);
   const imp = grid(MSRC.imp, 32, 32, 10, 16, 32);
@@ -1914,7 +1917,7 @@ function buildPixelSpecs(): Record<string, PixelSpec> {
     stump_golem: { recolor: gradientMap([0x2e180a, 0x5c3618, 0x8c5e30, 0xc89a5c, 0xf2dca4], { hue: [0, 42], minSat: 0.12 }), idle: { frames: stump(8, 10), rate: 2 }, move: { frames: stump(8, 9, 10, 11), rate: 6 } },
     // ── frostfang_cliffs ──
     frost_bat: { recolor: gradientMap(RAMP.ice), idle: { frames: batFly(0, 1, 2, 3), rate: 9 }, move: { frames: batFly(0, 1, 2, 3), rate: 12 },
-      hit: batHit(1)[0], die: { frames: batDie(...range(0, 10)), rate: 15 } },
+      hit: batHit(1)[0], die: { frames: [...batDie(...range(0, 7)), ...batDieLow(8, 9, 10)], rate: 15 } },
     snow_yeti: { flip: true, recolor: gradientMap(RAMP.snowFur, { hue: [8, 48], minSat: 0.15 }),
       idle: { frames: wartaur(0, 2), rate: 2 }, move: { frames: wartaur(0, 1, 2, 3), rate: 7 } },
     ice_wisp: { recolor: gradientMap(RAMP.ice), idle: { frames: sparky(0, 1, 2, 3), rate: 10 }, move: { frames: sparky(0, 1, 2, 3), rate: 13 } },

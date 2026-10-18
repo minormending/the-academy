@@ -809,6 +809,7 @@ const PIXEL_ICONS: Record<IconGlyph, Cand[]> = {
 };
 
 let sheet: HTMLImageElement | null = null;
+let sheetFailed = false;
 let iconVersion = 0;
 const readyCbs: (() => void)[] = [];
 const sigCache = new Map<PixelIconName, number>();
@@ -817,10 +818,16 @@ let assignedDone = false;
 
 /** True once the pixel icon sheet has loaded (icons are pixel art from then on). */
 export function pixelIconsReady(): boolean { return !!sheet; }
-/** Runs `cb` when the pixel icon sheet finishes loading (immediately if already loaded). */
-export function onPixelIconsReady(cb: () => void): void {
-  if (sheet) { try { cb(); } catch (e) { console.warn('[icons] ready cb failed', e); } }
-  else readyCbs.push(cb);
+/**
+ * Runs `cb` when the pixel icon sheet finishes loading (immediately if already loaded).
+ * Returns an unsubscribe fn (call it from the subscriber's destroy so retired UI is not retained).
+ * Pending subscribers are dropped if the sheet fails to load (they would never fire).
+ */
+export function onPixelIconsReady(cb: () => void): () => void {
+  if (sheet) { try { cb(); } catch (e) { console.warn('[icons] ready cb failed', e); } return () => { /* already ran */ }; }
+  if (sheetFailed) return () => { /* never fires */ };
+  readyCbs.push(cb);
+  return () => { const i = readyCbs.indexOf(cb); if (i >= 0) readyCbs.splice(i, 1); };
 }
 
 function loadSheet() {
@@ -834,7 +841,11 @@ function loadSheet() {
       for (const cb of readyCbs.splice(0)) { try { cb(); } catch (e) { console.warn('[icons] ready cb failed', e); } }
       try { bus.emit('player:changed', {}); } catch { /* no game yet */ }
     };
-    img.onerror = () => console.warn('[icons] pixel icon sheet failed to load; using procedural icons');
+    img.onerror = () => {
+      sheetFailed = true;
+      readyCbs.length = 0;
+      console.warn('[icons] pixel icon sheet failed to load; using procedural icons');
+    };
     img.src = assetUrl(SHEET_PATH);
   } catch (e) { console.warn('[icons] pixel icon sheet unavailable', e); }
 }

@@ -5,6 +5,17 @@ import { BootScene } from './scenes/BootScene';
 import { TitleScene } from './scenes/TitleScene';
 import { GameScene } from './scenes/GameScene';
 
+// All 2D canvases in this game are offscreen art-generation surfaces that we read back with getImageData
+// (palette swaps, outlines, pixelization). Default them to CPU-backed storage: faster reads and no
+// "willReadFrequently" console warnings. Explicit options passed by callers still win.
+{
+  const orig = HTMLCanvasElement.prototype.getContext as (this: HTMLCanvasElement, id: string, opts?: unknown) => RenderingContext | null;
+  HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, id: string, opts?: unknown) {
+    if (id === '2d') return orig.call(this, id, { willReadFrequently: true, ...(opts as object | undefined) });
+    return orig.call(this, id, opts);
+  } as typeof HTMLCanvasElement.prototype.getContext;
+}
+
 const debug = new URLSearchParams(location.search).has('debug');
 
 const game = new Phaser.Game({

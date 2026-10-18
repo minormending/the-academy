@@ -1,3 +1,26 @@
-// OWNER: A7 (world). STUB — replace with real implementation.
+// OWNER: A7 (world). Generates every world texture: terrain, parallax backdrops, decor, town, portal/ambient FX.
 import Phaser from 'phaser';
-export function generateTileTextures(scene: Phaser.Scene): void {}
+import { generateTerrainTextures } from './world/terrain';
+import { generateParallaxTextures } from './world/parallax';
+import { generateDecorTextures } from './world/decor';
+import { generateTownTextures } from './world/town';
+import { generateFxTextures } from './world/fx';
+
+/** Marker texture: present once generation has run (MapLoader lazily calls this if missing). */
+export const WORLD_TEX_READY = 'w__ready';
+
+export function generateTileTextures(scene: Phaser.Scene): void {
+  const steps: [string, (s: Phaser.Scene) => void][] = [
+    ['terrain', generateTerrainTextures],
+    ['parallax', generateParallaxTextures],
+    ['decor', generateDecorTextures],
+    ['town', generateTownTextures],
+    ['fx', generateFxTextures],
+  ];
+  for (const [name, fn] of steps) {
+    try { fn(scene); } catch (e) { console.error(`[tileArt] ${name} failed`, e); }
+  }
+  try {
+    if (!scene.textures.exists(WORLD_TEX_READY)) scene.textures.createCanvas(WORLD_TEX_READY, 1, 1);
+  } catch { /* ignore */ }
+}

@@ -188,7 +188,8 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     }
 
     // Up: portal first, then NPC (rope climbing is handled by the player).
-    if (JustDown(this.keyUp) && this.map) {
+    const climbing = (s.player as { isClimbing?: () => boolean }).isClimbing?.() ?? false;
+    if (JustDown(this.keyUp) && this.map && !climbing) {
       const portal = this.map.getPortalNear(s.player.x, s.player.y);
       if (portal) { this.changeMap(portal.targetMap, portal.targetPortal); return; }
       const npc = s.npcs.nearestInteractable();
@@ -223,6 +224,8 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     this.map?.destroy();
     bus.removeAll();
     setServices(null);
+    this.input.keyboard?.removeAllKeys(true);
+    this.input.keyboard?.enableGlobalCapture();
   }
 
   private exposeDebug() {

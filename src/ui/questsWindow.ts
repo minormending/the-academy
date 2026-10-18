@@ -1,0 +1,87 @@
+/** Quest log (J): Active / Available / Completed with objective progress. */
+import type { Branch, QuestDef, QuestProgress } from '../core/types';
+import { Registry } from '../core/registry';
+import type { UICtx } from './context';
+import { fmtNum, h, safe } from './dom';
+import { UIWindow, tabStrip } from './window';
+
+type Tab = 'active' | 'available' | 'done';
+
+export class QuestsWindow extends UIWindow {
+  private tab: Tab = 'active';
+  private expanded = new Set<string>();
+
+  constructor(ctx: UICtx) {
+    super(ctx, 'quests', 'Quest Log', { width: 380, x: 860, y: 90, className: 'ax-quests-win' });
+  }
+
+  protected signature(): string {
+    const st = this.ctx.s.progression.state;
+    // collect objectives depend on inventory counts
+    return JSON.stringify([this.tab, [...this.expanded], st.quests, st.level, st.job, st.inventory.map(s => s.itemId + s.qty)]);
+  }
+
+  protected render() {
+    const p = this.ctx.s.progression;
+    const st = p.state;
+    const all = safe(() => Registry.quests(), [] as QuestDef[]);
+    const branch = safe<Branch>(() => p.jobDef().branch, 'none');
+    const prog = (q: QuestDef): QuestProgress | undefined => st.quests?.[q.id];
+    const active = all.filter(q => { const s = prog(q)?.status; return s === 'active' || s === 'complete'; })
+      .sort((a, b) => (prog(b)?.status === 'complete' ? 1 : 0) - (prog(a)?.status === 'complete' ? 1 : 0));
+    const done = all.filter(q => prog(q)?.status === 'turned_in');
+    const available = all.filter(q => !prog(q) && q.minLevel <= st.level && (!q.requiredJobBranch || q.requiredJobBranch === 'none' || q.requiredJobBranch === branch));
+    const lists: Record<Tab, QuestDef[]> = { active, available, done };
+    const items = lists[this.tab];
+
+    const list = h('div', { class: 'ax-quest-list' });
+    if (!items.length) {
+      list.appendChild(h('div', { class: 'ax-empty-note' },
+        this.tab === 'active' ? 'No active quests. Talk to villagers marked with a quest icon.' :
+          this.tab === 'available' ? 'No new quests for your level right now.' : 'No completed quests yet.'));
+    }
+    for (const q of items) list.appendChild(this.card(q, prog(q)));
+
+    this.body.replaceChildren(
+      tabStrip<Tab>([
+        { id: 'active', label: `In Progress (${active.length})` },
+        { id: 'available', label: `Available (${available.length})` },
+        { id: 'done', label: `Completed (${done.length})` },
+      ], this.tab, (t) => { this.tab = t; this.invalidate(); this.ctx.sfx('ui_click'); }),
+      list);
+  }
+
+  private card(q: QuestDef, pr: QuestProgress | undefined): HTMLElement {
+    const p = this.ctx.s.progression;
+    const giver = Registry.npc(q.giver)?.name ?? q.giver;
+    const status = pr?.status;
+    const open = this.expanded.has(q.id) || this.tab === 'active';
+    const objectives = q.objectives.map((o, i) => {
+      let have = 0, need = 1, label = '';
+      if (o.kind === 'kill') { need = o.count; have = pr?.counts?.[i] ?? 0; label = `Defeat ${Registry.monster(o.monsterId)?.name ?? o.monsterId}`; }
+      else if (o.kind === 'collect') { need = o.count; have = Math.max(pr?.counts?.[i] ?? 0, safe(() => p.countItem(o.itemId), 0)); label = `Collect ${Registry.item(o.itemId)?.name ?? o.itemId}`; }
+      else { need = o.level; have = p.state.level; label = `Reach level ${o.level}`; }
+      if (status === 'turned_in') have = need;
+      have = Math.min(have, need);
+      const pct = Math.round((have / Math.max(1, need)) * 100);
+      return h('div', { class: `ax-obj${have >= need ? ' ax-done' : ''}` },
+        h('div', { class: 'ax-obj-line' }, h('span', null, label), h('b', null, `${have} / ${need}`)),
+        h('div', { class: 'ax-mini-bar' }, h('div', { style: `width:${pct}%` })));
+    });
+    const r = q.rewards ?? {};
+    const rewards: string[] = [];
+    if (r.exp) rewards.push(`${fmtNum(r.exp)} EXP`);
+    if (r.mesos) rewards.push(`${fmtNum(r.mesos)} mesos`);
+    for (const it of r.items ?? []) rewards.push(`${Registry.item(it.itemId)?.name ?? it.itemId}${it.qty > 1 ? ` ×${it.qty}` : ''}`);
+    const badge = status === 'complete' ? h('span', { class: 'ax-badge ax-badge-ready' }, 'Ready')
+      : status === 'turned_in' ? h('span', { class: 'ax-badge ax-badge-done' }, 'Done')
+        : status === 'active' ? null : h('span', { class: 'ax-badge' }, `Lv ${q.minLevel}+`);
+    const head = h('div', { class: 'ax-quest-head', onclick: () => { if (this.expanded.has(q.id)) this.expanded.delete(q.id); else this.expanded.add(q.id); this.invalidate(); } },
+      h('div', null, h('div', { class: 'ax-quest-name' }, q.name), h('div', { class: 'ax-quest-giver' }, status === 'complete' ? `Return to ${giver}` : `From ${giver}`)), badge);
+    return h('div', { class: `ax-quest${status === 'complete' ? ' ax-ready' : ''}` }, head,
+      open ? h('div', { class: 'ax-quest-body' },
+        h('div', { class: 'ax-quest-desc' }, q.description),
+        objectives,
+        rewards.length ? h('div', { class: 'ax-quest-rewards' }, h('span', { class: 'ax-dim' }, 'Rewards: '), rewards.join(' · ')) : null) : null);
+  }
+}

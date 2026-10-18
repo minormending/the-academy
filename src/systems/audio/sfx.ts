@@ -214,10 +214,30 @@ export const SFX: Record<SfxKey, SfxRecipe> = {
     });
     ['E6', 'G6', 'C7'].forEach((n, i) => bell(s, N(n) * p, 0.34 + i * 0.07, 0.5, 0.035 * v, 3.5, 1.2));
   },
-  // holy/shadow aliases until bespoke synth voices land
-  cast_holy: (s, p, v) => SFX.heal(s, p * 1.25, v),
-  cast_shadow: (s, p, v) => SFX.whoosh(s, p * 0.6, v),
-  curse: (s, p, v) => SFX.whoosh(s, p * 0.45, v * 0.8),
+  cast_holy: (s, p, v) => {
+    // Soft choir triad with octave air and quiet, harmonic bell shimmer.
+    ['C5', 'E5', 'G5'].forEach((n, i) => {
+      const f = N(n) * p;
+      tone(s, { type: 'sine', f, t: i * 0.015, dur: 0.5 - i * 0.015, v: 0.055 * v, a: 0.07, hold: 0.04, detune: (i - 1) * 4, vib: { rate: 5, depth: 7, delay: 0.06 } });
+      tone(s, { type: 'sine', f: f * 2, t: i * 0.015, dur: 0.46 - i * 0.015, v: 0.015 * v, a: 0.09, detune: (1 - i) * 5 });
+      bell(s, f * 2, 0.06 + i * 0.025, 0.4 - i * 0.025, 0.018 * v, 2, 0.45);
+    });
+    noise(s, { dur: 0.5, v: 0.025 * v, a: 0.09, filter: { type: 'highpass', f: 5500 * p } });
+  },
+  cast_shadow: (s, p, v) => {
+    // Breathy falling sweep over a detuned, lightly clipped minor-second growl.
+    const g = gritty(s, 1);
+    for (const detune of [-9, 9]) {
+      tone(g, { type: 'sawtooth', f: N('D3') * p, f2: N('Db3') * p, dur: 0.45, glide: 0.33, v: 0.045 * v, a: 0.045, hold: 0.035, detune, filter: { type: 'lowpass', f: 700 * p, f2: 240 * p, q: 0.8 } });
+    }
+    noise(s, { dur: 0.45, v: 0.16 * v, a: 0.08, filter: { type: 'bandpass', f: 900 * p, f2: 220 * p, q: 0.7 }, filter2: { type: 'lowpass', f: 2000 * p } });
+  },
+  curse: (s, p, v) => {
+    // A descending tritone with uneasy pitch wobble and a fading hiss.
+    tone(s, { type: 'sine', f: N('B4') * p, f2: N('F4') * p, dur: 0.6, glide: 0.5, v: 0.11 * v, a: 0.035, vib: { rate: 7.5, depth: 45 } });
+    tone(s, { type: 'triangle', f: N('B3') * p, f2: N('F3') * p, dur: 0.6, glide: 0.5, v: 0.055 * v, a: 0.05, detune: -7, vib: { rate: 6.5, depth: 30 }, filter: { type: 'lowpass', f: 1500 * p, f2: 500 * p } });
+    noise(s, { dur: 0.6, v: 0.11 * v, a: 0.06, filter: { type: 'bandpass', f: 3200 * p, f2: 1100 * p, q: 1.2 }, filter2: { type: 'highpass', f: 800 * p } });
+  },
   potion: (s, p, v) => {
     for (let i = 0; i < 3; i++) tone(s, { type: 'sine', f: 260 * p, f2: 520 * p, t: i * 0.08, dur: 0.07, v: 0.16 * v, filter: { type: 'lowpass', f: 1200 } });
     bell(s, N('A6') * p, 0.26, 0.35, 0.04 * v, 2, 1);
@@ -229,6 +249,7 @@ export const SFX: Record<SfxKey, SfxRecipe> = {
 export const SFX_GAIN: Partial<Record<SfxKey, number>> = {
   ui_click: 0.6, ui_open: 0.7, ui_close: 0.7, monster_hit: 0.75, zap: 0.8, land: 0.6, jump: 0.7,
   boss_roar: 1.1, thunder: 1.0, explosion: 0.95, levelup: 1.0, job_advance: 1.0,
+  cast_holy: 0.95, cast_shadow: 0.85, curse: 0.85,
 };
 
 /** Rate limits: [minimum gap ms between two plays, max plays per 100ms]. */

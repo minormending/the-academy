@@ -16,6 +16,8 @@ export interface MonsterSpawnOptions {
 }
 
 const TAU = Math.PI * 2;
+/** Half-width (px) of the strip around a portal that wandering walkers/hoppers turn back from. */
+const PORTAL_KEEP_OUT = 110;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 let NEXT_UID = 1;
 
@@ -327,12 +329,24 @@ export class Monster implements IMonster {
     return this.plat;
   }
 
-  protected atEdge(plat: PlatformDef | null, dir: number, ahead = 4): boolean {
+  protected atEdge(plat: PlatformDef | null, dir: number, ahead = 4, avoidPortals = false): boolean {
     const half = this.def.size.w / 2;
     const lookX = this.x + dir * (half * 0.5 + ahead);
     if (lookX < half || lookX > this.map.widthPx - half) return true;
+    // Wandering monsters keep clear of portals so they don't camp the map exits.
+    if (avoidPortals && this.nearPortal(lookX + dir * half * 0.5, dir)) return true;
     if (!plat) return false;
     return dir > 0 ? lookX >= plat.x2 : lookX <= plat.x1;
+  }
+
+  /** True if heading `dir` takes x into the keep-out zone of a portal on the same floor (never traps one already inside). */
+  protected nearPortal(x: number, dir: number): boolean {
+    const portals = this.map.def?.portals;
+    if (!portals) return false;
+    for (const p of portals) {
+      if (Math.abs(p.y - this.y) <= 12 && Math.abs(p.x - x) <= PORTAL_KEEP_OUT && Math.sign(p.x - this.x) === dir) return true;
+    }
+    return false;
   }
 
   protected blockedAhead(dir: number): boolean {
@@ -361,7 +375,7 @@ export class Monster implements IMonster {
       }
       moving = this.wanderMoving;
     }
-    if (moving && (this.atEdge(plat, this.dir) || this.blockedAhead(this.dir))) {
+    if (moving && (this.atEdge(plat, this.dir, 4, !target) || this.blockedAhead(this.dir))) {
       if (target) moving = false;
       else this.dir = this.dir === 1 ? -1 : 1;
     }
@@ -382,9 +396,9 @@ export class Monster implements IMonster {
     const air = (2 * hopV) / 1500;
     let vx = this.dir * this.def.speed * mult;
     const reach = Math.abs(vx) * air;
-    if (this.atEdge(plat, this.dir, reach) || this.blockedAhead(this.dir)) {
+    if (this.atEdge(plat, this.dir, reach, !target) || this.blockedAhead(this.dir)) {
       if (target) vx = 0;
-      else { this.dir = this.dir === 1 ? -1 : 1; vx = -vx; if (this.atEdge(plat, this.dir, reach)) vx = 0; }
+      else { this.dir = this.dir === 1 ? -1 : 1; vx = -vx; if (this.atEdge(plat, this.dir, reach, true)) vx = 0; }
     }
     this.body.setVelocity(vx, -hopV * (0.85 + 0.15 * mult));
     this.nextHop = now + (target ? rand(350, 700) : rand(800, 1700));

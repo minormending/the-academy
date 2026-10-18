@@ -81,7 +81,7 @@ export class SkillSystem implements ISkillSystem {
 
   private castOrigin(): Origin {
     const p = this.services.player;
-    return { x: p.x + CAST_OFFSET.x * p.facing, y: p.y + CAST_OFFSET.y, facing: p.facing, groundY: p.y };
+    return { x: p.x + CAST_OFFSET.x * p.facing, y: p.y + CAST_OFFSET.y, facing: p.facing, groundY: p.y, centerX: p.x };
   }
 
   private makeContext(def: SkillDef, lv: number): SkillContext {
@@ -91,7 +91,7 @@ export class SkillSystem implements ISkillSystem {
       skill: def,
       level: lv,
       runAttack: (spec: AttackSpec, origin: { x: number; y: number; facing: 1 | -1 }) =>
-        this.runner.run(spec, { groundY: this.services.player.y, ...origin }, lv, def.element, def.id),
+        this.runner.run(spec, { groundY: this.services.player.y, centerX: origin.x, ...origin }, lv, def.element, def.id),
     };
   }
 

@@ -10,6 +10,8 @@ export interface Origin {
   groundY?: number;
   /** Optional aim point (summons): projectiles are aimed at it instead of flying straight. */
   aimAt?: { x: number; y: number };
+  /** Caster body center x (the player's x, not the staff tip). aoe_self is centered here; defaults to x. */
+  centerX?: number;
 }
 
 export const FRONT_MAX_DY = 140;

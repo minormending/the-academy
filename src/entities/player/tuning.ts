@@ -43,6 +43,8 @@ export const PT = {
 
   blinkMargin: 20,
   blinkStep: 6,
+  /** Horizontal blinks rise over solid ledges up to this tall (px) instead of stopping at the wall face. */
+  blinkStepUp: 64,
   blinkFlashMs: 160,
 
   /** Fall distance (px from the apex of the airtime) that counts as a hard landing. */

@@ -264,3 +264,13 @@ export function whileAlive(scene: Phaser.Scene, owner: Phaser.GameObjects.GameOb
   });
   owner.once('destroy', () => ev.remove(false));
 }
+
+/**
+ * Looping tween on a persistent visual's children that is stopped when `owner` is destroyed.
+ * (Container.preDestroy empties its child list before DESTROY fires, so killTweensOf(list) can't do this.)
+ */
+export function loopWhileAlive(scene: Phaser.Scene, owner: Phaser.GameObjects.GameObject, cfg: Phaser.Types.Tweens.TweenBuilderConfig): Phaser.Tweens.Tween {
+  const tw = scene.tweens.add(cfg);
+  owner.once('destroy', () => { try { tw.remove(); } catch { /* already gone */ } });
+  return tw;
+}

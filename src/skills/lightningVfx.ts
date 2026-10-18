@@ -7,7 +7,7 @@ import { generateTextures } from './lightning/textures';
 import { STORM } from './lightning/shared';
 import {
   C, TAU, rnd, pick, drawBolt, drawBoltFrame, spawnBolt, radialBolts, flash, ring, column, converge,
-  screenFlash, sparks, motes, stars, whileAlive,
+  screenFlash, sparks, motes, stars, whileAlive, loopWhileAlive,
 } from './lightning/fx';
 import type { BoltStyle } from './lightning/fx';
 
@@ -331,7 +331,7 @@ function stormClouds(scene: Phaser.Scene, o: VfxOptions): void {
     alive = false;
     for (const c of clouds) {
       if (!c.active) continue;
-      scene.tweens.add({ targets: c, alpha: 0, y: c.y - 14, duration: 540, onComplete: () => c.destroy() });
+      scene.tweens.add({ targets: c, alpha: 0, y: c.y - 14, duration: 540, onComplete: () => { scene.tweens.killTweensOf(c); c.destroy(); } });
     }
     if (gloom.active) scene.tweens.add({ targets: gloom, alpha: 0, duration: 620, onComplete: () => gloom.destroy() });
   });
@@ -371,8 +371,8 @@ const ballProj: VfxFn = (scene) => {
   const arcs = scene.add.graphics().setBlendMode(ADD);
   const c = scene.add.container(0, 0, [outer, mid, core, arcs]).setDepth(DEPTH.VFX);
 
-  scene.tweens.add({ targets: [outer, mid], scale: '*=1.14', duration: 160, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-  scene.tweens.add({ targets: core, scale: 0.78, duration: 110, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  loopWhileAlive(scene, c, { targets: [outer, mid], scale: '*=1.14', duration: 160, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  loopWhileAlive(scene, c, { targets: core, scale: 0.78, duration: 110, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
   const redraw = (): void => {
     arcs.clear();
@@ -446,9 +446,9 @@ const totemBody: VfxFn = (scene) => {
 
   const c = scene.add.container(0, 0, [glow, base, stone, arcs, top]).setDepth(DEPTH.SUMMON);
 
-  scene.tweens.add({ targets: top, y: -78, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-  scene.tweens.add({ targets: orbit, rotation: TAU, duration: 1500, repeat: -1 });
-  scene.tweens.add({ targets: [glow, crystalGlow], alpha: '*=0.7', duration: 260, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  loopWhileAlive(scene, c, { targets: top, y: -78, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  loopWhileAlive(scene, c, { targets: orbit, rotation: TAU, duration: 1500, repeat: -1 });
+  loopWhileAlive(scene, c, { targets: [glow, crystalGlow], alpha: '*=0.7', duration: 260, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
   whileAlive(scene, c, 120, () => {
     arcs.clear();
@@ -529,11 +529,11 @@ const thunderbird: VfxFn = (scene) => {
   const c = scene.add.container(0, 0, [inner]).setDepth(DEPTH.SUMMON);
 
   // Hover bob + wing flap (children only; the engine owns the root container's position).
-  scene.tweens.add({ targets: inner, y: 6, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  loopWhileAlive(scene, c, { targets: inner, y: 6, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   wingFront.rotation = 0.2; wingBack.rotation = 0.0;
-  scene.tweens.add({ targets: wingFront, rotation: -1.55, duration: 210, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-  scene.tweens.add({ targets: wingBack, rotation: -1.4, duration: 210, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 40 });
-  scene.tweens.add({ targets: aura, alpha: 0.28, scale: 3.0, duration: 340, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  loopWhileAlive(scene, c, { targets: wingFront, rotation: -1.55, duration: 210, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  loopWhileAlive(scene, c, { targets: wingBack, rotation: -1.4, duration: 210, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 40 });
+  loopWhileAlive(scene, c, { targets: aura, alpha: 0.28, scale: 3.0, duration: 340, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
   whileAlive(scene, c, 85, () => {
     arcs.clear();
@@ -587,8 +587,8 @@ const surgeAura: VfxFn = (scene) => {
   const baseRing = scene.add.image(0, -2, 'ltn_ring').setBlendMode(ADD).setTint(C.yellow).setScale(0.75, 0.2).setAlpha(0.75);
   const arcs = scene.add.graphics().setBlendMode(ADD);
   const c = scene.add.container(0, 0, [glow, baseRing, arcs]).setDepth(DEPTH.VFX);
-  scene.tweens.add({ targets: glow, alpha: 0.14, duration: 380, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-  scene.tweens.add({ targets: baseRing, scaleX: 0.9, alpha: 0.4, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  loopWhileAlive(scene, c, { targets: glow, alpha: 0.14, duration: 380, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  loopWhileAlive(scene, c, { targets: baseRing, scaleX: 0.9, alpha: 0.4, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
   whileAlive(scene, c, 95, () => {
     arcs.clear();

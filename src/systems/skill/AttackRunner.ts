@@ -198,7 +198,8 @@ export class AttackRunner {
   private runAoeSelf(info: CastInfo, o: Origin, delay: number) {
     const spec = info.spec;
     const a = spec.area ?? { w: Math.max(160, spec.range * 2), h: 140 };
-    const cx = o.x + o.facing * num(a.offsetX, 0);
+    // Centered on the caster's body, not the staff tip 18px ahead (novas must look centered on the mage).
+    const cx = num(o.centerX, o.x) + o.facing * num(a.offsetX, 0);
     const cy = o.y + num(a.offsetY, 0);
     playVfx(this.scene, spec.vfx.area, { x: cx, y: cy, facing: o.facing, w: a.w, h: a.h, lv: info.lv });
     this.sched.after(delay, () => {

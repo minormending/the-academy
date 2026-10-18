@@ -90,10 +90,14 @@ export class Player implements IPlayer {
   private jumpBufferedAt = -Infinity;
   private lastJumpAt = -Infinity;
   private prevJumpDown = false;
+  /** Presses latched from key 'down' events so sub-frame taps (down+up between two updates) are never lost. */
+  private jumpLatched = false;
+  private tapDirLatched: -1 | 0 | 1 = 0;
 
   // contact bookkeeping (set from collider callbacks)
   private lastOneWayFootAt = -Infinity;
   private lastSolidFootAt = -Infinity;
+  private embeddedFrames = 0;
 
   // airtime tracking
   private wasGrounded = false;
@@ -107,6 +111,9 @@ export class Player implements IPlayer {
   private curAnimSerial = -1;
 
   private warnedUpdate = false;
+  private onJumpKeyDown = () => { this.jumpLatched = true; };
+  private onLeftKeyDown = () => { this.tapDirLatched = -1; };
+  private onRightKeyDown = () => { this.tapDirLatched = 1; };
   private onWindowKey = (e: KeyboardEvent) => { if (e.key === 'Alt' && this.controlEnabled) e.preventDefault(); };
 
   constructor(private scene: Phaser.Scene, private services: GameServices, x: number, y: number, job: JobId) {
@@ -130,6 +137,10 @@ export class Player implements IPlayer {
         left: kb.addKey(K.LEFT), right: kb.addKey(K.RIGHT), up: kb.addKey(K.UP), down: kb.addKey(K.DOWN),
         space: kb.addKey(K.SPACE), alt: kb.addKey(K.ALT),
       };
+      this.keys.space.on('down', this.onJumpKeyDown);
+      this.keys.alt.on('down', this.onJumpKeyDown);
+      this.keys.left.on('down', this.onLeftKeyDown);
+      this.keys.right.on('down', this.onRightKeyDown);
     }
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', this.onWindowKey);
@@ -259,10 +270,20 @@ export class Player implements IPlayer {
       }
     } else if (dist > 0) {
       const steps = Math.max(1, Math.ceil(dist / PT.blinkStep));
+      // Horizontal blinks may climb over low ledges (hills / steps) instead of stopping at their face.
+      const horizontal = Math.abs(ty - oy) < 1;
+      let lift = 0;
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
-        const cx = ox + (tx - ox) * t, cy = oy + (ty - oy) * t;
-        if (this.overlapsSolid(cx, cy)) break;
+        const cx = ox + (tx - ox) * t;
+        let cy = oy + (ty - oy) * t - lift;
+        if (this.overlapsSolid(cx, cy)) {
+          if (!horizontal) break;
+          let up = 0;
+          while (up < PT.blinkStepUp && this.overlapsSolid(cx, cy - up)) up += 3;
+          if (this.overlapsSolid(cx, cy - up)) break;
+          lift += up; cy -= up;
+        }
         fx = cx; fy = cy;
       }
     }
@@ -635,6 +656,23 @@ export class Player implements IPlayer {
     return false;
   }
 
+  /** Highest top edge among the solids overlapping the player's column at (fx, fy). */
+  private solidTopAbove(fx: number, fy: number): number | null {
+    const group = this.map?.solids;
+    if (!group) return null;
+    const w = PLAYER_HITBOX.w, h = PLAYER_HITBOX.h;
+    const l = fx - w / 2 + 1, r = fx + w / 2 - 1, t = fy - h + 1, btm = fy - 1;
+    let best: number | null = null;
+    for (const c of group.getChildren()) {
+      const b = bodyOf(c);
+      if (!b || !(c as { active?: boolean }).active) continue;
+      if (l < b.x + b.width && r > b.x && t < b.y + b.height && btm > b.y) {
+        if (best === null || b.y < best) best = b.y;
+      }
+    }
+    return best;
+  }
+
   private destroyColliders() {
     for (const c of this.colliders) { try { c.destroy(); } catch { /* ignore */ } }
     this.colliders = [];
@@ -643,6 +681,23 @@ export class Player implements IPlayer {
   private checkFallOut() {
     const map = this.map;
     if (!map) return;
+    // Embedded in a solid (Arcade will not separate deep overlaps): pop onto its top, else respawn.
+    if (!this.rope && this.overlapsSolid(this.x, this.y)) {
+      if (++this.embeddedFrames >= 3) {
+        this.embeddedFrames = 0;
+        const top = this.solidTopAbove(this.x, this.y);
+        if (top !== null && !this.overlapsSolid(this.x, top)) {
+          this.body.setVelocity(0, 0);
+          this.placeFeet(this.x, top);
+          this.lastFeetY = top;
+          return;
+        }
+        this.placeAt(map.getDefaultSpawn().x, map.getDefaultSpawn().y);
+        return;
+      }
+    } else {
+      this.embeddedFrames = 0;
+    }
     if (this.y > map.heightPx + PT.fallOutMargin) {
       try {
         const s = map.getDefaultSpawn();
@@ -814,8 +869,11 @@ export class Player implements IPlayer {
       left: !!k?.left.isDown, right: !!k?.right.isDown, up: !!k?.up.isDown, down: !!k?.down.isDown,
       jump: !!k && (k.space.isDown || k.alt.isDown),
     };
-    const pressed = raw.jump && !this.prevJumpDown;
+    const pressed = (raw.jump && !this.prevJumpDown) || this.jumpLatched;
     this.prevJumpDown = raw.jump;
+    this.jumpLatched = false;
+    const tap = this.tapDirLatched;
+    this.tapDirLatched = 0;
 
     let blocked = false;
     try { blocked = !!this.services.game?.isInputBlocked?.(); } catch { blocked = false; }
@@ -823,7 +881,9 @@ export class Player implements IPlayer {
     if (!active) return { dir: 0, left: false, right: false, up: false, down: false, jumpHeld: false };
 
     if (pressed) this.jumpBufferedAt = now;
-    const dir = ((raw.right ? 1 : 0) - (raw.left ? 1 : 0)) as -1 | 0 | 1;
+    let dir = ((raw.right ? 1 : 0) - (raw.left ? 1 : 0)) as -1 | 0 | 1;
+    // A tap released before this frame still counts for one frame (turn around / nudge).
+    if (dir === 0 && tap !== 0 && !raw.left && !raw.right) dir = tap;
     return { dir, left: raw.left, right: raw.right, up: raw.up, down: raw.down, jumpHeld: raw.jump };
   }
 
@@ -854,6 +914,12 @@ export class Player implements IPlayer {
       window.removeEventListener('keyup', this.onWindowKey);
     }
     const kb = this.scene.input?.keyboard;
+    if (this.keys) {
+      this.keys.space.off('down', this.onJumpKeyDown);
+      this.keys.alt.off('down', this.onJumpKeyDown);
+      this.keys.left.off('down', this.onLeftKeyDown);
+      this.keys.right.off('down', this.onRightKeyDown);
+    }
     if (kb && this.keys) {
       // UP is shared with GameScene (portal/NPC interact), so leave it registered.
       for (const key of [this.keys.left, this.keys.right, this.keys.down, this.keys.space, this.keys.alt]) {

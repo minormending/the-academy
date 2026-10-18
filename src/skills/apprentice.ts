@@ -141,7 +141,7 @@ export const APPRENTICE_SKILLS: SkillDef[] = [
       hits: () => 1,
       maxTargets: lv => 4 + Math.floor(lv / 3),
       range: 120,
-      area: { w: 240, h: 150, offsetX: -18, offsetY: 4 },
+      area: { w: 240, h: 150, offsetY: 4 },
       knockback: 40,
       delayMs: 140,
       vfx: { cast: 'app_nova_cast', area: 'app_nova', hit: 'app_nova_hit' },
@@ -367,8 +367,11 @@ function flash(scene: Phaser.Scene, key: string, x: number, y: number, o: {
 
 /** Attach cleanup to a persistent container: kills its tweens and runs extra disposers. */
 function onDispose(scene: Phaser.Scene, go: Phaser.GameObjects.Container, fn?: () => void) {
+  // Snapshot the children now: Container.preDestroy empties `list` before DESTROY is emitted,
+  // so reading go.list inside the handler would miss every child's (infinite) tweens.
+  const kids = [...go.list];
   go.once(Phaser.GameObjects.Events.DESTROY, () => {
-    try { scene.tweens.killTweensOf(go.list); scene.tweens.killTweensOf(go); } catch { /* ignore */ }
+    try { scene.tweens.killTweensOf(kids); scene.tweens.killTweensOf(go); } catch { /* ignore */ }
     try { fn?.(); } catch { /* ignore */ }
   });
 }

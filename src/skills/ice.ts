@@ -226,7 +226,7 @@ const frostElemental: SkillDef = {
   sfx: 'cast_ice',
   summon: {
     durationMs: lerpR(30000, 60000, 15),
-    attackIntervalMs: 1400,
+    attackIntervalMs: 1000,
     offset: { x: -56, y: -52 },
     follow: true,
     vfx: 'ice_elemental',
@@ -273,7 +273,8 @@ const glacialLance: SkillDef = {
   icon: icon('icicle', 0xd8f8ff, 0x4aa8ff),
   requires: [{ skillId: 'ice_lance', level: 10 }],
   mpCost: lerpR(45, 60, 20),
-  cooldownMs: () => 800,
+  // No cooldown: it is the tier-4 primary (fire/lightning primaries have none); with an 800ms cd ice
+  // single-target DPS at lv48 measured ~1/3 of fire's.
   castTimeMs: 480,
   sfx: 'cast_ice',
   attack: {

@@ -9,6 +9,11 @@ import { pxFx } from '../art/particles';
 import type { VfxFn, VfxOptions } from '../core/types';
 import { generateIceTextures as genTextures } from './ice/textures';
 import {
+  absoluteZeroArea, absoluteZeroCast, absoluteZeroHit, crystalMemorySigil, crystalNeedleBeam,
+  crystalNeedleHit, crystalWallArea, diamondBarrierAura, diamondBarrierCast, frostStepIn,
+  frostStepOut, hoarfrostHit, hoarfrostLink, restorativeThaw, rimeGuardSigil, rimeRayBeam,
+} from './ice/academyFx';
+import {
   ADD, C, GROUND_DY, bindLife, breathe, burst, faceDeg, flash, followEmitter, img, ring, rnd, spin, T, tweenOut,
 } from './ice/fx';
 
@@ -637,4 +642,20 @@ export function registerIceVfx(): void {
   registerVfx('ice_orb_pulse', iceOrbPulse);
   registerVfx('ice_winter_cast', iceWinterCast);
   registerVfx('ice_winter_aura', iceWinterAura);
+  registerVfx('ice_rime_ray_beam', rimeRayBeam);
+  registerVfx('ice_crystal_wall_area', crystalWallArea);
+  registerVfx('ice_frost_step_out', frostStepOut);
+  registerVfx('ice_frost_step_in', frostStepIn);
+  registerVfx('ice_rime_guard_sigil', rimeGuardSigil);
+  registerVfx('ice_crystal_needle_beam', crystalNeedleBeam);
+  registerVfx('ice_crystal_needle_hit', crystalNeedleHit);
+  registerVfx('ice_restorative_thaw', restorativeThaw);
+  registerVfx('ice_crystal_memory_sigil', crystalMemorySigil);
+  registerVfx('ice_hoarfrost_link', hoarfrostLink);
+  registerVfx('ice_hoarfrost_hit', hoarfrostHit);
+  registerVfx('ice_absolute_zero_cast', absoluteZeroCast);
+  registerVfx('ice_absolute_zero_area', absoluteZeroArea);
+  registerVfx('ice_absolute_zero_hit', absoluteZeroHit);
+  registerVfx('ice_diamond_barrier_cast', diamondBarrierCast);
+  registerVfx('ice_diamond_barrier_aura', diamondBarrierAura);
 }

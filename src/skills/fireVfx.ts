@@ -2,15 +2,20 @@
 import Phaser from 'phaser';
 import { registerVfx } from '../core/vfx';
 import { DEPTH } from '../core/constants';
+import { maybeServices } from '../core/services';
 import { pxFx, pxLoop } from '../art/particles';
 import type { VfxFn, VfxOptions } from '../core/types';
 import { generateFireTextures as genTextures, FT } from './fire/textures';
+import { generateFireSheets, fpx, fpxLoop } from './fire/sheets';
 import {
   ADD, NORMAL, C, FIRE_TINTS, HOT_TINTS, ALIGN, img, tk, loop, shake, shock, flash, flare,
   burst, stream, attachTrail, tongue, zone,
 } from './fire/fx';
 
-export function generateFireTextures(scene: Phaser.Scene): void { genTextures(scene); }
+export function generateFireTextures(scene: Phaser.Scene): void {
+  genTextures(scene);
+  generateFireSheets(scene);
+}
 
 // ───────────────────────────── shared sub-effects ─────────────────────────────
 
@@ -250,9 +255,22 @@ const explosionArea: VfxFn = (scene, o) => {
   explosion(scene, o.x, o.y, w, h, 1.3);
 };
 
+/**
+ * Ground surface under (x, y): aoe_target areas are centred on the target's body, not its feet, so
+ * ground-anchored effects look up the walkable surface just below instead of guessing from the area height.
+ */
+function groundBelow(x: number, y: number, fallback: number, maxDown = 180): number {
+  try {
+    const map = maybeServices()?.game.currentMap();
+    // Nearest surface at/below y (scan down in 4px steps; platformAt only matches within ±tolerance).
+    if (map) for (let dy = 0; dy <= maxDown; dy += 4) { const p = map.platformAt(x, y + dy, 2); if (p) return p.y; }
+  } catch { /* no map */ }
+  return fallback;
+}
+
 const pillarArea: VfxFn = (scene, o) => {
   const { w, h } = sizeOf(o, 170, 260);
-  const x = o.x, gy = o.y + h / 2;
+  const x = o.x, gy = o.groundY ?? groundBelow(o.x, o.y, o.y + h / 2);
   shock(scene, x, gy - 2, C.orange, w * 1.3, 420, 0.3);
   shock(scene, x, gy - 2, C.yellow, w * 0.8, 320, 0.3, 0.8, 70);
   // pixel flame columns: a tall 4× core flanked by 2× columns, plus a ground blast
@@ -616,6 +634,394 @@ const ascensionAura: VfxFn = (scene, o) => {
   return c;
 };
 
+// ───────────────────────────── Phase 4: Year 2 additions ─────────────────────────────
+
+/** Implosion: hot sparks rush from an ellipse edge into (x, y). */
+function implode(scene: Phaser.Scene, x: number, y: number, rw: number, rh: number, n: number, life = 220): void {
+  const em = scene.add.particles(x, y, tk(scene, FT.spark), {
+    emitting: false, blendMode: ADD, moveToX: x, moveToY: y, lifespan: life, scale: { start: 1, end: 0.5 },
+    alpha: { start: 0.25, end: 1 }, tint: HOT_TINTS, rotate: ALIGN,
+    emitZone: zone(new Phaser.Geom.Ellipse(0, 0, rw, rh), 'edge', n),
+  });
+  em.setDepth(DEPTH.VFX_TOP);
+  em.explode(n);
+  scene.time.delayedCall(life + 150, () => { if (em.scene) em.destroy(); });
+}
+
+/** Flat scorch mark that fades out (ground effects). */
+function scorchMark(scene: Phaser.Scene, x: number, gy: number, w: number, hold = 600): void {
+  const sc = img(scene, FT.scorch, x, gy - 1, { tint: 0x120603, add: false, alpha: 0, depth: DEPTH.VFX - 2 });
+  sc.setScale(Math.max(1, Math.round(w / 128)), 1);
+  scene.tweens.add({ targets: sc, alpha: 0.7, duration: 80 });
+  scene.tweens.add({ targets: sc, alpha: 0, duration: 1200, delay: hold, onComplete: () => { if (sc.scene) sc.destroy(); } });
+}
+
+const bombProj: VfxFn = (scene, o) => {
+  const c = projContainer(scene, o);
+  const bomb = fpxLoop(scene, c, 'bomb', 0, 0, { scale: 2 });
+  if (bomb) {
+    // tumble the bomb itself (child), never the root's scale
+    loop(scene, c, { targets: bomb, angle: 360, duration: 520, ease: 'Stepped', easeParams: [8] });
+  } else {
+    const glow = img(scene, FT.glow, 0, 0, { tint: C.red, scale: 0.4, alpha: 0.8 });
+    const core = img(scene, FT.rock, 0, 0, { add: false, scale: 0.5 });
+    c.add([glow, core]);
+    loop(scene, c, { targets: core, rotation: Math.PI * 2, duration: 520, ease: 'Linear' });
+  }
+  attachTrail(scene, c, FT.ember, 520, {
+    speed: { min: 5, max: 30 }, lifespan: { min: 300, max: 520 }, scale: { start: 1, end: 0.5 },
+    alpha: { start: 1, end: 0 }, frequency: 40, quantity: 1, tint: FIRE_TINTS, gravityY: -30, emitZone: zone(ring(4)),
+  });
+  attachTrail(scene, c, FT.smoke, 500, {
+    speed: { min: 0, max: 15 }, lifespan: 460, scale: { start: 0.2, end: 0.55 }, alpha: { start: 0.3, end: 0 },
+    frequency: 70, quantity: 1, tint: C.smoke, blendMode: NORMAL,
+  }, DEPTH.VFX - 1);
+  return c;
+};
+
+const bombArea: VfxFn = (scene, o) => {
+  const { w, h } = sizeOf(o, 170, 120);
+  const { x, y } = o;
+  // Gothicvania fire-bomb dome: grows from a point into a mushroom of flame anchored at the impact
+  const dome = pxFx(scene, 'g9_firebomb', x, y + 18, { scale: 2, oy: 0.85, depth: DEPTH.VFX_TOP });
+  if (dome) {
+    pxFx(scene, 'ex1', x - w * 0.3, y + 6, { scale: 2, delay: 70, depth: DEPTH.VFX_TOP });
+    pxFx(scene, 'ex1', x + w * 0.3, y + 2, { scale: 2, delay: 120, depth: DEPTH.VFX_TOP });
+    flash(scene, x, y, C.orange, w * 0.7, 180, 0.6);
+  } else {
+    explosion(scene, x, y, w, h, 0.9, false);
+  }
+  shock(scene, x, y + h * 0.3, C.orange, w * 1.1, 360, 0.4);
+  sparks(scene, x, y, 9, 300, 380);
+  embers(scene, x, y, 6, 150);
+  smokePuff(scene, x, y + 4, 2, 0.8);
+  const gy = groundBelow(x, y, NaN, 70);
+  if (Number.isFinite(gy)) scorchMark(scene, x, gy, w, 400);
+  shake(scene, 90, 0.0025);
+};
+
+const dashOut: VfxFn = (scene, o) => {
+  const { x, y } = o;
+  const dir = Math.sign((o.targetX ?? x + o.facing) - x) || o.facing;
+  if (!fpx(scene, 'whirl', x, y + 2, { scale: 4, oy: 1, dur: 360, depth: DEPTH.VFX_TOP })) {
+    flash(scene, x, y - 30, C.orange, 90, 240, 0.9);
+  }
+  pxFx(scene, 'sf_boom', x, y - 28, { scale: 2, dur: 240, add: true, depth: DEPTH.VFX_TOP });
+  smokePuff(scene, x, y - 16, 3, 0.9);
+  burst(scene, x, y - 28, FT.ember, 12, 700, {
+    speed: { min: 60, max: 220 }, angle: dir > 0 ? { min: 150, max: 210 } : { min: -30, max: 30 },
+    lifespan: { min: 380, max: 700 }, scale: { start: 1.1, end: 0.4 }, alpha: { start: 1, end: 0 }, tint: FIRE_TINTS,
+    emitZone: zone(new Phaser.Geom.Rectangle(-10, -26, 20, 52)),
+  });
+};
+
+const dashTrail: VfxFn = (scene, o) => {
+  const { w, h } = sizeOf(o, 230, 90);
+  const f = o.facing;
+  let sprites = 0;
+  if (w >= h) {
+    const gy = o.y + 34;                      // engine centres the area 34px above the feet line
+    const n = Math.max(3, Math.round(w / 26));
+    const x0 = o.x - f * (w / 2 - 14);
+    for (let i = 0; i < n; i++) {
+      const fx = x0 + f * ((w - 28) * (i / (n - 1)));
+      if (pxFx(scene, 'cm_brightfire', fx, gy + 4, { scale: 2, oy: 1, flipX: i % 2 === 1, delay: i * 16, dur: 560, depth: i % 2 ? DEPTH.VFX : DEPTH.VFX_TOP })) sprites++;
+    }
+    if (!sprites) for (let i = 0; i < n; i++) tongue(scene, x0 + f * ((w - 28) * (i / (n - 1))), gy, FIRE_TINTS[i % 3], 18, rnd(36, 56), i * 16, 520);
+    const sc = img(scene, FT.scorch, o.x, gy - 1, { tint: 0x120603, add: false, alpha: 0, depth: DEPTH.VFX - 2 });
+    sc.setScale(Math.max(1, Math.round(w / 128)), 1);
+    scene.tweens.add({ targets: sc, alpha: 0.65, duration: 80 });
+    scene.tweens.add({ targets: sc, alpha: 0, duration: 900, delay: 500, onComplete: () => { if (sc.scene) sc.destroy(); } });
+    stream(scene, o.x, gy - 6, FT.ember, 360, 700, {
+      speedY: { min: -110, max: -40 }, speedX: { min: -20, max: 20 }, lifespan: { min: 400, max: 700 },
+      scale: { start: 1, end: 0.4 }, alpha: { start: 1, end: 0 }, tint: FIRE_TINTS, frequency: 22, quantity: 1,
+      emitZone: zone(new Phaser.Geom.Rectangle(-w / 2, -6, w, 8)),
+    });
+  } else {
+    const n = Math.max(3, Math.round(h / 30));
+    const y0 = o.y - h / 2 + 16;
+    for (let i = 0; i < n; i++) {
+      const fy = y0 + (h - 32) * (i / (n - 1));
+      if (pxFx(scene, 'sf_flame', o.x + (i % 2 ? 6 : -6), fy, { scale: 2, delay: i * 20, fps: 10, depth: DEPTH.VFX_TOP })) sprites++;
+    }
+    if (!sprites) flash(scene, o.x, o.y, C.orange, h, 300, 0.8);
+    stream(scene, o.x, o.y, FT.ember, 300, 600, {
+      speed: { min: 10, max: 50 }, lifespan: { min: 300, max: 600 }, scale: { start: 1, end: 0.4 },
+      alpha: { start: 1, end: 0 }, tint: FIRE_TINTS, frequency: 24, quantity: 1,
+      emitZone: zone(new Phaser.Geom.Rectangle(-8, -h / 2, 16, h)),
+    });
+  }
+};
+
+const dashIn: VfxFn = (scene, o) => {
+  const { x, y, facing: f } = o;
+  if (!pxFx(scene, 'cm_flamelash', x + f * 6, y - 30, { scale: 2, flipX: f < 0, dur: 360, depth: DEPTH.VFX_TOP })) {
+    flash(scene, x, y - 30, C.yellow, 80, 220, 0.9);
+  }
+  flash(scene, x, y - 30, C.orange, 60, 180, 0.6);
+  shock(scene, x, y - 2, C.orange, 110, 320, 0.3);
+  burst(scene, x, y - 4, FT.ember, 8, 600, {
+    speed: { min: 40, max: 150 }, angle: { min: 200, max: 340 }, gravityY: 120, lifespan: { min: 300, max: 600 },
+    scale: { start: 1, end: 0.4 }, alpha: { start: 1, end: 0 }, tint: FIRE_TINTS,
+  });
+};
+
+const overheatCast: VfxFn = (scene, o) => {
+  const { x, y, facing: f } = o;
+  shock(scene, x, y - 2, C.red, 150, 420, 0.3);
+  flash(scene, x, y - 32, C.red, 130, 320, 0.8);
+  if (!pxFx(scene, 'cm_flamelash', x, y - 34, { scale: 2, flipX: f < 0, dur: 420, depth: DEPTH.VFX_TOP })) {
+    flash(scene, x, y - 32, C.white, 60, 200, 1);
+  }
+  for (let i = 0; i < 4; i++) fpx(scene, 'mote', x + rnd(-22, 22), y - rnd(14, 60), { scale: 2, delay: i * 70, depth: DEPTH.VFX_TOP });
+  // steam venting off the overheated body
+  burst(scene, x, y - 40, FT.smoke, 5, 1000, {
+    speed: { min: 20, max: 60 }, angle: { min: 240, max: 300 }, gravityY: -40, blendMode: NORMAL,
+    lifespan: { min: 700, max: 1000 }, scale: { start: 0.3, end: 0.9 }, alpha: { start: 0.35, end: 0 }, tint: 0x7a5a50,
+  }, DEPTH.VFX - 1);
+  burst(scene, x, y - 30, FT.spark, 14, 700, {
+    speed: { min: 120, max: 300 }, angle: { min: 0, max: 360 }, lifespan: { min: 300, max: 600 }, gravityY: 200,
+    scale: { start: 1, end: 0.3 }, alpha: { start: 1, end: 0 }, tint: [C.red, C.orange, C.white], rotate: ALIGN,
+  });
+  shake(scene, 90, 0.002);
+};
+
+const overheatAura: VfxFn = (scene, o) => {
+  const c = scene.add.container(o.x, o.y).setDepth(DEPTH.VFX);
+  // pulsing red heat under the feet
+  const glow = img(scene, FT.glow, 0, -4, { tint: C.red, sx: 0.7, sy: 0.18, alpha: 0.45 });
+  c.add(glow);
+  loop(scene, c, { targets: glow, alpha: 0.15, duration: 380, yoyo: true, ease: 'Stepped', easeParams: [3] });
+  // heat-shimmer motes hovering around the body
+  const spots: [number, number][] = [[-20, -58], [18, -40], [-14, -22]];
+  spots.forEach(([mx, my], i) => {
+    const m = fpx(scene, 'mote', mx, my, { scale: 2, loop: true, randomStart: true, alpha: 0.85 });
+    if (!m) return;
+    c.add(m);
+    loop(scene, c, { targets: m, y: my - 6, duration: 600 + i * 120, yoyo: true, ease: 'Stepped', easeParams: [3] });
+  });
+  attachTrail(scene, c, FT.spark, 600, {
+    speedY: { min: -150, max: -80 }, speedX: { min: -10, max: 10 }, lifespan: { min: 300, max: 600 },
+    scale: { start: 0.8, end: 0.3 }, alpha: { start: 0.9, end: 0 }, tint: [C.red, C.orange], frequency: 110, quantity: 1,
+    rotate: ALIGN, emitZone: zone(new Phaser.Geom.Rectangle(-14, -56, 28, 50)),
+  });
+  return c;
+};
+
+// ───────────────────────────── Phase 4: Year 3 additions ─────────────────────────────
+
+const volleyCast: VfxFn = (scene, o) => {
+  const { x, y, facing: f } = o;
+  if (!pxFx(scene, 'sf_boom', x + f * 4, y, { scale: 2, dur: 220, add: true, depth: DEPTH.VFX_TOP })) flash(scene, x, y, C.orange, 60, 200, 0.9);
+  burst(scene, x, y, FT.spark, 10, 420, {
+    speed: { min: 160, max: 320 }, angle: sideAngle(f, 22), lifespan: { min: 180, max: 340 },
+    scale: { start: 1, end: 0.4 }, alpha: { start: 1, end: 0 }, tint: HOT_TINTS, rotate: ALIGN,
+  });
+};
+
+const volleyProj: VfxFn = (scene, o) => {
+  const c = projContainer(scene, o);
+  if (!fpxLoop(scene, c, 'dart', 0, 0, { scale: 2 })) {
+    const tail = img(scene, FT.comet, 0, 0, { tint: C.orange, origin: [0.875, 0.5], sx: 0.45, sy: 0.4 });
+    const core = img(scene, FT.soft, 0, 0, { tint: C.yellow, scale: 0.2 });
+    c.add([tail, core]);
+  }
+  attachTrail(scene, c, FT.ember, 360, {
+    speed: { min: 5, max: 25 }, lifespan: { min: 200, max: 360 }, scale: { start: 0.8, end: 0.3 },
+    alpha: { start: 1, end: 0 }, frequency: 45, quantity: 1, tint: FIRE_TINTS,
+  });
+  return c;
+};
+
+const wallBody: VfxFn = (scene, o) => {
+  const c = scene.add.container(o.x, o.y).setDepth(DEPTH.SUMMON);
+  const gy = 4; // feet line (container origin) + the sheets' transparent bottom rows
+  // eruption as it rises (one-shot, scene level)
+  pxFx(scene, 'ex3', o.x, o.y + 4, { scale: 2, oy: 1, dur: 480, depth: DEPTH.VFX });
+  shock(scene, o.x, o.y - 2, C.orange, 200, 380, 0.3);
+  const base = img(scene, FT.scorch, 0, -1, { tint: C.red, sx: 1, sy: 1, alpha: 0.55 });
+  c.add(base);
+  let cols = 0;
+  const xs = [-44, 0, 44];
+  xs.forEach((cx, i) => {
+    const col = pxFx(scene, 'cm_fire', cx, gy, { scale: 2, oy: 1, loop: true, randomStart: true, flipX: i === 1 });
+    if (!col) return;
+    cols++;
+    col.setAlpha(0);
+    c.add(col);
+    scene.tweens.add({ targets: col, alpha: 1, duration: 160, delay: i * 60 });
+  });
+  [-22, 22].forEach((cx) => {
+    const f = pxFx(scene, 'sf_flame', cx, gy, { scale: 2, oy: 1, loop: true, randomStart: true });
+    if (f) c.add(f);
+  });
+  if (!cols) {
+    for (let i = 0; i < 5; i++) {
+      const fl = img(scene, FT.flame, -48 + i * 24, 0, { tint: FIRE_TINTS[i % 3], origin: [0.5, 1], sx: 0.6, sy: 1.1 });
+      c.add(fl);
+      flick(scene, c, fl, 1.15, 120 + i * 20);
+    }
+  }
+  loop(scene, c, { targets: base, alpha: 0.3, duration: 300, yoyo: true, ease: 'Stepped', easeParams: [3] });
+  attachTrail(scene, c, FT.ember, 900, {
+    speedY: { min: -150, max: -70 }, speedX: { min: -20, max: 20 }, lifespan: { min: 500, max: 900 },
+    scale: { start: 1, end: 0.4 }, alpha: { start: 1, end: 0 }, tint: FIRE_TINTS, frequency: 45, quantity: 1,
+    emitZone: zone(new Phaser.Geom.Rectangle(-60, -100, 120, 90)),
+  });
+  attachTrail(scene, c, FT.smoke, 1000, {
+    speedY: { min: -60, max: -30 }, speedX: { min: -10, max: 10 }, lifespan: { min: 700, max: 1000 },
+    scale: { start: 0.4, end: 1.1 }, alpha: { start: 0.25, end: 0 }, tint: C.smoke, frequency: 220, quantity: 1, blendMode: NORMAL,
+    emitZone: zone(new Phaser.Geom.Rectangle(-50, -120, 100, 20)),
+  }, DEPTH.VFX - 1);
+  return c;
+};
+
+const wallPulse: VfxFn = (scene, o) => {
+  const { w, h } = sizeOf(o, 140, 150);
+  const gy = o.y + h / 2 - 15;              // area offsetY -60 → bottom ≈ feet
+  flash(scene, o.x, gy - 50, C.orange, w * 0.9, 220, 0.45);
+  pxFx(scene, 'cm_brightfire', o.x + rnd(-w * 0.3, w * 0.3), gy + 4, { scale: 2, oy: 1, dur: 420, depth: DEPTH.VFX_TOP });
+};
+
+const wardCast: VfxFn = (scene, o) => {
+  const { x, y } = o;
+  if (!fpx(scene, 'ward', x, y - 32, { scale: 4, add: true, dur: 500, depth: DEPTH.VFX_TOP })) {
+    shock(scene, x, y - 32, C.orange, 120, 420, 1);
+  }
+  shock(scene, x, y - 2, C.yellow, 140, 420, 0.3);
+  flash(scene, x, y - 32, C.gold, 100, 300, 0.6);
+  burst(scene, x, y - 32, FT.ember, 16, 900, {
+    speed: { min: 50, max: 120 }, angle: { min: 0, max: 360 }, gravityY: -40, lifespan: { min: 500, max: 900 },
+    scale: { start: 1, end: 0.4 }, alpha: { start: 1, end: 0 }, tint: FIRE_TINTS, emitZone: zone(ring(30), 'edge', 16),
+  });
+};
+
+const wardAura: VfxFn = (scene, o) => {
+  // behind the caster so the ring frames the body instead of covering it
+  const c = scene.add.container(o.x, o.y).setDepth(DEPTH.PLAYER - 1);
+  const r = fpxLoop(scene, c, 'ward', 0, -30, { scale: 2, alpha: 0.75, fps: 10 });
+  if (!r) {
+    const rr = img(scene, FT.ring, 0, -30, { tint: C.orange, scale: 0.6, alpha: 0.4 });
+    c.add(rr);
+    loop(scene, c, { targets: rr, alpha: 0.2, duration: 600, yoyo: true });
+  }
+  attachTrail(scene, c, FT.ember, 900, {
+    speed: { min: 5, max: 20 }, lifespan: { min: 600, max: 900 }, scale: { start: 0.9, end: 0.3 },
+    alpha: { start: 0.9, end: 0 }, tint: [C.gold, C.orange], frequency: 180, quantity: 1, gravityY: -30,
+    emitZone: zone(new Phaser.Geom.Ellipse(0, -30, 70, 70), 'edge', 24),
+  });
+  return c;
+};
+
+// ───────────────────────────── Phase 4: Year 4 additions ─────────────────────────────
+
+const supernovaCast: VfxFn = (scene, o) => {
+  const f = o.facing;
+  const x = o.x - f * 18, y = o.y;          // gather the star over the caster's body, not the staff tip
+  const star = fpx(scene, 'nova', x, y - 10, { scale: 2, add: true, dur: 620, depth: DEPTH.VFX_TOP });
+  if (!star) flash(scene, x, y, C.white, 140, 620, 0.9);
+  const r = img(scene, FT.ring, x, y, { tint: C.orange, alpha: 0.9, scale: 3.2, depth: DEPTH.VFX_TOP });
+  scene.tweens.add({ targets: r, scale: 0.1, duration: 560, ease: 'Cubic.easeIn', onComplete: () => { if (r.scene) r.destroy(); } });
+  implode(scene, x, y, 360, 220, 18, 300);
+  scene.time.delayedCall(220, () => implode(scene, x, y, 260, 160, 14, 260));
+  flare(scene, x, y, C.white, 140, 620);
+  shake(scene, 600, 0.0015);
+};
+
+const supernovaArea: VfxFn = (scene, o) => {
+  const { w, h } = sizeOf(o, 600, 280);
+  const x = o.x, y = o.y;
+  const gy = o.groundY ?? y + 54;
+  scene.time.delayedCall(600, () => {
+    if (!scene.sys || !scene.sys.isActive()) return;
+    try { scene.cameras.main.flash(160, 255, 220, 160); } catch { /* ignore */ }
+    const big = pxFx(scene, 'ex4', x, gy + 8, { scale: 4, oy: 1, depth: DEPTH.VFX_TOP });
+    if (!big) flash(scene, x, y, C.white, w * 0.8, 320, 1);
+    fpx(scene, 'nova', x, y - 10, { scale: 4, add: true, dur: 520, depth: DEPTH.VFX_TOP });
+    for (let i = 0; i < 6; i++) {
+      const side = i % 2 ? 1 : -1;
+      pxFx(scene, 'ex2', x + side * w * rnd(0.22, 0.45), y + rnd(-0.25, 0.25) * h, { scale: 2, delay: 60 + i * 70, depth: DEPTH.VFX_TOP });
+    }
+    shock(scene, x, gy - 2, C.white, w * 1.1, 520, 0.3);
+    shock(scene, x, gy - 2, C.orange, w * 1.4, 700, 0.3, 0.9, 80);
+    shock(scene, x, y, C.red, w * 0.9, 600, 0.55, 0.7, 40);
+    sparks(scene, x, y, 22, 560, 300);
+    embers(scene, x, y, 16, 260);
+    smokePuff(scene, x, gy - 30, 4, 1.6);
+    scorchMark(scene, x, gy, w, 900);
+    shake(scene, 320, 0.011);
+  });
+};
+
+const immolateCast: VfxFn = (scene, o) => {
+  castFx(scene, o, 1.3);
+  flash(scene, o.x, o.y, C.red, 90, 260, 0.8);
+};
+
+const immolateSelf: VfxFn = (scene, o) => {
+  const { x, y } = o;
+  // the caster is briefly engulfed: the price of the spell
+  if (!pxFx(scene, 'cm_fire', x, y + 6, { scale: 2, oy: 1, dur: 520, depth: DEPTH.VFX_TOP })) {
+    tongue(scene, x, y, C.red, 40, 80, 0, 480, DEPTH.VFX_TOP);
+  }
+  flash(scene, x, y - 30, C.red, 110, 280, 0.7);
+  burst(scene, x, y - 30, FT.ember, 10, 800, {
+    speed: { min: 40, max: 120 }, angle: { min: 240, max: 300 }, gravityY: -60, lifespan: { min: 500, max: 800 },
+    scale: { start: 1, end: 0.4 }, alpha: { start: 1, end: 0 }, tint: [C.red, C.deep, C.orange],
+    emitZone: zone(new Phaser.Geom.Rectangle(-14, -26, 28, 52)),
+  });
+};
+
+const immolateArea: VfxFn = (scene, o) => {
+  const { w, h } = sizeOf(o, 150, 170);
+  const x = o.x, y = o.y;
+  const gy = o.groundY ?? y + h * 0.3;
+  // brand sigil snaps onto the target, then three eruptions (synced to the 3 hit lines)
+  const rune = img(scene, 'fx_rune_3', x, y - 6, { tint: C.orange, alpha: 0, depth: DEPTH.VFX_TOP });
+  rune.setScale(2);
+  scene.tweens.add({ targets: rune, alpha: 1, duration: 90 });
+  scene.tweens.add({ targets: rune, alpha: 0, duration: 260, delay: 420, ease: 'Stepped', easeParams: [3], onComplete: () => { if (rune.scene) rune.destroy(); } });
+  const circ = img(scene, 'fx_circle', x, gy - 2, { tint: C.red, alpha: 0.85, depth: DEPTH.VFX - 1 });
+  circ.setScale(1, 0.25);
+  scene.tweens.add({ targets: circ, alpha: 0, duration: 400, delay: 420, onComplete: () => { if (circ.scene) circ.destroy(); } });
+  for (let i = 0; i < 3; i++) {
+    scene.time.delayedCall(250 + i * 110, () => {
+      if (!scene.sys || !scene.sys.isActive()) return;
+      if (!pxFx(scene, 'cm_flamelash', x + rnd(-10, 10), y - 4, { scale: 2, flipX: i % 2 === 1, dur: 360, depth: DEPTH.VFX_TOP })) {
+        tongue(scene, x, gy, FIRE_TINTS[i], w * 0.4, h * 0.9, 0, 360);
+      }
+      if (i === 0) pxFx(scene, 'ex3', x, gy + 4, { scale: 2, oy: 1, dur: 500, depth: DEPTH.VFX });
+      flash(scene, x, y, i === 2 ? C.white : C.orange, w * 0.8, 180, 0.7);
+      sparks(scene, x, y, 6, 260, 260);
+    });
+  }
+  scene.time.delayedCall(250, () => shake(scene, 140, 0.004));
+};
+
+const cauterizeSelf: VfxFn = (scene, o) => {
+  const { x, y } = o;
+  if (!fpx(scene, 'heal', x, y - 34, { scale: 4, add: true, dur: 480, depth: DEPTH.VFX_TOP })) {
+    flash(scene, x, y - 34, C.gold, 120, 420, 0.9);
+  }
+  pxFx(scene, 'cm_firespin', x, y - 34, { scale: 2, dur: 560, depth: DEPTH.VFX_TOP });
+  stream(scene, x, y - 4, FT.ember, 420, 900, {
+    speedY: { min: -120, max: -60 }, speedX: { min: -12, max: 12 }, lifespan: { min: 600, max: 900 },
+    scale: { start: 1, end: 0.4 }, alpha: { start: 1, end: 0 }, tint: [C.gold, C.yellow, C.white], frequency: 30, quantity: 1,
+    emitZone: zone(new Phaser.Geom.Rectangle(-16, -6, 32, 8)),
+  });
+};
+
+const cauterizeArea: VfxFn = (scene, o) => {
+  const { w } = sizeOf(o, 240, 130);
+  const x = o.x;
+  const gy = o.groundY ?? o.y + 34;
+  shock(scene, x, gy - 2, C.orange, w * 1.1, 420, 0.3);
+  for (const d of [-0.42, -0.22, 0.22, 0.42]) {
+    pxFx(scene, 'cm_brightfire', x + d * w, gy + 4, { scale: 2, oy: 1, flipX: d < 0, delay: Math.abs(d) > 0.3 ? 80 : 20, dur: 520, depth: DEPTH.VFX });
+  }
+  sparks(scene, x, gy - 30, 8, 260, 220);
+};
+
 // ───────────────────────────── registry ─────────────────────────────
 
 export function registerFireVfx(): void {
@@ -648,5 +1054,29 @@ export function registerFireVfx(): void {
   registerVfx('fire_phoenix_bolt', phoenixBolt);
   registerVfx('fire_ascension_cast', ascensionCast);
   registerVfx('fire_ascension_aura', ascensionAura);
+
+  // Phase 4 — Year 2
+  registerVfx('fire_bomb_proj', bombProj);
+  registerVfx('fire_bomb_area', bombArea);
+  registerVfx('fire_dash_out', dashOut);
+  registerVfx('fire_dash_trail', dashTrail);
+  registerVfx('fire_dash_in', dashIn);
+  registerVfx('fire_overheat_cast', overheatCast);
+  registerVfx('fire_overheat_aura', overheatAura);
+  // Phase 4 — Year 3
+  registerVfx('fire_volley_cast', volleyCast);
+  registerVfx('fire_volley_proj', volleyProj);
+  registerVfx('fire_wall', wallBody);
+  registerVfx('fire_wall_pulse', wallPulse);
+  registerVfx('fire_ward_cast', wardCast);
+  registerVfx('fire_ward_aura', wardAura);
+  // Phase 4 — Year 4
+  registerVfx('fire_supernova_cast', supernovaCast);
+  registerVfx('fire_supernova_area', supernovaArea);
+  registerVfx('fire_immolate_cast', immolateCast);
+  registerVfx('fire_immolate_self', immolateSelf);
+  registerVfx('fire_immolate_area', immolateArea);
+  registerVfx('fire_cauterize', cauterizeSelf);
+  registerVfx('fire_cauterize_area', cauterizeArea);
 }
 

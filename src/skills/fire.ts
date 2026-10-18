@@ -1,6 +1,7 @@
-// OWNER: A3 (fire-tree). Pyromancer -> Flamebinder -> Inferno Sage.
-// Identity: highest raw damage, burn DoT, explosions, big AoE.
-import type { IconSpec, SkillDef, StatusSpec } from '../core/types';
+// OWNER: A3 (fire-tree). Pyromancer (Year 2) -> Flamebinder (Year 3) -> Inferno Sage (Year 4), 8 spells per Year.
+// Identity: highest raw damage, burn DoT, explosions, big AoE, risk/reward (Overheat, Immolation).
+import type { AttackSpec, IconSpec, SkillContext, SkillDef, StatusSpec } from '../core/types';
+import { playVfx } from '../core/vfx';
 
 /** Linear interpolation across levels 1..max (clamped). */
 const L = (a: number, b: number, max: number) => (lv: number) => a + ((b - a) * (Math.min(Math.max(lv, 1), max) - 1)) / (max - 1);
@@ -15,8 +16,83 @@ const burn = (max: number, chance: [number, number], dur: [number, number], pot:
   kind: 'burn', chance: L(chance[0], chance[1], max), durationMs: L(dur[0], dur[1], max), potency: L(pot[0], pot[1], max),
 });
 
+// ───────────────────────── custom casts (onCast) ─────────────────────────
+
+/** Flame Dash: blink in the held direction, then scorch everything along the path. */
+const DASH_MAX = 10;
+const dashDist = Li(150, 230, DASH_MAX);
+const DASH_ATTACK: AttackSpec = {
+  pattern: 'aoe_self', damagePct: L(90, 140, DASH_MAX), hits: K(1), maxTargets: K(6), range: 230,
+  area: { w: 230, h: 90 },
+  status: burn(DASH_MAX, [0.4, 0.7], [3000, 4000], [10, 14]),
+  vfx: { area: 'fire_dash_trail', hit: 'fire_hit' },
+};
+
+function castFlameDash(ctx: SkillContext, lv: number): void {
+  const p = ctx.services.player;
+  const aim = p.getAimDir();
+  const dist = dashDist(lv);
+  let dx = 0, dy = 0;
+  if (aim.x !== 0) dx = aim.x * dist;
+  else if (aim.y !== 0) dy = aim.y * dist;
+  else dx = p.facing * dist;
+  const ox = p.x, oy = p.y;
+  playVfx(ctx.scene, 'fire_dash_out', { x: ox, y: oy, facing: p.facing, targetX: ox + dx, targetY: oy + dy, lv });
+  p.blink(dx, dy);
+  const nx = p.x, ny = p.y;
+  playVfx(ctx.scene, 'fire_dash_in', { x: nx, y: ny, facing: p.facing, targetX: ox, targetY: oy, lv });
+  const horiz = Math.abs(nx - ox) >= Math.abs(ny - oy);
+  const f: 1 | -1 = horiz ? (nx >= ox ? 1 : -1) : p.facing;
+  const area = horiz
+    ? { w: Math.max(90, Math.abs(nx - ox) + 50), h: 90 }
+    : { w: 90, h: Math.max(90, Math.abs(ny - oy) + 60) };
+  // aoe_self centres on origin.x (body) — put it at the middle of the travelled path.
+  ctx.runAttack({ ...DASH_ATTACK, area }, { x: (ox + nx) / 2, y: (oy + ny) / 2 - 34, facing: f });
+}
+
+/** Immolation: pay a slice of max HP (never lethal) to brand the nearest foes with three searing blasts. */
+const IMMO_MAX = 20;
+const IMMO_HP = 0.06;
+const IMMOLATION: AttackSpec = {
+  pattern: 'aoe_target', damagePct: L(260, 370, IMMO_MAX), hits: K(3), maxTargets: K(2), range: 360,
+  area: { w: 150, h: 170 }, delayMs: 260, hitIntervalMs: 110,
+  status: burn(IMMO_MAX, [0.8, 1], [4000, 6000], [14, 22]),
+  vfx: { cast: 'fire_immolate_cast', area: 'fire_immolate_area', hit: 'fire_hit_big' },
+};
+
+function castImmolation(ctx: SkillContext, lv: number): void {
+  const { player: p, progression: prog, combat } = ctx.services;
+  const cost = Math.min(Math.round(prog.derived().maxHp * IMMO_HP), Math.max(0, Math.floor(prog.state.hp) - 1));
+  if (cost > 0) {
+    prog.loseHp(cost);
+    combat.showNumber(p.x, p.y - 70, cost, 'player');
+  }
+  playVfx(ctx.scene, 'fire_immolate_self', { x: p.x, y: p.y, facing: p.facing, lv });
+  ctx.runAttack(IMMOLATION, { x: p.x + 18 * p.facing, y: p.y - 34, facing: p.facing });
+}
+
+/** Cauterize: sear your wounds shut (heal % max HP) and scorch whatever crowds you. */
+const CAUT_MAX = 10;
+const cauterizePct = L(0.15, 0.3, CAUT_MAX);
+const CAUTERIZE: AttackSpec = {
+  pattern: 'aoe_self', damagePct: L(150, 240, CAUT_MAX), hits: K(1), maxTargets: K(6), range: 120,
+  area: { w: 240, h: 130, offsetY: 4 }, delayMs: 120,
+  status: burn(CAUT_MAX, [0.5, 0.8], [3000, 4000], [10, 16]),
+  vfx: { area: 'fire_cauterize_area', hit: 'fire_hit' },
+};
+
+function castCauterize(ctx: SkillContext, lv: number): void {
+  const { player: p, progression: prog, combat } = ctx.services;
+  const before = prog.state.hp;
+  prog.heal(Math.max(1, Math.round(prog.derived().maxHp * cauterizePct(lv))), 0);
+  const got = Math.round(prog.state.hp - before);
+  playVfx(ctx.scene, 'fire_cauterize', { x: p.x, y: p.y, facing: p.facing, lv });
+  if (got > 0) combat.showNumber(p.x, p.y - 72, got, 'heal');
+  ctx.runAttack(CAUTERIZE, { x: p.x, y: p.y - 34, facing: p.facing });
+}
+
 export const FIRE_SKILLS: SkillDef[] = [
-  // ───────────────────────── Tier 2 — Pyromancer (lv 10) ─────────────────────────
+  // ───────────────────────── Year 2 — Pyromancer (lv 10) · roots: arrow, firebomb, flame dash ─────────────────────────
   {
     id: 'fire_arrow', name: 'Flame Arrow', job: 'pyromancer', element: 'fire', kind: 'attack', maxLevel: 20,
     description: 'Hurl a blazing arrow that strikes one enemy hard and sets it ablaze.',
@@ -55,14 +131,56 @@ export const FIRE_SKILLS: SkillDef[] = [
     },
   },
   {
+    id: 'fire_firebomb', name: 'Firebomb', job: 'pyromancer', element: 'fire', kind: 'attack', maxLevel: 15,
+    description: 'Lob a molten bomb in an arc; it bursts on the first enemy or surface it touches, burning the crowd.',
+    icon: icon('orb', 0xffb830, 0xc2321a), mpCost: Li(14, 24, 15), cooldownMs: L(2000, 1200, 15), castTimeMs: 420, sfx: 'cast_fire',
+    attack: {
+      pattern: 'projectile', damagePct: L(115, 165, 15), hits: K(1), maxTargets: K(6), range: 300,
+      area: { w: 170, h: 120 },
+      projectile: { speed: 430, radius: 12, gravity: 900, explodeArea: { w: 170, h: 120 } },
+      status: burn(15, [0.35, 0.6], [3000, 4500], [10, 16]),
+      vfx: { cast: 'fire_cast', projectile: 'fire_bomb_proj', hit: 'fire_hit', area: 'fire_bomb_area' },
+    },
+  },
+  {
+    id: 'fire_flame_dash', name: 'Flame Dash', job: 'pyromancer', element: 'fire', kind: 'movement', maxLevel: DASH_MAX,
+    description: 'Burst forward (or up/down with the arrows) in a rush of fire, scorching every enemy along the path.',
+    icon: icon('teleport', 0xffd84a, 0xe63a12), mpCost: Li(12, 20, DASH_MAX), cooldownMs: L(5000, 3000, DASH_MAX), castTimeMs: 150, sfx: 'whoosh',
+    movement: { kind: 'blink', distance: dashDist, vfxOut: 'fire_dash_out', vfxIn: 'fire_dash_in' },
+    attack: DASH_ATTACK,
+    onCast: castFlameDash,
+  },
+  {
+    id: 'fire_overheat', name: 'Overheat', job: 'pyromancer', element: 'fire', kind: 'buff', maxLevel: 10,
+    description: 'Run dangerously hot: far more fire damage and critical rate, but your defense is halved while it lasts.',
+    icon: icon('ember', 0xffffff, 0xe63a12), requires: [{ skillId: 'fire_firebomb', level: 3 }],
+    mpCost: Li(16, 24, 10), cooldownMs: L(60000, 45000, 10), castTimeMs: 450, sfx: 'buff',
+    buff: {
+      durationMs: L(20000, 30000, 10),
+      modifiers: (lv) => [
+        { stat: 'dmgFire', add: L(0.15, 0.3, 10)(lv) },
+        { stat: 'critRate', add: L(0.03, 0.08, 10)(lv) },
+        { stat: 'def', mul: -0.5 },
+      ],
+      vfx: 'fire_overheat_cast', auraVfx: 'fire_overheat_aura',
+    },
+  },
+  {
     id: 'fire_smolder', name: 'Smoldering Focus', job: 'pyromancer', element: 'fire', kind: 'passive', maxLevel: 15,
     description: 'Permanently increases fire damage and mana regeneration.',
     icon: icon('flame', 0xffb830, 0xc2321a), requires: [{ skillId: 'fire_arrow', level: 3 }],
     mpCost: K(0),
     passive: (lv) => [{ stat: 'dmgFire', add: 0.015 * lv }, { stat: 'mpRegen', add: 2 * lv }],
   },
+  {
+    id: 'fire_fleetflame', name: 'Fleetflame', job: 'pyromancer', element: 'fire', kind: 'passive', maxLevel: 10,
+    description: 'Fire in your heels: permanently faster movement, higher jumps and quicker casting.',
+    icon: icon('wind', 0xffd84a, 0xff7a1a), requires: [{ skillId: 'fire_flame_dash', level: 3 }],
+    mpCost: K(0),
+    passive: (lv) => [{ stat: 'speed', add: 2 * lv }, { stat: 'jump', add: 3 * lv }, { stat: 'castSpeed', add: 0.007 * lv }],
+  },
 
-  // ───────────────────────── Tier 3 — Flamebinder (lv 25) ─────────────────────────
+  // ───────────────────────── Year 3 — Flamebinder (lv 25) · roots: orb, pillar, pyre mastery ─────────────────────────
   {
     id: 'fire_orb', name: 'Blazing Orb', job: 'flamebinder', element: 'fire', kind: 'attack', maxLevel: 20,
     description: 'Launch a fireball that detonates on impact, burning everything caught in the blast.',
@@ -101,6 +219,33 @@ export const FIRE_SKILLS: SkillDef[] = [
     },
   },
   {
+    id: 'fire_ember_volley', name: 'Ember Volley', job: 'flamebinder', element: 'fire', kind: 'attack', maxLevel: 20,
+    description: 'Fan out a spray of ember darts (3, then 5 from level 11) that each strike a different foe.',
+    icon: icon('missile', 0xffd84a, 0xe63a12), requires: [{ skillId: 'fire_orb', level: 3 }],
+    mpCost: Li(24, 36, 20), castTimeMs: 440, sfx: 'cast_fire',
+    attack: {
+      pattern: 'projectile', damagePct: L(140, 200, 20), hits: K(1), maxTargets: K(1), range: 500,
+      projectile: { speed: 700, radius: 12, count: (lv) => (lv >= 11 ? 5 : 3), spreadDeg: 8 },
+      status: burn(20, [0.2, 0.4], [3000, 4000], [8, 12]),
+      vfx: { cast: 'fire_volley_cast', projectile: 'fire_volley_proj', hit: 'fire_hit' },
+    },
+  },
+  {
+    id: 'fire_flame_wall', name: 'Wall of Fire', job: 'flamebinder', element: 'fire', kind: 'summon', maxLevel: 15,
+    description: 'Raise a roaring wall of flame in front of you that keeps burning anything that touches it.',
+    icon: icon('flame', 0xff9a2e, 0x9a1a0a), requires: [{ skillId: 'fire_pillar', level: 5 }],
+    mpCost: Li(30, 42, 15), cooldownMs: L(16000, 12000, 15), castTimeMs: 520, sfx: 'cast_fire',
+    summon: {
+      durationMs: L(8000, 11000, 15), attackIntervalMs: 600, offset: { x: 90, y: 0 }, follow: false, vfx: 'fire_wall',
+      attack: {
+        pattern: 'aoe_self', damagePct: L(80, 120, 15), hits: K(1), maxTargets: K(8), range: 90,
+        area: { w: 140, h: 150, offsetY: -60 },
+        status: burn(15, [0.3, 0.5], [2000, 3000], [8, 12]),
+        vfx: { area: 'fire_wall_pulse', hit: 'fire_hit' },
+      },
+    },
+  },
+  {
     id: 'fire_salamander', name: 'Summon Salamander', job: 'flamebinder', element: 'fire', kind: 'summon', maxLevel: 15,
     description: 'Summon a fire salamander that stands its ground and spits burning bolts at nearby enemies.',
     icon: icon('ember', 0xffd84a, 0xc2321a), requires: [{ skillId: 'fire_orb', level: 5 }],
@@ -122,8 +267,19 @@ export const FIRE_SKILLS: SkillDef[] = [
     mpCost: K(0),
     passive: (lv) => [{ stat: 'dmgFire', add: 0.02 * lv }, { stat: 'mastery', add: 0.012 * lv }],
   },
+  {
+    id: 'fire_ember_ward', name: 'Ember Ward', job: 'flamebinder', element: 'fire', kind: 'buff', maxLevel: 10,
+    description: 'Wrap yourself in a ring of embers: part of the damage you take burns away your MP instead, and defense rises.',
+    icon: icon('shield', 0xffd84a, 0xe63a12), requires: [{ skillId: 'fire_pyre_mastery', level: 3 }],
+    mpCost: Li(20, 30, 10), cooldownMs: K(4000), castTimeMs: 500, sfx: 'buff',
+    buff: {
+      durationMs: L(60000, 120000, 10),
+      modifiers: (lv) => [{ stat: 'mpShield', add: L(0.08, 0.2, 10)(lv) }, { stat: 'def', add: Li(8, 30, 10)(lv) }],
+      vfx: 'fire_ward_cast', auraVfx: 'fire_ward_aura',
+    },
+  },
 
-  // ───────────────────────── Tier 4 — Inferno Sage (lv 40) ─────────────────────────
+  // ───────────────────────── Year 4 — Inferno Sage (lv 40) · ultimates: Meteor Storm, Supernova ─────────────────────────
   {
     id: 'fire_inferno_lance', name: 'Inferno Lance', job: 'inferno_sage', element: 'fire', kind: 'attack', maxLevel: 20,
     description: 'Fire a piercing lance of white-hot flame that sears everything in a long line three times.',
@@ -150,6 +306,26 @@ export const FIRE_SKILLS: SkillDef[] = [
       status: burn(10, [0.7, 0.9], [4000, 6000], [5, 7]),
       vfx: { cast: 'fire_meteor_cast', projectile: 'fire_meteor_proj', area: 'fire_meteor_impact', hit: 'fire_hit_big' },
     },
+  },
+  {
+    id: 'fire_supernova', name: 'Supernova', job: 'inferno_sage', element: 'fire', kind: 'attack', maxLevel: 10,
+    description: 'Gather a star in your hands and let it go: a colossal blast around you that detonates every burn for 1.5x damage.',
+    icon: icon('sunburst', 0xfff4d0, 0xff4a10), requires: [{ skillId: 'fire_combust', level: 10 }],
+    mpCost: Li(75, 90, 10), cooldownMs: L(70000, 55000, 10), castTimeMs: 900, sfx: 'explosion',
+    attack: {
+      pattern: 'aoe_self', damagePct: L(380, 520, 10), hits: K(3), maxTargets: K(12), range: 300,
+      area: { w: 600, h: 280, offsetY: -20 }, delayMs: 650, hitIntervalMs: 120, knockback: 60,
+      bonusVs: { status: 'burn', mult: 1.5, consume: true },
+      vfx: { cast: 'fire_supernova_cast', area: 'fire_supernova_area', hit: 'fire_hit_big' },
+    },
+  },
+  {
+    id: 'fire_immolation', name: 'Immolation', job: 'inferno_sage', element: 'fire', kind: 'attack', maxLevel: IMMO_MAX,
+    description: 'Burn 6% of your own max HP to brand the two nearest foes with three searing blasts (never lethal to you).',
+    icon: icon('skull', 0xffd84a, 0xe63a12), requires: [{ skillId: 'fire_inferno_lance', level: 3 }],
+    mpCost: Li(40, 60, IMMO_MAX), cooldownMs: L(6000, 4500, IMMO_MAX), castTimeMs: 520, sfx: 'explosion',
+    attack: IMMOLATION,
+    onCast: castImmolation,
   },
   {
     id: 'fire_phoenix', name: 'Summon Phoenix', job: 'inferno_sage', element: 'fire', kind: 'summon', maxLevel: 10,
@@ -186,5 +362,13 @@ export const FIRE_SKILLS: SkillDef[] = [
     icon: icon('ember', 0xff4a10, 0xffd84a), requires: [{ skillId: 'fire_pyre_mastery', level: 10 }],
     mpCost: K(0),
     passive: (lv) => [{ stat: 'critRate', add: 0.012 * lv }, { stat: 'critDmg', add: 0.035 * lv }],
+  },
+  {
+    id: 'fire_cauterize', name: 'Cauterize', job: 'inferno_sage', element: 'fire', kind: 'attack', maxLevel: CAUT_MAX,
+    description: 'Sear your wounds shut, restoring 15-30% of max HP, and scorch every enemy crowding around you.',
+    icon: icon('heart', 0xffd84a, 0xe63a12), requires: [{ skillId: 'fire_ascension', level: 3 }],
+    mpCost: Li(40, 55, CAUT_MAX), cooldownMs: L(30000, 20000, CAUT_MAX), castTimeMs: 500, sfx: 'heal',
+    attack: CAUTERIZE,
+    onCast: castCauterize,
   },
 ];

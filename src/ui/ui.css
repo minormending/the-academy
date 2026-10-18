@@ -634,6 +634,7 @@ body.ax-dragging, body.ax-dragging * { cursor: grabbing !important; }
 .ax-title-h { font-family: var(--ax-serif); font-size: 22px; font-weight: 700; color: #ffe9b0; text-align: center; text-shadow: 0 0 10px rgba(150, 110, 255, 0.7), 0 2px 2px #000; }
 .ax-title-text { text-align: center; color: #e3e6ff; font-size: 13px; text-shadow: 0 1px 2px #000; }
 .ax-title-panel .ax-row { justify-content: center; }
+.ax-begin-btn.ax-btn-danger { flex: 1; min-width: 0; font-size: 13px; padding-left: 10px; padding-right: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ax-input-wrap { position: relative; }
 .ax-input {
   width: 100%; padding: 11px 50px 11px 14px; border-radius: 10px; font-size: 17px; font-weight: 700; font-family: var(--ax-font); color: #fff; outline: none;

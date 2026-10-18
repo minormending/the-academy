@@ -32,6 +32,8 @@ export class TitleMenu {
   private starting = false;
   private nameDraft = '';
   private error = '';
+  /** Second-click confirmation before New Game overwrites an existing save. */
+  private confirmOverwrite = false;
   private readonly onKey = (e: KeyboardEvent) => this.key(e);
   private readonly onFocusIn = () => this.syncCapture();
   private readonly onFocusOut = () => setTimeout(() => this.syncCapture(), 0);
@@ -65,7 +67,7 @@ export class TitleMenu {
 
   private sfx(k: 'ui_click' | 'ui_open' | 'ui_close' | 'ui_error') { try { getAudio().play(k); } catch { /* ignore */ } }
 
-  private setView(v: View) { this.view = v; this.error = ''; this.render(); }
+  private setView(v: View) { this.view = v; this.error = ''; this.confirmOverwrite = false; this.render(); }
 
   private render() {
     const p = this.panel;
@@ -95,6 +97,7 @@ export class TitleMenu {
         this.nameDraft = input.value;
         counter.textContent = `${input.value.trim().length}/12`;
         if (this.error) { this.error = ''; err.textContent = ''; }
+        if (this.confirmOverwrite) { this.confirmOverwrite = false; this.syncBeginBtn(); }
       });
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); this.begin(); }
@@ -107,7 +110,7 @@ export class TitleMenu {
         err,
         this.saveExists && this.save ? h('div', { class: 'ax-title-warn' }, `This will replace ${this.save.name} (Lv ${this.save.level}).`) : null,
         h('div', { class: 'ax-row' },
-          h('button', { class: 'ax-btn ax-btn-large', onclick: () => this.begin() }, 'Begin'),
+          h('button', { class: 'ax-btn ax-btn-large ax-begin-btn', onclick: () => this.begin() }, 'Begin'),
           h('button', { class: 'ax-btn ax-btn-secondary ax-btn-large', onclick: () => { this.sfx('ui_click'); this.setView('main'); } }, 'Back'))]);
       setTimeout(() => { if (this.view === 'new' && input.isConnected) input.focus(); }, 30);
     } else {
@@ -128,6 +131,16 @@ export class TitleMenu {
     }
   }
 
+  /** Swap the Begin button between normal and "Overwrite <name>?" confirmation. */
+  private syncBeginBtn() {
+    const btn = this.panel.querySelector<HTMLButtonElement>('.ax-begin-btn');
+    if (!btn) return;
+    const s = this.save;
+    btn.textContent = this.confirmOverwrite ? (s ? `Overwrite ${s.name} Lv ${s.level}?` : 'Overwrite save?') : 'Begin';
+    btn.classList.toggle('ax-btn-danger', this.confirmOverwrite);
+    if (this.confirmOverwrite) { btn.classList.remove('ax-shake'); void btn.offsetWidth; btn.classList.add('ax-shake'); }
+  }
+
   private continue() {
     if (this.starting) return;
     const s = safe(() => loadSave(), null);
@@ -143,6 +156,13 @@ export class TitleMenu {
       this.sfx('ui_error');
       const e = this.panel.querySelector('.ax-title-error');
       if (e) { e.textContent = err; e.classList.remove('ax-shake'); void (e as HTMLElement).offsetWidth; e.classList.add('ax-shake'); }
+      return;
+    }
+    // An existing save would be replaced: require a second Begin (click or Enter) to confirm.
+    if (safe(() => hasSave(), false) && !this.confirmOverwrite) {
+      this.confirmOverwrite = true;
+      this.sfx('ui_error');
+      this.syncBeginBtn();
       return;
     }
     const name = this.nameDraft.trim().replace(/\s+/g, ' ');

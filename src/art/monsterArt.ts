@@ -1,9 +1,15 @@
-// OWNER: A6 (monsters). Procedural monster art (Canvas 2D → Phaser textures + anims).
+// OWNER: A6 (monsters). Monster art → Phaser textures + anims.
+// 16-bit pivot: each monster is sliced from a freely licensed pixel sheet (src/art/manifests/monsters.ts,
+// credits in public/assets/monsters/CREDITS.md), palette-swapped and integer-scaled by PIXEL_SCALE.
+// The original procedural Canvas painter below stays as the fallback when a source sheet failed to load.
 // Texture key `monster_${id}`; frames `${anim}_${i}`; anims `monster_${id}_${anim}`.
 // Every frame has the monster's feet at bottom-center, MONSTER_FOOT_PAD px above the frame bottom.
 // Art is drawn facing RIGHT (+x); entities flip with setFlipX.
 import type Phaser from 'phaser';
 import { MONSTERS } from '../data/monsters';
+import { PIXEL_SCALE } from '../core/constants';
+import { sourceImage } from './assets';
+import { MSRC } from './manifests/monsters';
 
 export type MonsterAnim = 'idle' | 'move' | 'hit' | 'die' | 'attack';
 export const MONSTER_FOOT_PAD = 2;
@@ -1625,7 +1631,8 @@ const COIN_COLORS = {
   gold: { base: 0xffc93a, hi: 0xfff2b0, dk: 0x9a6a08 },
 };
 
-function generateFxTextures(scene: Phaser.Scene) {
+/** Procedural (smooth) FX + drop textures — the fallback layer; pixel versions overwrite these keys. */
+function generateProceduralFxTextures(scene: Phaser.Scene) {
   addSimple(scene, MFX.ember, canvasOf(10, 10, c => softDot(c, 5, 5, 5, 'rgba(255,230,140,1)', 'rgba(255,90,20,0)')));
   addSimple(scene, MFX.glow, canvasOf(32, 32, c => softDot(c, 16, 16, 16, 'rgba(255,255,255,0.9)', 'rgba(255,255,255,0)')));
   addSimple(scene, MFX.spark, canvasOf(16, 16, c => {
@@ -1753,18 +1760,521 @@ function generateFxTextures(scene: Phaser.Scene) {
   }));
 }
 
+
+// ═════════════════════════════ 16-bit pixel pipeline ═════════════════════════════
+
+type Rgb = [number, number, number];
+/** In-place recolor of a sheet's RGBA pixels (palette swap). */
+type Recolor = (d: Uint8ClampedArray) => void;
+
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
+  if (mx === mn) return [0, 0, l];
+  const d = mx - mn;
+  const s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+  let h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  h *= 60;
+  return [h, s, l];
+}
+function hslToRgb(h: number, s: number, l: number): Rgb {
+  h = ((h % 360) + 360) % 360 / 360;
+  if (s === 0) { const v = Math.round(l * 255); return [v, v, v]; }
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+  const f = (t: number) => {
+    t = (t + 1) % 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  return [Math.round(f(h + 1 / 3) * 255), Math.round(f(h) * 255), Math.round(f(h - 1 / 3) * 255)];
+}
+const lum = (r: number, g: number, b: number) => (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+/** Hue-range test (degrees, wraps through 0). */
+function inHue(h: number, lo: number, hi: number): boolean {
+  return lo <= hi ? h >= lo && h <= hi : h >= lo || h <= hi;
+}
+interface PixFilter { hue?: [number, number]; minSat?: number; minLum?: number; maxLum?: number }
+function passes(f: PixFilter | undefined, r: number, g: number, b: number): boolean {
+  if (!f) return true;
+  const [h, s] = rgbToHsl(r, g, b);
+  const l = lum(r, g, b);
+  if (f.hue && !inHue(h, f.hue[0], f.hue[1])) return false;
+  if (f.minSat !== undefined && s < f.minSat) return false;
+  if (f.minLum !== undefined && l < f.minLum) return false;
+  if (f.maxLum !== undefined && l > f.maxLum) return false;
+  return true;
+}
+/**
+ * Gradient map: each (filtered) pixel's luminance is normalised over the sheet and mapped onto a colour ramp.
+ * Source palettes are small, so the result stays a small palette (no new shades are invented per pixel).
+ */
+function gradientMap(stops: number[], filter?: PixFilter): Recolor {
+  return d => {
+    let lo = 1, hi = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 8 || !passes(filter, d[i], d[i + 1], d[i + 2])) continue;
+      const l = lum(d[i], d[i + 1], d[i + 2]);
+      if (l < lo) lo = l;
+      if (l > hi) hi = l;
+    }
+    const span = Math.max(0.05, hi - lo);
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 8 || !passes(filter, d[i], d[i + 1], d[i + 2])) continue;
+      const t = Math.min(1, Math.max(0, (lum(d[i], d[i + 1], d[i + 2]) - lo) / span)) * (stops.length - 1);
+      const k = Math.min(stops.length - 2, Math.floor(t)), f = t - k;
+      const c = mix(stops[k], stops[k + 1], f);
+      d[i] = (c >> 16) & 255; d[i + 1] = (c >> 8) & 255; d[i + 2] = c & 255;
+    }
+  };
+}
+function hueShift(deg: number, satMul = 1, lightMul = 1, filter?: PixFilter): Recolor {
+  return d => {
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 8 || !passes(filter, d[i], d[i + 1], d[i + 2])) continue;
+      const [h, s, l] = rgbToHsl(d[i], d[i + 1], d[i + 2]);
+      const [r, g, b] = hslToRgb(h + deg, Math.min(1, s * satMul), Math.min(1, l * lightMul));
+      d[i] = r; d[i + 1] = g; d[i + 2] = b;
+    }
+  };
+}
+const chain = (...fns: Recolor[]): Recolor => d => fns.forEach(f => f(d));
+
+/** Element / biome ramps (dark → light). */
+const RAMP = {
+  ice: [0x0c1838, 0x1f4f8f, 0x3f93d6, 0x8fd8f6, 0xe4fbff],
+  snowFur: [0x3a4a6e, 0x7d97c0, 0xbcd2ec, 0xf2f8ff],
+  void: [0x0a0412, 0x2c0a52, 0x7a1ec8, 0xe85cff, 0x9ff4ff],
+  lava: [0x5a1008, 0xc8300e, 0xff6a1e, 0xffb43c, 0xfff4a8],
+  magma: [0x120808, 0x241414, 0x3a1e1a, 0x5a2a1e, 0xa83a14, 0xff8a1e, 0xffe070],
+  crag: [0x1c1a22, 0x45414c, 0x736c6a, 0xa79d8c, 0xe2d9c2],
+  storm: [0x140c2c, 0x352a80, 0x6656d6, 0xb4a6ff, 0xfff2a0],
+  thunder: [0x14143a, 0x2e3aa8, 0x4f74f0, 0x96b4ff, 0xe4ecff],
+  arcaneFire: [0x2a0a5a, 0x7a24d0, 0xc86cff, 0xffc8ff, 0xffffff],
+};
+
+interface FrameRef { key: string; x: number; y: number; w: number; h: number; ax: number; ay: number; dy?: number }
+/** Frames of a uniform grid sheet: `cols` per row, anchor (ax = body centre x, ay = feet y) inside each cell. */
+const grid = (key: string, fw: number, fh: number, cols: number, ax: number, ay: number) =>
+  (...idx: number[]): FrameRef[] => idx.map(i => ({ key, x: (i % cols) * fw, y: Math.floor(i / cols) * fh, w: fw, h: fh, ax, ay }));
+const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+
+interface PixelAnim { frames: FrameRef[]; rate: number }
+interface PixelSpec {
+  /** Integer scale (defaults to PIXEL_SCALE). */
+  scale?: number;
+  /** Source art faces LEFT (we flip it so every texture faces right). */
+  flip?: boolean;
+  recolor?: Recolor;
+  /** Add a 1px outline of this colour (for sources drawn without one). */
+  outline?: number;
+  idle: PixelAnim;
+  move: PixelAnim;
+  /** Base frame for the hit flash (default idle[0]). */
+  hit?: FrameRef;
+  /** Source death frames; otherwise a fade + pixel poof is derived. */
+  die?: PixelAnim;
+  attack?: PixelAnim;
+}
+
+function buildPixelSpecs(): Record<string, PixelSpec> {
+  const snail = grid(MSRC.snail, 32, 32, 7, 16, 28);
+  const slime = grid(MSRC.slime, 24, 24, 3, 12, 20);
+  const shWalk = grid(MSRC.shroomWalk, 41, 30, 10, 20, 30);
+  const shIdle = grid(MSRC.shroomIdle, 63, 37, 4, 19, 37);
+  const shGas = grid(MSRC.shroomBreath, 63, 37, 10, 19, 37);
+  const stump = grid(MSRC.stump, 32, 48, 4, 16, 48);
+  const batFly = grid(MSRC.batFly, 64, 64, 4, 32, 44);
+  const batHit = grid(MSRC.batHit, 64, 64, 4, 32, 44);
+  const batDie = grid(MSRC.batDeath, 64, 64, 4, 32, 44);
+  const wartaur = grid(MSRC.wartaur, 80, 80, 4, 48, 80);
+  const sparky = grid(MSRC.sparky, 16, 16, 5, 8, 16);
+  const imp = grid(MSRC.imp, 32, 32, 10, 16, 32);
+  const lzIdle = grid(MSRC.lizardIdle, 64, 32, 4, 15, 32);
+  const lzWalk = grid(MSRC.lizardWalk, 64, 32, 6, 15, 32);
+  const lzHurt = grid(MSRC.lizardHurt, 64, 32, 3, 15, 32);
+  const golem = grid(MSRC.golem, 64, 72, 6, 41, 72);
+  const bird = grid(MSRC.bird, 32, 32, 7, 15, 30);
+  const dragon = grid(MSRC.dragon, 144, 64, 6, 96, 64);
+  const wizard = grid(MSRC.wizard, 81, 66, 15, 39, 66);
+
+  const thornCap = hueShift(36, 1.05, 1.05, { hue: [320, 25], minSat: 0.25 });
+  const golemIdle = { frames: golem(0, 0, 2, 2), rate: 2 };
+  const golemMove = { frames: golem(...range(6, 11)), rate: 7 };
+  return {
+    // ── whisperwood ──
+    moss_snail: { idle: { frames: snail(14, 15, 16, 15), rate: 3 }, move: { frames: snail(14, 15, 16, 15), rate: 7 },
+      recolor: hueShift(38, 0.85, 0.95, { hue: [10, 45], minSat: 0.15 }) },
+    puff_slime: { idle: { frames: slime(0, 1, 2, 1), rate: 6 }, move: { frames: slime(3, 4, 5, 4), rate: 9 }, hit: slime(6)[0] },
+    cap_shroom: { idle: { frames: shIdle(0, 1, 2, 3), rate: 6 }, move: { frames: shWalk(...range(0, 9)), rate: 12 } },
+    // ── shroom_hollow ──
+    thorn_shroom: { recolor: thornCap, idle: { frames: shGas(...range(0, 9)), rate: 8 },
+      move: { frames: shWalk(...range(0, 9)), rate: 13 }, hit: shIdle(2)[0] },
+    stump_golem: { recolor: gradientMap([0x2e180a, 0x5c3618, 0x8c5e30, 0xc89a5c, 0xf2dca4], { hue: [0, 42], minSat: 0.12 }), idle: { frames: stump(8, 10), rate: 2 }, move: { frames: stump(8, 9, 10, 11), rate: 6 } },
+    // ── frostfang_cliffs ──
+    frost_bat: { recolor: gradientMap(RAMP.ice), idle: { frames: batFly(0, 1, 2, 3), rate: 9 }, move: { frames: batFly(0, 1, 2, 3), rate: 12 },
+      hit: batHit(1)[0], die: { frames: batDie(...range(0, 10)), rate: 15 } },
+    snow_yeti: { flip: true, recolor: gradientMap(RAMP.snowFur, { hue: [8, 48], minSat: 0.15 }),
+      idle: { frames: wartaur(0, 2), rate: 2 }, move: { frames: wartaur(0, 1, 2, 3), rate: 7 } },
+    ice_wisp: { recolor: gradientMap(RAMP.ice), idle: { frames: sparky(0, 1, 2, 3), rate: 10 }, move: { frames: sparky(0, 1, 2, 3), rate: 13 } },
+    // ── cinder_caverns ──
+    ember_imp: { recolor: hueShift(18, 1.15, 1.3), outline: 0x2a0806, idle: { frames: imp(...range(0, 9)), rate: 10 }, move: { frames: imp(...range(20, 29)), rate: 15 },
+      hit: imp(10)[0], die: { frames: imp(...range(40, 49)), rate: 15 } },
+    lava_salamander: { recolor: gradientMap(RAMP.lava), outline: 0x1e0604, idle: { frames: lzIdle(0, 1, 2, 3), rate: 5 },
+      move: { frames: lzWalk(...range(0, 5)), rate: 12 }, hit: lzHurt(1)[0] },
+    magma_golem: { flip: true, recolor: gradientMap(RAMP.magma), idle: golemIdle, move: golemMove },
+    // ── stormspire_peak ──
+    storm_harpy: { recolor: gradientMap(RAMP.storm), idle: { frames: bird(...range(0, 6)), rate: 11 }, move: { frames: bird(...range(0, 6)), rate: 14 } },
+    crag_golem: { flip: true, recolor: gradientMap(RAMP.crag), idle: golemIdle, move: golemMove },
+    thunder_drake: { flip: true, recolor: chain(gradientMap([0x8a6a14, 0xd8a820, 0xfff27a, 0xfffbd8], { hue: [28, 58], minSat: 0.45, minLum: 0.4 }), gradientMap(RAMP.thunder, { hue: [62, 36] })),
+      idle: { frames: dragon(...range(0, 5)), rate: 8 }, move: { frames: dragon(...range(0, 5)), rate: 11 } },
+    // ── arcane_sanctum ──
+    void_wisp: { recolor: gradientMap(RAMP.void), idle: { frames: sparky(0, 1, 2, 3), rate: 9 }, move: { frames: sparky(0, 1, 2, 3), rate: 12 } },
+    lich_archon: { scale: 4, flip: true, recolor: gradientMap(RAMP.arcaneFire, { hue: [10, 70], minSat: 0.45, minLum: 0.3 }),
+      idle: { frames: wizard(...range(0, 4)), rate: 7 }, move: { frames: wizard(...range(0, 4)), rate: 9 },
+      attack: { frames: wizard(...range(5, 14)), rate: 15 } },
+  };
+}
+let PIXEL_SPECS: Record<string, PixelSpec> | null = null;
+
+/** Source image → (recoloured) canvas, cached per sheet + recolor. */
+function srcCanvas(scene: Phaser.Scene, key: string, recolor: Recolor | undefined, cache: Map<string, HTMLCanvasElement | null>, tag: string): HTMLCanvasElement | null {
+  const ck = `${key}|${recolor ? tag : ''}`;
+  if (cache.has(ck)) return cache.get(ck)!;
+  let out: HTMLCanvasElement | null = null;
+  const img = sourceImage(scene, key);
+  const iw = img ? (img as HTMLImageElement).naturalWidth || img.width : 0;
+  const ih = img ? (img as HTMLImageElement).naturalHeight || img.height : 0;
+  if (img && iw > 0 && ih > 0) {
+    out = document.createElement('canvas');
+    out.width = iw;
+    out.height = ih;
+    const c = out.getContext('2d', { willReadFrequently: true })!;
+    c.imageSmoothingEnabled = false;
+    c.drawImage(img, 0, 0);
+    if (recolor) {
+      const data = c.getImageData(0, 0, iw, ih);
+      recolor(data.data);
+      c.putImageData(data, 0, 0);
+    }
+  }
+  cache.set(ck, out);
+  return out;
+}
+
+/** Opaque bounding box of a canvas (alpha > 20), or null if empty. */
+function alphaBox(cv: HTMLCanvasElement): { x0: number; y0: number; x1: number; y1: number } | null {
+  const d = cv.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, cv.width, cv.height).data;
+  let x0 = cv.width, y0 = cv.height, x1 = -1, y1 = -1;
+  for (let y = 0; y < cv.height; y++) {
+    for (let x = 0; x < cv.width; x++) {
+      if (d[(y * cv.width + x) * 4 + 3] > 20) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+  }
+  return x1 < 0 ? null : { x0, y0, x1: x1 + 1, y1: y1 + 1 };
+}
+
+/** One source frame cut out at 1×, flipped to face right; anchor converted accordingly. */
+interface Cut { cv: HTMLCanvasElement; ax: number; ay: number; dy: number; box: { x0: number; y0: number; x1: number; y1: number } | null; alpha: number; light: number; poof: number }
+function cutFrame(src: HTMLCanvasElement, f: FrameRef, flip: boolean, outline?: number): Cut {
+  const o = outline === undefined ? 0 : 1; // 1px border so an added outline has room
+  const cv = document.createElement('canvas');
+  cv.width = f.w + 2 * o;
+  cv.height = f.h + 2 * o;
+  const c = cv.getContext('2d', { willReadFrequently: true })!;
+  c.imageSmoothingEnabled = false;
+  c.save();
+  if (flip) { c.translate(cv.width, 0); c.scale(-1, 1); }
+  c.drawImage(src, f.x, f.y, f.w, f.h, o, o, f.w, f.h);
+  c.restore();
+  if (outline !== undefined) {
+    // 1px dark outline around the silhouette (4-neighbour), like the hand-outlined packs.
+    const img = c.getImageData(0, 0, cv.width, cv.height), d = img.data, W = cv.width, H = cv.height;
+    const solid = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && d[(y * W + x) * 4 + 3] > 100;
+    const add: number[] = [];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (!solid(x, y) && (solid(x - 1, y) || solid(x + 1, y) || solid(x, y - 1) || solid(x, y + 1))) add.push((y * W + x) * 4);
+      }
+    }
+    for (const i of add) { d[i] = (outline >> 16) & 255; d[i + 1] = (outline >> 8) & 255; d[i + 2] = outline & 255; d[i + 3] = 255; }
+    c.putImageData(img, 0, 0);
+  }
+  return { cv, ax: (flip ? f.w - f.ax : f.ax) + o, ay: f.ay + o, dy: f.dy ?? 0, box: alphaBox(cv), alpha: 1, light: 0, poof: -1 };
+}
+
+/** Per-texture visual extents (screen px) so overlays can sit on the art rather than the hitbox. */
+export interface MonsterVisual { contentH: number; contentW: number }
+const VISUALS = new Map<string, MonsterVisual>();
+export function monsterVisual(textureKey: string): MonsterVisual | null { return VISUALS.get(textureKey) ?? null; }
+
+const POOF_FRAMES = 6, POOF_W = 40, POOF_H = 41;
+const DIE_ALPHA = [1, 0.7, 0.4, 0.15, 0, 0];
+
+/** Builds a pixel-art monster sheet from its source pack, or null if a source sheet is missing. */
+export function paintPixelMonsterSheet(scene: Phaser.Scene, id: string): (MonsterSheet & { visual: MonsterVisual }) | null {
+  PIXEL_SPECS ??= buildPixelSpecs();
+  const spec = PIXEL_SPECS[id];
+  if (!spec) return null;
+  const S = spec.scale ?? PIXEL_SCALE;
+  const flip = !!spec.flip;
+  const cache = new Map<string, HTMLCanvasElement | null>();
+  const cut = (f: FrameRef): Cut | null => {
+    const src = srcCanvas(scene, f.key, spec.recolor, cache, id);
+    return src ? cutFrame(src, f, flip, spec.outline) : null;
+  };
+  const cutAll = (fs: FrameRef[]): Cut[] | null => {
+    const out: Cut[] = [];
+    for (const f of fs) { const k = cut(f); if (!k) return null; out.push(k); }
+    return out;
+  };
+
+  const rows: { name: MonsterAnim; cuts: Cut[]; rate: number; repeat: number }[] = [];
+  const idle = cutAll(spec.idle.frames), move = cutAll(spec.move.frames);
+  if (!idle || !move || !idle.length || !move.length) return null;
+  rows.push({ name: 'idle', cuts: idle, rate: spec.idle.rate, repeat: -1 });
+  rows.push({ name: 'move', cuts: move, rate: spec.move.rate, repeat: -1 });
+  const hitBase = spec.hit ? cut(spec.hit) : idle[0];
+  if (!hitBase) return null;
+  rows.push({ name: 'hit', cuts: [{ ...hitBase, light: 0.45 }, { ...hitBase }], rate: 10, repeat: 0 });
+  const poofSrc = srcCanvas(scene, MSRC.poof, undefined, cache, '');
+  if (spec.die) {
+    const d = cutAll(spec.die.frames);
+    if (!d) return null;
+    rows.push({ name: 'die', cuts: d, rate: spec.die.rate, repeat: 0 });
+  } else {
+    // Fade the hurt pose out under the Sunny Land poof (its frame 0 is a dark impact blot, so start at 1).
+    rows.push({ name: 'die', cuts: DIE_ALPHA.map((a, i) => ({ ...hitBase, alpha: a, light: i === 0 ? 0.35 : 0, poof: poofSrc && i > 0 ? Math.min(POOF_FRAMES - 1, i) : -1 })), rate: 10, repeat: 0 });
+  }
+  if (spec.attack) {
+    const a = cutAll(spec.attack.frames);
+    if (a) rows.push({ name: 'attack', cuts: a, rate: spec.attack.rate, repeat: 0 });
+  }
+
+  // Body centre (for the poof) relative to the feet, from the hit base frame.
+  const hb = hitBase.box;
+  const bodyUp = hb ? Math.round(((hitBase.ay - hb.y0) * S) / 2) : 16;
+  // Frame size: symmetric around the anchor, feet at H - FOOT_PAD.
+  let halfW = 8, up = 8, idleUp = 0, idleHalf = 0;
+  for (const r of rows) {
+    for (const k of r.cuts) {
+      if (k.box) {
+        const l = (k.ax - k.box.x0) * S, rr = (k.box.x1 - k.ax) * S, u = (k.ay - k.dy - k.box.y0) * S;
+        halfW = Math.max(halfW, l, rr);
+        up = Math.max(up, u);
+        if (r.name === 'idle') { idleUp = Math.max(idleUp, u); idleHalf = Math.max(idleHalf, l, rr); }
+      }
+      if (k.poof >= 0) {
+        halfW = Math.max(halfW, (POOF_W / 2) * S);
+        up = Math.max(up, bodyUp + (POOF_H / 2) * S);
+      }
+    }
+  }
+  const W = Math.ceil(halfW) * 2 + 2;
+  const H = Math.ceil(up) + MONSTER_FOOT_PAD + 2;
+  const PAD = 2;
+  const cols = Math.max(...rows.map(r => r.cuts.length));
+  const canvas = document.createElement('canvas');
+  canvas.width = cols * (W + PAD) + PAD;
+  canvas.height = rows.length * (H + PAD) + PAD;
+  const c = canvas.getContext('2d')!;
+  c.imageSmoothingEnabled = false;
+  const frames: SheetFrame[] = [];
+  const anims: SheetAnim[] = [];
+  rows.forEach((r, row) => {
+    const names: string[] = [];
+    r.cuts.forEach((k, i) => {
+      const fx = PAD + i * (W + PAD), fy = PAD + row * (H + PAD);
+      const name = `${r.name}_${i}`;
+      const feetY = fy + H - MONSTER_FOOT_PAD;
+      const ox = fx + W / 2 - k.ax * S, oy = feetY - (k.ay - k.dy) * S;
+      let art = k.cv;
+      if (k.light > 0) {
+        art = document.createElement('canvas');
+        art.width = k.cv.width;
+        art.height = k.cv.height;
+        const lc = art.getContext('2d')!;
+        lc.drawImage(k.cv, 0, 0);
+        lc.globalCompositeOperation = 'source-atop';
+        lc.fillStyle = `rgba(255,255,255,${k.light})`;
+        lc.fillRect(0, 0, art.width, art.height);
+      }
+      if (k.alpha > 0) {
+        c.globalAlpha = k.alpha;
+        c.drawImage(art, 0, 0, art.width, art.height, ox, oy, art.width * S, art.height * S);
+        c.globalAlpha = 1;
+      }
+      if (k.poof >= 0 && poofSrc) {
+        const pw = POOF_W * S, ph = POOF_H * S;
+        c.drawImage(poofSrc, k.poof * POOF_W, 0, POOF_W, POOF_H, fx + W / 2 - pw / 2, feetY - bodyUp - Math.floor(ph / 2), pw, ph);
+      }
+      frames.push({ name, x: fx, y: fy, w: W, h: H });
+      names.push(name);
+    });
+    anims.push({ name: r.name, frames: names, rate: r.rate, repeat: r.repeat });
+  });
+  return { canvas, frames, anims, w: W, h: H, visual: { contentH: Math.round(idleUp), contentW: Math.round(idleHalf * 2) } };
+}
+
+// ───────────────────────────── pixel FX + drops ─────────────────────────────
+
+/** Paint at 1× on a tiny canvas, then integer-upscale (nearest) — keeps FX on the same pixel grid as the sprites. */
+function pixCanvas(w: number, h: number, scale: number, fn: (c: Ctx, px: (x: number, y: number, col: number, a?: number) => void) => void): HTMLCanvasElement {
+  const lo = document.createElement('canvas');
+  lo.width = w;
+  lo.height = h;
+  const lc = lo.getContext('2d')!;
+  fn(lc, (x, y, col, a = 1) => { lc.fillStyle = css(col, a); lc.fillRect(x, y, 1, 1); });
+  const cv = document.createElement('canvas');
+  cv.width = w * scale;
+  cv.height = h * scale;
+  const c = cv.getContext('2d')!;
+  c.imageSmoothingEnabled = false;
+  c.drawImage(lo, 0, 0, w * scale, h * scale);
+  return cv;
+}
+/** Draw a character map: each char looks up a colour (or [colour, alpha]); '.' / ' ' = transparent. */
+function pixMap(px: (x: number, y: number, col: number, a?: number) => void, rows: string[], pal: Record<string, number | [number, number]>, ox = 0, oy = 0) {
+  rows.forEach((row, y) => [...row].forEach((ch, x) => {
+    const p = pal[ch];
+    if (p === undefined) return;
+    if (Array.isArray(p)) px(ox + x, oy + y, p[0], p[1]); else px(ox + x, oy + y, p);
+  }));
+}
+/** Stepped (posterised) radial blob: rings of colour/alpha from the centre out. */
+function pixRadial(px: (x: number, y: number, col: number, a?: number) => void, size: number, rings: [number, number, number][]) {
+  const c = (size - 1) / 2;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const d = Math.hypot(x - c, y - c) / (size / 2);
+      const ring = rings.find(r => d <= r[0]);
+      if (ring) px(x, y, ring[1], ring[2]);
+    }
+  }
+}
+
+function generatePixelFxTextures(scene: Phaser.Scene) {
+  const S = PIXEL_SCALE;
+  addSimple(scene, MFX.ember, pixCanvas(5, 5, S, (_c, px) => pixMap(px, [
+    '.oo..', 'oyyo.', 'oywyo', '.oyo.', '..o..',
+  ], { o: [0xff5a14, 0.85], y: 0xffc23a, w: 0xfff4c0 })));
+  addSimple(scene, MFX.glow, pixCanvas(16, 16, S, (_c, px) => pixRadial(px, 16, [
+    [0.3, 0xffffff, 0.9], [0.55, 0xffffff, 0.55], [0.8, 0xffffff, 0.28], [1, 0xffffff, 0.1],
+  ])));
+  addSimple(scene, MFX.spark, pixCanvas(8, 8, S, (_c, px) => pixMap(px, [
+    '...y....', '...y....', '..yWy...', 'yyWWWyy.', '..yWy...', '...y....', '...y....', '........',
+  ], { y: 0xfff27a, W: 0xffffff })));
+  addSimple(scene, MFX.star, pixCanvas(8, 8, S, (_c, px) => pixMap(px, [
+    '...o....', '...yo...', 'ooyWyoo.', '.oyyyo..', '..yyy...', '.yo.oy..', '.o...o..', '........',
+  ], { o: 0xb8760b, y: 0xffd83a, W: 0xffffff })));
+  addSimple(scene, MFX.snow, pixCanvas(3, 3, S, (_c, px) => pixMap(px, ['.b.', 'bWb', '.b.'], { b: 0xbfe6ff, W: 0xffffff })));
+  addSimple(scene, MFX.puff, pixCanvas(16, 16, S, (_c, px) => pixRadial(px, 16, [
+    [0.45, 0xffffff, 0.85], [0.75, 0xffffff, 0.6], [0.95, 0xffffff, 0.3],
+  ])));
+  addSimple(scene, MFX.shard, pixCanvas(5, 8, S, (_c, px) => pixMap(px, [
+    '..o..', '.oWo.', '.oWb.', 'oWbbo', 'obbbo', '.obb.', '.ob..', '..o..',
+  ], { o: 0x3a86c8, W: 0xffffff, b: 0xa8dcff })));
+  // Ice shell (scaled to each monster by Monster.ts): faceted crystal block, 32×36 → ×2.
+  addSimple(scene, MFX.crystal, pixCanvas(32, 36, S, (_c, px) => {
+    const poly: [number, number][] = [[3, 35], [1, 19], [6, 5], [13, 1], [20, 4], [27, 2], [31, 15], [29, 35]];
+    const inside = (x: number, y: number) => {
+      let r = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const [xi, yi] = poly[i], [xj, yj] = poly[j];
+        if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) r = !r;
+      }
+      return r;
+    };
+    for (let y = 0; y < 36; y++) {
+      for (let x = 0; x < 32; x++) {
+        if (!inside(x + 0.5, y + 0.5)) continue;
+        const edge = !inside(x - 0.5, y + 0.5) || !inside(x + 1.5, y + 0.5) || !inside(x + 0.5, y - 0.5) || !inside(x + 0.5, y + 1.5);
+        if (edge) { px(x, y, 0xe8f8ff, 0.95); continue; }
+        // facets: three bands split by two diagonal crease lines
+        const f = x + y * 0.35 < 14 ? 0 : x - y * 0.3 > 17 ? 2 : 1;
+        const col = [0xd8f4ff, 0x9fd8fa, 0x6ab4ec][f];
+        px(x, y, col, [0.62, 0.45, 0.58][f]);
+      }
+    }
+    for (let i = 0; i < 9; i++) px(7 + Math.floor(i / 3), 9 + i, 0xffffff, 0.75); // glint
+    for (let i = 0; i < 4; i++) px(21 + i, 6 + i, 0xffffff, 0.6);
+  }));
+  // Boss orb projectile.
+  addSimple(scene, MFX.orb, pixCanvas(16, 16, S, (_c, px) => pixRadial(px, 16, [
+    [0.18, 0xffe8ff, 1], [0.36, 0xd27aff, 1], [0.56, 0x8a2ee0, 1], [0.66, 0x3a0a6a, 1], [0.84, 0xa040ff, 0.45], [1, 0x7820c8, 0.18],
+  ])));
+  addSimple(scene, MFX.aura, pixCanvas(32, 32, 4, (_c, px) => pixRadial(px, 32, [
+    [0.25, 0xffffff, 0.5], [0.5, 0xffffff, 0.34], [0.75, 0xffffff, 0.18], [1, 0xffffff, 0.06],
+  ])));
+
+  // Coins: zaphgames 16×16 spin sheet (rows gold / silver / bronze) → 12×12 crops ×2, 8 frames each.
+  const coinSrc = sourceImage(scene, MSRC.coins);
+  if (coinSrc && ((coinSrc as HTMLImageElement).naturalWidth || coinSrc.width) >= 128) {
+    (['gold', 'silver', 'bronze'] as const).forEach((tier, row) => {
+      const N = 8, C = 12, F = C * S;
+      const cv = document.createElement('canvas');
+      cv.width = F * N;
+      cv.height = F;
+      const c = cv.getContext('2d')!;
+      c.imageSmoothingEnabled = false;
+      for (let i = 0; i < N; i++) c.drawImage(coinSrc, i * 16 + 2, row * 16 + 2, C, C, i * F, 0, F, F);
+      if (tier === 'bronze') { // source "bronze" row is a dark chocolate; warm it to copper so it reads on dirt
+        const data = c.getImageData(0, 0, cv.width, cv.height);
+        gradientMap([0x5a2a10, 0xa85a26, 0xe0954e, 0xffcf96], { minSat: 0.15 })(data.data);
+        c.putImageData(data, 0, 0);
+      }
+      const frames: SheetFrame[] = range(0, N - 1).map(i => ({ name: `f${i}`, x: i * F, y: 0, w: F, h: F }));
+      const key = DROP_TEX[tier];
+      if (registerSheet(scene, key, { canvas: cv, frames })) addAnim(scene, dropCoinAnimKey(tier), key, frames.map(f => f.name), 10, -1);
+    });
+  }
+  // Meso bag: original 14×14 pixel art (tied sack + gold coin emblem) ×2 = 28×28.
+  addSimple(scene, DROP_TEX.bag, pixCanvas(14, 14, S, (_c, px) => pixMap(px, [
+    '...k.....k....',
+    '...kbk.kbk....',
+    '....kbbbk.....',
+    '....kyyyk.....',
+    '...kbbbbbk....',
+    '..kbBBBBBbk...',
+    '.kbBBkkkBBbk..',
+    '.kbBkGGGkBbk..',
+    'kbBBkGYGkBBbk.',
+    'kbBBkGGGkBBbk.',
+    'kbBBBkkkBBBbk.',
+    '.kbBBBBBBBbk..',
+    '..kkbbbbbkk...',
+    '....kkkkk.....',
+  ], { k: 0x3a2410, b: 0x8a5a26, B: 0xc8904a, y: 0xffc93a, G: 0xe8a820, Y: 0xfff2a0 })));
+}
+
 /** Texture key `monster_${id}`; anims `monster_${id}_${'idle'|'move'|'hit'|'die'|'attack'}`. */
 export function generateMonsterTextures(scene: Phaser.Scene): void {
-  try { generateFxTextures(scene); } catch (e) { console.error('[monsterArt] fx textures failed', e); }
+  try { generateProceduralFxTextures(scene); } catch (e) { console.error('[monsterArt] fx textures failed', e); }
+  try { generatePixelFxTextures(scene); } catch (e) { console.error('[monsterArt] pixel fx textures failed', e); }
   const ids = new Set<string>([...MONSTERS.map(m => m.id), ...Object.keys(ART)]);
+  let pixel = 0;
   for (const id of ids) {
     try {
-      const sheet = paintMonsterSheet(id);
       const key = monsterTextureKey(id);
+      let sheet: MonsterSheet | null = null;
+      try {
+        const px = paintPixelMonsterSheet(scene, id);
+        if (px) { sheet = px; VISUALS.set(key, px.visual); pixel++; }
+      } catch (e) {
+        console.warn(`[monsterArt] pixel sheet for ${id} failed, using procedural`, e);
+      }
+      if (!sheet) { sheet = paintMonsterSheet(id); VISUALS.delete(key); }
       if (!registerSheet(scene, key, sheet)) continue;
       for (const a of sheet.anims) addAnim(scene, monsterAnimKey(id, a.name), key, a.frames, a.rate, a.repeat);
     } catch (e) {
       console.error(`[monsterArt] ${id} failed`, e);
     }
   }
+  if (pixel < ids.size) console.info(`[monsterArt] ${pixel}/${ids.size} monsters from pixel sources (rest procedural)`);
 }

@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 import type { GameServices, IMapInstance, IMonster, MonsterDef, PlatformDef, StatusInstance, StatusKind } from '../core/types';
 import { bus } from '../core/events';
 import { DEPTH } from '../core/constants';
-import { MFX, MONSTER_FOOT_PAD, monsterTextureKey, type MonsterAnim } from '../art/monsterArt';
+import { MFX, MONSTER_FOOT_PAD, monsterTextureKey, monsterVisual, type MonsterAnim, type MonsterVisual } from '../art/monsterArt';
 import { platformUnder } from './monsters/ground';
 
 export interface MonsterSpawnOptions {
@@ -60,6 +60,8 @@ export class Monster implements IMonster {
   protected warned = false;
   protected deathFinished = false;
   protected deathTimer: Phaser.Time.TimerEvent | null = null;
+  /** Visual extents of the pixel art (may exceed the hitbox); null for procedural art. */
+  protected visual: MonsterVisual | null = null;
 
   constructor(
     protected scene: Phaser.Scene,
@@ -78,6 +80,7 @@ export class Monster implements IMonster {
     const key = monsterTextureKey(def.id);
     const texKey = scene.textures.exists(key) ? key : scene.textures.exists(MFX.fallback) ? MFX.fallback : '__DEFAULT';
     this.animBase = texKey === '__DEFAULT' ? null : texKey;
+    this.visual = monsterVisual(texKey);
     const tex = scene.textures.get(texKey);
     const frame = tex.has('idle_0') ? 'idle_0' : undefined;
 
@@ -476,14 +479,16 @@ export class Monster implements IMonster {
           .setOrigin(0.5, 1)
           .setDepth(this.sprite.depth + 0.2)
           .setAlpha(0)
-          .setDisplaySize(this.def.size.w * 1.4 + 8, this.def.size.h * 1.18 + 6);
+          // Whole-number multiples of the 32×36 pixel shell so its pixels stay on the grid.
+          .setDisplaySize(32 * Math.max(2, Math.round(Math.max(this.def.size.w * 1.4 + 8, (this.visual?.contentW ?? 0) + 8) / 32)),
+            36 * Math.max(2, Math.round(Math.max(this.def.size.h * 1.18 + 6, (this.visual?.contentH ?? 0) + 6) / 36)));
         this.scene.tweens.add({ targets: this.shell, alpha: 0.82, duration: 120 });
       }
       this.sprite.anims.pause();
     } else if (kind === 'stun') {
       if (this.scene.textures.exists(MFX.star)) {
         for (let k = 0; k < 3; k++) {
-          this.stars.push(this.scene.add.image(this.x, this.y, MFX.star).setDepth(DEPTH.NAMETAG - 1).setScale(0.8));
+          this.stars.push(this.scene.add.image(this.x, this.y, MFX.star).setDepth(DEPTH.NAMETAG - 1));
         }
       }
     }
@@ -539,6 +544,8 @@ export class Monster implements IMonster {
 
   protected updateOverlays(now: number, delta: number) {
     const b = this.getBounds();
+    // Overlays sit above the art, which can be taller than the hitbox.
+    const top = Math.min(b.y, this.sprite.y - (this.visual?.contentH ?? 0));
     // status tint
     if (now >= this.flashUntil) {
       this.flashUntil = 0;
@@ -562,7 +569,7 @@ export class Monster implements IMonster {
       const a0 = now / 260;
       this.stars.forEach((s, k) => {
         const a = a0 + (k * TAU) / this.stars.length;
-        s.setPosition(this.x + Math.cos(a) * Math.max(14, b.width * 0.45), b.y - 8 + Math.sin(a) * 4);
+        s.setPosition(this.x + Math.cos(a) * Math.max(14, b.width * 0.45), top - 8 + Math.sin(a) * 4);
         s.setDepth(Math.sin(a) > 0 ? DEPTH.NAMETAG - 1 : this.sprite.depth - 0.1);
         s.setRotation(a * 2);
       });
@@ -571,7 +578,7 @@ export class Monster implements IMonster {
     if (this.showOverheadBar() && (this.hpBarDirty || this.hpBar)) {
       if (!this.hpBar) this.hpBar = this.scene.add.graphics().setDepth(DEPTH.NAMETAG);
       if (this.hpBarDirty) { this.hpBarDirty = false; this.drawHpBar(); }
-      this.hpBar.setPosition(Math.round(this.x), Math.round(b.y - 12));
+      this.hpBar.setPosition(Math.round(this.x), Math.round(top - 12));
     }
   }
 

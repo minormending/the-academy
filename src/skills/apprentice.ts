@@ -1,7 +1,9 @@
 // OWNER: A2 (skill-engine). Tier-1 Apprentice skills (arcane: violet / cyan) + their textures and VFX.
 import Phaser from 'phaser';
 import type { SkillDef, VfxOptions } from '../core/types';
-import { registerVfx } from '../core/vfx';
+import { playVfx, registerVfx } from '../core/vfx';
+import { bus } from '../core/events';
+import { maybeServices } from '../core/services';
 import { DEPTH, PIXEL_SCALE } from '../core/constants';
 import { pixelizeTexture, pxFx, pxLoop } from '../art/particles';
 
@@ -147,6 +149,102 @@ export const APPRENTICE_SKILLS: SkillDef[] = [
       delayMs: 140,
       vfx: { cast: 'app_nova_cast', area: 'app_nova', hit: 'app_nova_hit' },
     },
+  },
+  {
+    id: 'app_arcane_orb',
+    name: 'Arcane Orb',
+    description: 'Send a slow orb through a line of enemies. A lesson in positioning and piercing magic.',
+    element: 'neutral',
+    job: 'apprentice',
+    kind: 'attack',
+    maxLevel: 10,
+    icon: { glyph: 'orb', color: CYAN, color2: VIOLET_LT, bg: 0x18133f },
+    requires: [{ skillId: 'app_arcane_bolt', level: 2 }],
+    mpCost: lv => Math.round(lerp(8, 14, lv, 10)),
+    cooldownMs: () => 1500,
+    castTimeMs: 480,
+    sfx: 'cast_arcane',
+    attack: {
+      pattern: 'projectile',
+      damagePct: lv => Math.round(lerp(75, 100, lv, 10)),
+      hits: () => 1,
+      maxTargets: lv => lv >= 6 ? 4 : 3,
+      range: 480,
+      projectile: { speed: 280, radius: 16, pierce: true },
+      vfx: { cast: 'app_orb_cast', projectile: 'app_orb', hit: 'app_orb_hit' },
+    },
+  },
+  {
+    id: 'app_spark_primer',
+    name: 'Spark Primer',
+    description: 'Link nearby enemies with an arcane spark. A first lesson in the Lightning School\'s chains.',
+    element: 'neutral',
+    job: 'apprentice',
+    kind: 'attack',
+    maxLevel: 10,
+    icon: { glyph: 'chain', color: VIOLET_LT, color2: CYAN_LT, bg: 0x211343 },
+    requires: [{ skillId: 'app_arcane_bolt', level: 2 }],
+    mpCost: lv => Math.round(lerp(8, 13, lv, 10)),
+    cooldownMs: () => 1100,
+    castTimeMs: 400,
+    sfx: 'cast_arcane',
+    attack: {
+      pattern: 'chain',
+      damagePct: lv => Math.round(lerp(70, 95, lv, 10)),
+      hits: () => 1,
+      maxTargets: lv => lv >= 6 ? 3 : 2,
+      range: 280,
+      chain: { jumpRange: 140, jumpDelayMs: 100 },
+      delayMs: 80,
+      vfx: { cast: 'app_spark_cast', area: 'app_spark_chain', hit: 'app_spark_hit' },
+    },
+  },
+  {
+    id: 'app_frost_primer',
+    name: 'Frost Primer',
+    description: 'Trace a small arcane frost seal around a foe, chilling nearby enemies without freezing them.',
+    element: 'neutral',
+    job: 'apprentice',
+    kind: 'attack',
+    maxLevel: 10,
+    icon: { glyph: 'snowflake', color: CYAN_LT, color2: VIOLET_LT, bg: 0x14213f },
+    requires: [{ skillId: 'app_mana_shield', level: 2 }],
+    mpCost: lv => Math.round(lerp(8, 12, lv, 10)),
+    cooldownMs: () => 1800,
+    castTimeMs: 450,
+    sfx: 'cast_arcane',
+    attack: {
+      pattern: 'aoe_target',
+      damagePct: lv => Math.round(lerp(70, 85, lv, 10)),
+      hits: () => 1,
+      maxTargets: () => 3,
+      range: 260,
+      area: { w: 136, h: 88 },
+      delayMs: 120,
+      status: {
+        kind: 'chill',
+        chance: () => 1,
+        durationMs: lv => Math.round(lerp(1800, 3000, lv, 10)),
+        potency: lv => +lerp(0.2, 0.35, lv, 10).toFixed(3),
+      },
+      vfx: { cast: 'app_frost_cast', area: 'app_frost_seal', hit: 'app_frost_hit' },
+    },
+  },
+  {
+    id: 'app_scholars_insight',
+    name: 'Scholar\'s Insight',
+    description: 'Passive. Careful study improves critical chance and the minimum damage of every spell.',
+    element: 'neutral',
+    job: 'apprentice',
+    kind: 'passive',
+    maxLevel: 10,
+    icon: { glyph: 'book', color: VIOLET_LT, color2: CYAN_LT, bg: 0x1a1540 },
+    requires: [{ skillId: 'app_mana_font', level: 2 }],
+    mpCost: () => 0,
+    passive: lv => [
+      { stat: 'critRate', add: +(0.005 * lv).toFixed(3) },
+      { stat: 'mastery', add: +(0.01 * lv).toFixed(3) },
+    ],
   },
 ];
 
@@ -322,7 +420,225 @@ export function generateApprenticeTextures(scene: Phaser.Scene): void {
     c.closePath(); c.stroke();
     c.fillStyle = 'rgba(255,255,255,0.25)'; c.fill();
   });
+  generateCurriculumTextures(scene);
   void starPath;
+}
+
+// The curriculum's original silhouettes are drawn on a 1x grid and enlarged exactly x2.
+// They also keep these effects readable when the shared CC0 sheets did not load.
+const CT = {
+  orb: 'app_orb_core', crystal: 'app_primer_crystal',
+  glint: 'app_primer_glint', book: 'app_insight_book',
+} as const;
+
+function curriculumTex(scene: Phaser.Scene, key: string, w: number, h: number,
+  paint: (c: CanvasRenderingContext2D) => void): void {
+  if (scene.textures.exists(key)) return;
+  const t = scene.textures.createCanvas(key, w * PIXEL_SCALE, h * PIXEL_SCALE);
+  if (!t) return;
+  const c = t.getContext();
+  c.imageSmoothingEnabled = false;
+  c.save();
+  c.scale(PIXEL_SCALE, PIXEL_SCALE);
+  paint(c);
+  c.restore();
+  t.refresh();
+}
+
+function generateCurriculumTextures(scene: Phaser.Scene): void {
+  curriculumTex(scene, CT.orb, 40, 24, c => {
+    // Long stepped wake on the left; the collision-sized spherical head is at (26,12).
+    c.fillStyle = '#332266';
+    c.fillRect(0, 11, 19, 2); c.fillRect(6, 7, 14, 2); c.fillRect(8, 15, 12, 2);
+    for (let y = -8; y <= 8; y++) {
+      for (let x = -8; x <= 8; x++) {
+        const r = Math.hypot(x, y);
+        if (r > 8) continue;
+        c.fillStyle = r > 7 ? '#211448' : r > 5 ? '#8061cd' : r > 3 ? '#5bb8ef' : '#b8f6ff';
+        c.fillRect(26 + x, 12 + y, 1, 1);
+      }
+    }
+    c.fillStyle = '#ffffff'; c.fillRect(23, 8, 3, 2);
+    c.fillStyle = '#5bb8ef'; c.fillRect(6, 11, 10, 1);
+  });
+  curriculumTex(scene, CT.crystal, 9, 15, c => {
+    for (let y = 0; y < 15; y++) {
+      const half = Math.floor(Math.min(y, 14 - y) * 4 / 7);
+      c.fillStyle = '#292052'; c.fillRect(4 - half, y, 2 * half + 1, 1);
+      if (half < 1) continue;
+      c.fillStyle = '#8d8fe0'; c.fillRect(5 - half, y, 2 * half - 1, 1);
+      c.fillStyle = '#b8f6ff'; c.fillRect(4, y, 1, 1);
+    }
+  });
+  curriculumTex(scene, CT.glint, 9, 9, c => {
+    c.fillStyle = '#49327e'; c.fillRect(3, 2, 3, 5); c.fillRect(2, 3, 5, 3);
+    c.fillStyle = '#a7bdff'; c.fillRect(4, 0, 1, 9); c.fillRect(0, 4, 9, 1);
+    c.fillStyle = '#effaff'; c.fillRect(3, 3, 3, 3);
+  });
+  curriculumTex(scene, CT.book, 24, 18, c => {
+    c.fillStyle = '#22143f'; c.fillRect(1, 4, 22, 13); c.fillRect(3, 2, 18, 3);
+    c.fillStyle = '#7460b8'; c.fillRect(2, 5, 20, 10);
+    c.fillStyle = '#b9ceef'; c.fillRect(3, 3, 8, 10); c.fillRect(13, 3, 8, 10);
+    c.fillStyle = '#effaff'; c.fillRect(4, 4, 6, 7); c.fillRect(14, 4, 6, 7);
+    c.fillStyle = '#706ca5';
+    for (const y of [5, 7, 9]) { c.fillRect(5, y, 4, 1); c.fillRect(15, y, 4, 1); }
+    c.fillStyle = '#5ee0ff'; c.fillRect(11, 3, 2, 13);
+  });
+}
+
+/** Fade only: pixel art keeps its authored scale, including on projectile children. */
+function curriculumFade(scene: Phaser.Scene, go: Phaser.GameObjects.GameObject, duration: number, delay = 0): void {
+  go.once(Phaser.GameObjects.Events.DESTROY, () => scene.tweens.killTweensOf(go));
+  scene.tweens.add({ targets: go, alpha: 0, duration, delay, onComplete: () => go.destroy() });
+}
+
+function curriculumImage(scene: Phaser.Scene, key: string, x: number, y: number): Phaser.GameObjects.Image | null {
+  if (!scene.textures.exists(key)) generateCurriculumTextures(scene);
+  if (!scene.textures.exists(key)) return null;
+  return scene.add.image(Math.round(x / PIXEL_SCALE) * PIXEL_SCALE,
+    Math.round(y / PIXEL_SCALE) * PIXEL_SCALE, key).setDepth(DEPTH.VFX_TOP);
+}
+
+function vfxOrbCast(scene: Phaser.Scene, o: VfxOptions): void {
+  // Four points close around a circular seal, distinct from Bolt's starburst.
+  pxFx(scene, 'sf_ring', o.x, o.y, { v: 'arcane', scale: PIXEL_SCALE, dur: 260 });
+  for (const [dx, dy] of [[-22, 0], [22, 0], [0, -22], [0, 22]]) {
+    const p = curriculumImage(scene, CT.glint, o.x + dx, o.y + dy);
+    if (p) curriculumFade(scene, p, 260);
+  }
+}
+
+function vfxOrb(scene: Phaser.Scene, o: VfxOptions): Phaser.GameObjects.GameObject {
+  const root = scene.add.container(o.x, o.y).setDepth(DEPTH.VFX);
+  // Art faces +x at rotation zero. AttackRunner owns root position, rotation and scaleY sign.
+  const core = curriculumImage(scene, CT.orb, 0, 0);
+  if (core) root.add(core.setOrigin(26 / 40, 0.5));
+  const ring = pxLoop(scene, root, 'sf_ring', 0, 0, { v: 'arcane', scale: PIXEL_SCALE, alpha: 0.7 });
+  if (core) scene.tweens.add({ targets: core, alpha: 0.65, duration: 360, yoyo: true, repeat: -1 });
+  // No smooth-shape fallback: the generated pixel core remains when the sheet is absent.
+  if (!core && !ring) root.add(scene.add.rectangle(0, 0, 16, 16, CYAN_LT));
+  onDispose(scene, root);
+  return root;
+}
+
+function vfxOrbHit(scene: Phaser.Scene, o: VfxOptions): void {
+  pxFx(scene, 'sf_ring', o.x, o.y, { v: 'arcane', scale: PIXEL_SCALE, dur: 260 });
+  for (const dx of [-12, 12]) {
+    const p = curriculumImage(scene, CT.glint, o.x + dx, o.y);
+    if (p) curriculumFade(scene, p, 220);
+  }
+}
+
+function vfxSparkCast(scene: Phaser.Scene, o: VfxOptions): void {
+  if (pxFx(scene, 'g9_spark', o.x, o.y, { v: 'arcane', scale: PIXEL_SCALE, dur: 180 })) return;
+  const p = curriculumImage(scene, CT.glint, o.x, o.y);
+  if (p) curriculumFade(scene, p, 180);
+}
+
+/** Bresenham pixels: the chain stays on the 2px grid, even on diagonal jumps. */
+function primerLine(g: Phaser.GameObjects.Graphics, ax: number, ay: number, bx: number, by: number,
+  color: number, size: number): void {
+  let x = Math.round(ax), y = Math.round(ay);
+  const ex = Math.round(bx), ey = Math.round(by);
+  const dx = Math.abs(ex - x), dy = -Math.abs(ey - y);
+  const sx = x < ex ? 1 : -1, sy = y < ey ? 1 : -1;
+  let err = dx + dy;
+  g.fillStyle(color);
+  for (;;) {
+    g.fillRect(x - Math.floor(size / 2), y - Math.floor(size / 2), size, size);
+    if (x === ex && y === ey) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x += sx; }
+    if (e2 <= dx) { err += dx; y += sy; }
+  }
+}
+
+function vfxSparkChain(scene: Phaser.Scene, o: VfxOptions): void {
+  const x = Math.round(o.x / PIXEL_SCALE) * PIXEL_SCALE;
+  const y = Math.round(o.y / PIXEL_SCALE) * PIXEL_SCALE;
+  const dx = ((o.targetX ?? o.x + 100 * o.facing) - x) / PIXEL_SCALE;
+  const dy = ((o.targetY ?? o.y) - y) / PIXEL_SCALE;
+  const length = Math.hypot(dx, dy);
+  const n = Math.max(2, Math.ceil(length / 9));
+  const points = Array.from({ length: n + 1 }, (_, i) => {
+    const j = i === 0 || i === n ? 0 : (i % 2 ? 3 : -3);
+    return { x: Math.round(dx * i / n - dy / Math.max(1, length) * j),
+      y: Math.round(dy * i / n + dx / Math.max(1, length) * j) };
+  });
+  const g = scene.add.graphics({ x, y }).setScale(PIXEL_SCALE).setDepth(DEPTH.VFX_TOP);
+  for (const [color, size] of [[0x49327e, 3], [CYAN_LT, 1]]) {
+    for (let i = 1; i < points.length; i++) {
+      primerLine(g, points[i - 1].x, points[i - 1].y, points[i].x, points[i].y, color, size);
+    }
+  }
+  curriculumFade(scene, g, 180);
+}
+
+function vfxSparkHit(scene: Phaser.Scene, o: VfxOptions): void {
+  if (pxFx(scene, 'spark', o.x, o.y, { tint: VIOLET_LT, scale: PIXEL_SCALE, dur: 200 })) return;
+  const p = curriculumImage(scene, CT.glint, o.x, o.y);
+  if (p) curriculumFade(scene, p, 200);
+}
+
+function vfxFrostCast(scene: Phaser.Scene, o: VfxOptions): void {
+  const p = curriculumImage(scene, CT.crystal, o.x, o.y);
+  if (p) curriculumFade(scene, p, 240);
+}
+
+function vfxFrostSeal(scene: Phaser.Scene, o: VfxOptions): void {
+  // Sparse crystal border marks the actual small hit area without hiding enemies.
+  const rx = (o.w ?? 136) / 2 - 10, ry = (o.h ?? 88) / 2 - 14;
+  for (let i = 0; i < 8; i++) {
+    const a = i * Math.PI / 4;
+    const p = curriculumImage(scene, CT.crystal, o.x + Math.cos(a) * rx, o.y + Math.sin(a) * ry);
+    if (p) curriculumFade(scene, p, 420, 120);
+  }
+  const p = curriculumImage(scene, CT.glint, o.x, o.y);
+  if (p) curriculumFade(scene, p, 300, 120);
+}
+
+function vfxFrostHit(scene: Phaser.Scene, o: VfxOptions): void {
+  for (const dx of [-8, 8]) {
+    const p = curriculumImage(scene, CT.crystal, o.x + dx, o.y);
+    if (p) curriculumFade(scene, p, 320);
+  }
+}
+
+function vfxInsight(scene: Phaser.Scene, o: VfxOptions): void {
+  const p = curriculumImage(scene, CT.book, o.x, o.y - 76);
+  if (p) curriculumFade(scene, p, 600, 200);
+  for (const [dx, dy] of [[-30, -80], [30, -80], [0, -104]]) {
+    const star = curriculumImage(scene, CT.glint, o.x + dx, o.y + dy);
+    if (star) curriculumFade(scene, star, 500, 120);
+  }
+}
+
+// Passives cannot be cast and SkillDef has no learn-VFX slot. Observe the existing state event
+// for a rank-up flourish; stat calculation stays pure and no engine changes are needed.
+let insightObserverRegistered = false;
+function registerInsightObserver(): void {
+  if (insightObserverRegistered) return;
+  insightObserverRegistered = true;
+  const ranks = new WeakMap<Phaser.Scene, number>();
+  const stop = bus.on('player:changed', () => {
+    const svc = maybeServices();
+    if (!svc?.player || !svc.scene.sys.isActive()) return;
+    const level = svc.progression.state.skills.app_scholars_insight ?? 0;
+    const previous = ranks.get(svc.scene);
+    ranks.set(svc.scene, level);
+    if (previous === undefined) {
+      // GameScene clears the bus on shutdown. Reattach when this scene next starts.
+      svc.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        ranks.delete(svc.scene);
+        stop();
+        insightObserverRegistered = false;
+        svc.scene.events.once(Phaser.Scenes.Events.START, registerInsightObserver);
+      });
+    }
+    if (level > (previous ?? 0)) playVfx(svc.scene, 'app_insight', {
+      x: svc.player.x, y: svc.player.y, facing: svc.player.facing, lv: level,
+    });
+  });
 }
 
 // ───────────────────────────── VFX helpers ─────────────────────────────
@@ -619,4 +935,15 @@ export function registerApprenticeVfx(): void {
   registerVfx('app_nova_cast', vfxNovaCast);
   registerVfx('app_nova', vfxNova);
   registerVfx('app_nova_hit', vfxNovaHit);
+  registerVfx('app_orb_cast', vfxOrbCast);
+  registerVfx('app_orb', vfxOrb);
+  registerVfx('app_orb_hit', vfxOrbHit);
+  registerVfx('app_spark_cast', vfxSparkCast);
+  registerVfx('app_spark_chain', vfxSparkChain);
+  registerVfx('app_spark_hit', vfxSparkHit);
+  registerVfx('app_frost_cast', vfxFrostCast);
+  registerVfx('app_frost_seal', vfxFrostSeal);
+  registerVfx('app_frost_hit', vfxFrostHit);
+  registerVfx('app_insight', vfxInsight);
+  registerInsightObserver();
 }

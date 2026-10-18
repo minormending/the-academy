@@ -1,4 +1,4 @@
-# Arcana Story — Architecture & Team Contract
+# The Academy (formerly "Arcana Story") — Architecture & Team Contract
 
 A MapleStory-style 2D side-scroller where every character is a mage. Start as an **Apprentice**,
 then specialise at level 10 into one of three trees, with 3rd and 4th advancements at 25 and 40:

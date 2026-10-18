@@ -57,13 +57,18 @@ function equipDrops(level: number): DropEntry[] {
   if (level < 15) return [{ itemId: 'willow_staff', chance: 0.02 }, { itemId: 'soft_sandals', chance: 0.012 }];
   if (level < 20) return [
     { itemId: 'ember_staff', chance: 0.01 }, { itemId: 'frost_staff', chance: 0.01 }, { itemId: 'storm_staff', chance: 0.01 },
+    { itemId: 'dawn_staff', chance: 0.01 }, { itemId: 'grave_staff', chance: 0.01 },
   ];
-  if (level < 25) return [{ itemId: 'sage_hat', chance: 0.02 }, { itemId: 'sage_robe', chance: 0.015 }];
+  if (level < 25) return [
+    { itemId: 'sage_hat', chance: 0.02 }, { itemId: 'sage_robe', chance: 0.015 },
+    { itemId: 'acolyte_vestments', chance: 0.006 }, { itemId: 'grave_robes', chance: 0.006 },
+  ];
   if (level < 30) return [{ itemId: 'wind_boots', chance: 0.02 }, { itemId: 'sage_robe', chance: 0.01 }];
   if (level < 35) return [{ itemId: 'mana_ring', chance: 0.02 }, { itemId: 'wind_boots', chance: 0.01 }];
   if (level < 45) return [
     { itemId: 'arcane_amulet', chance: 0.015 }, { itemId: 'inferno_staff', chance: 0.008 },
     { itemId: 'glacier_staff', chance: 0.008 }, { itemId: 'tempest_staff', chance: 0.008 },
+    { itemId: 'sunlit_scepter', chance: 0.008 }, { itemId: 'umbral_scepter', chance: 0.008 },
   ];
   return [{ itemId: 'arcane_amulet', chance: 0.015 }, { itemId: 'archon_staff', chance: 0.005 }];
 }
@@ -115,6 +120,9 @@ const lichArchon: MonsterDef = {
   behavior: 'boss',
   aggressive: true,
   boss: true,
+  // Undead: holy is the answer, shadow just feeds it.
+  weak: ['holy'],
+  resist: ['shadow'],
   drops: [
     { itemId: 'archon_sigil', chance: 1, min: 1, max: 1 },
     { itemId: 'archon_staff', chance: 0.3 },
@@ -126,6 +134,8 @@ const lichArchon: MonsterDef = {
     { itemId: 'inferno_staff', chance: 0.08 },
     { itemId: 'glacier_staff', chance: 0.08 },
     { itemId: 'tempest_staff', chance: 0.08 },
+    { itemId: 'sunlit_scepter', chance: 0.08 },
+    { itemId: 'umbral_scepter', chance: 0.08 },
   ],
 };
 
@@ -143,30 +153,33 @@ export const MONSTERS: MonsterDef[] = [
   mk({ id: 'thorn_shroom', name: 'Thorn Shroom', level: 9, behavior: 'walker', speed: 64, size: { w: 44, h: 52 },
     hpMul: 0.95, expMul: 1.05, touchMul: 1.15, etc: 'thorn_spore' }),
   mk({ id: 'stump_golem', name: 'Stump Golem', level: 13, behavior: 'walker', speed: 44, size: { w: 50, h: 62 },
-    hpMul: 1.28, expMul: 1.2, touchMul: 1.1, defMul: 1.5, etc: 'stump_bark', etcChance: 0.4 }),
+    hpMul: 1.28, expMul: 1.2, touchMul: 1.1, defMul: 1.5, weak: ['shadow'], resist: ['holy'], etc: 'stump_bark', etcChance: 0.4 }),
   // ── frostfang_cliffs ──
   mk({ id: 'frost_bat', name: 'Frost Bat', level: 16, behavior: 'flyer', speed: 95, size: { w: 40, h: 30 },
-    hpMul: 0.82, expMul: 0.95, touchMul: 0.9, weak: ['fire'], etc: 'bat_wing' }),
+    hpMul: 0.82, expMul: 0.95, touchMul: 0.9, weak: ['fire', 'lightning'], etc: 'bat_wing' }),
   mk({ id: 'snow_yeti', name: 'Snow Yeti', level: 20, behavior: 'walker', speed: 70, size: { w: 56, h: 72 },
-    hpMul: 1.22, expMul: 1.15, touchMul: 1.15, defMul: 1.2, weak: ['fire'], etc: 'yeti_fur', etcChance: 0.4 }),
+    hpMul: 1.22, expMul: 1.15, touchMul: 1.15, defMul: 1.2, weak: ['fire', 'shadow'], etc: 'yeti_fur', etcChance: 0.4,
+    extraDrops: [{ itemId: 'yeti_bone', chance: 0.35 }] }),
   mk({ id: 'ice_wisp', name: 'Ice Wisp', level: 23, behavior: 'flyer', speed: 78, size: { w: 34, h: 38 },
-    hpMul: 0.85, touchMul: 1.05, weak: ['fire'], resist: ['ice'], immune: ['freeze'], etc: 'wisp_essence' }),
+    hpMul: 0.85, touchMul: 1.05, weak: ['fire', 'holy'], resist: ['ice'], immune: ['freeze'], etc: 'wisp_essence' }),
   // ── cinder_caverns ──
   mk({ id: 'ember_imp', name: 'Ember Imp', level: 26, behavior: 'hopper', speed: 105, size: { w: 36, h: 44 },
     hpMul: 0.9, expMul: 0.95, weak: ['ice'], resist: ['fire'], etc: 'imp_horn' }),
   mk({ id: 'lava_salamander', name: 'Lava Salamander', level: 30, behavior: 'walker', speed: 82, size: { w: 64, h: 34 },
-    hpMul: 1.05, expMul: 1.05, touchMul: 1.05, weak: ['ice'], resist: ['fire'], immune: ['burn'], etc: 'salamander_scale' }),
+    hpMul: 1.05, expMul: 1.05, touchMul: 1.05, weak: ['ice', 'shadow'], resist: ['fire'], immune: ['burn'], etc: 'salamander_scale' }),
   mk({ id: 'magma_golem', name: 'Magma Golem', level: 34, behavior: 'walker', speed: 44, size: { w: 64, h: 80 },
     hpMul: 1.3, expMul: 1.25, touchMul: 1.2, defMul: 1.6, weak: ['ice'], resist: ['fire'], etc: 'magma_core', etcChance: 0.35 }),
   // ── stormspire_peak ──
   mk({ id: 'storm_harpy', name: 'Storm Harpy', level: 37, behavior: 'flyer', speed: 112, size: { w: 44, h: 48 },
-    hpMul: 0.84, expMul: 0.95, weak: ['lightning'], etc: 'harpy_feather' }),
+    hpMul: 0.84, expMul: 0.95, weak: ['lightning', 'shadow'], etc: 'harpy_feather' }),
   mk({ id: 'crag_golem', name: 'Crag Golem', level: 40, behavior: 'walker', speed: 44, size: { w: 66, h: 84 },
-    hpMul: 1.3, expMul: 1.25, touchMul: 1.2, defMul: 1.6, weak: ['lightning'], etc: 'golem_shard', etcChance: 0.35 }),
+    hpMul: 1.3, expMul: 1.25, touchMul: 1.2, defMul: 1.6, weak: ['lightning'], resist: ['holy'], etc: 'golem_shard', etcChance: 0.35 }),
   mk({ id: 'thunder_drake', name: 'Thunder Drake', level: 43, behavior: 'flyer', speed: 100, size: { w: 70, h: 50 },
-    hpMul: 0.95, expMul: 1.1, touchMul: 1.1, weak: ['ice'], resist: ['lightning'], etc: 'drake_scale' }),
+    hpMul: 0.95, expMul: 1.1, touchMul: 1.1, weak: ['ice', 'holy'], resist: ['lightning'], etc: 'drake_scale',
+    extraDrops: [{ itemId: 'seal_fragment', chance: 0.3 }] }),
   // ── arcane_sanctum ──
   mk({ id: 'void_wisp', name: 'Void Wisp', level: 46, behavior: 'flyer', speed: 92, size: { w: 36, h: 40 },
-    hpMul: 0.85, expMul: 0.95, etc: 'void_crystal', extraDrops: [{ itemId: 'wisp_essence', chance: 0.15 }] }),
+    hpMul: 0.85, expMul: 0.95, weak: ['holy'], resist: ['shadow'], etc: 'void_crystal',
+    extraDrops: [{ itemId: 'wisp_essence', chance: 0.15 }, { itemId: 'seal_fragment', chance: 0.12 }] }),
   lichArchon,
 ];

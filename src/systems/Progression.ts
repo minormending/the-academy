@@ -9,6 +9,7 @@ import { bus } from '../core/events';
 import { AP_PER_LEVEL, SP_PER_LEVEL, expToNext } from '../core/balance';
 import { MAX_LEVEL, TOWN_MAP } from '../core/constants';
 import { JOB_ADVANCEMENT_QUESTS } from '../data/quests';
+import { SCHOOL_NAME, SCHOOL_PROFESSOR, isSchool, yearOfTier } from '../data/jobs';
 import { computeDerived, deathExpLoss } from './progression/stats';
 import { newUid, repairState, writeSave } from './SaveSystem';
 
@@ -127,12 +128,12 @@ export class Progression implements IProgression {
       const job = this.jobDef();
       const crossed = Registry.jobs().some(j => j.parent === job.id && startLevel < j.requiredLevel && s.level >= j.requiredLevel);
       if (crossed) {
-        bus.emit('ui:log', {
-          text: job.tier === 1
-            ? 'You are ready to choose a path! Speak with Elder Maelis in Mistvale.'
-            : 'Your instructor in Mistvale has a new trial for you.',
-          color: LOG.quest,
-        });
+        let text = 'You are ready to declare a School! Speak with Headmistress Maelis on campus.';
+        if (job.tier > 1) {
+          const prof = isSchool(job.branch) ? Registry.npc(SCHOOL_PROFESSOR[job.branch])?.name : undefined;
+          text = `Your Year ${yearOfTier(job.tier + 1)} Exam is open! See ${prof ?? 'your Professor'} on campus.`;
+        }
+        bus.emit('ui:log', { text, color: LOG.quest });
       }
       this.save();
     }
@@ -317,7 +318,12 @@ export class Progression implements IProgression {
     const d = this.derived();
     s.hp = d.maxHp;
     s.mp = d.maxMp;
-    bus.emit('ui:log', { text: `You are now a ${def.name}! (+${JOB_ADVANCE_BONUS_SP} SP)`, color: LOG.good });
+    const year = yearOfTier(def.tier);
+    const school = isSchool(def.branch) ? `the ${SCHOOL_NAME[def.branch]} School` : '';
+    const text = year >= 4
+      ? `You graduated${school ? ` from ${school}` : ''} as ${/^[aeiou]/i.test(def.name) ? 'an' : 'a'} ${def.name}! (+${JOB_ADVANCE_BONUS_SP} SP)`
+      : `You are now a Year ${year} student${school ? ` of ${school}` : ''}: ${def.name}! (+${JOB_ADVANCE_BONUS_SP} SP)`;
+    bus.emit('ui:log', { text, color: LOG.good });
     bus.emit('player:job', { job });
     this.refreshQuests();
     this.changed();
@@ -475,8 +481,8 @@ export class Progression implements IProgression {
     if (this.state.level < def.equip.reqLevel) return `Requires level ${def.equip.reqLevel}.`;
     const br = def.equip.reqBranch;
     if (br && br !== 'none' && this.jobDef().branch !== br) {
-      const name = br === 'fire' ? 'Fire' : br === 'ice' ? 'Ice' : 'Lightning';
-      return `Only ${name} mages can wield this.`;
+      const name = isSchool(br) ? SCHOOL_NAME[br] : br;
+      return `Only students of the ${name} School can use this.`;
     }
     return null;
   }
@@ -591,7 +597,7 @@ export class Progression implements IProgression {
     if (!this.canAcceptQuest(questId)) return;
     const q = Registry.quest(questId)!;
     this.state.quests[questId] = { status: 'active', counts: q.objectives.map(() => 0) };
-    bus.emit('ui:log', { text: `Quest accepted: ${q.name}`, color: LOG.quest });
+    bus.emit('ui:log', { text: this.isExam(q) ? `${q.name} — good luck!` : `Assignment accepted: ${q.name}`, color: LOG.quest });
     this.evalQuest(q, false);
     bus.emit('quest:updated', { questId });
     this.changed();
@@ -611,7 +617,7 @@ export class Progression implements IProgression {
     }
     prog.status = 'turned_in';
     for (const h of handIn) this.removeItem(h.itemId, h.qty);
-    bus.emit('ui:log', { text: `Quest complete: ${q.name}`, color: LOG.quest });
+    bus.emit('ui:log', { text: this.isExam(q) ? `Passed! ${q.name}` : `Assignment complete: ${q.name}`, color: LOG.quest });
     this.sfx('quest_complete');
     if (q.rewards.mesos) this.addMesos(q.rewards.mesos);
     for (const r of rewards) this.addItem(r.itemId, r.qty);
@@ -640,7 +646,7 @@ export class Progression implements IProgression {
       prog.status = status;
       changed = true;
       if (done) {
-        bus.emit('ui:log', { text: `Quest ready to turn in: ${q.name}`, color: LOG.quest });
+        bus.emit('ui:log', { text: `Ready to hand in: ${q.name}`, color: LOG.quest });
         this.sfx('quest_complete');
       }
     }
@@ -653,6 +659,11 @@ export class Progression implements IProgression {
       const q = Registry.quest(qid);
       if (q) this.evalQuest(q, true);
     }
+  }
+
+  /** Year-end Exams (job advancement) vs. ordinary Assignments, for log wording. */
+  private isExam(q: QuestDef): boolean {
+    return Object.values(JOB_ADVANCEMENT_QUESTS).includes(q.id);
   }
 
   /** Quest progress helper for UI/NPC scripts. */

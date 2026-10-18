@@ -31,6 +31,8 @@ export class GameScene extends Phaser.Scene implements IGameApi {
   private keyUp!: Phaser.Input.Keyboard.Key;
   private keyPickup!: Phaser.Input.Keyboard.Key;
   private nextPickupAt = 0;
+  /** Presses latched from key 'down' events so sub-frame taps are never lost (Phaser clears _justDown on keyup). */
+  private latched = new Set<Phaser.Input.Keyboard.Key>();
 
   constructor() { super(SCENES.GAME); }
 
@@ -160,12 +162,21 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     this.hotkeys = HOTBAR_KEYS.map(k => kb.addKey(Phaser.Input.Keyboard.KeyCodes[k]));
     this.keyUp = kb.addKey(Phaser.Input.Keyboard.KeyCodes[CONTROL_KEYS.interact]);
     this.keyPickup = kb.addKey(Phaser.Input.Keyboard.KeyCodes[CONTROL_KEYS.pickup]);
+    for (const k of [...this.hotkeys, this.keyUp, this.keyPickup]) k.on('down', () => this.latched.add(k));
+  }
+
+  /** True once per physical press, even if the key was released before this frame. */
+  private consumePress(k: Phaser.Input.Keyboard.Key): boolean {
+    Phaser.Input.Keyboard.JustDown(k);
+    if (!this.latched.has(k)) return false;
+    this.latched.delete(k);
+    return true;
   }
 
   private handleInput(time: number) {
     const s = this.s;
-    if (this.inputBlocked || this.transitioning || s.progression.isDead()) return;
-    const JustDown = Phaser.Input.Keyboard.JustDown;
+    if (this.inputBlocked || this.transitioning || s.progression.isDead()) { this.latched.clear(); return; }
+    const JustDown = (k: Phaser.Input.Keyboard.Key) => this.consumePress(k);
 
     // Hotbar: skills repeat while held (Maple-style), items fire once per press.
     const hotbar = s.progression.state.hotbar;
@@ -178,7 +189,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
         continue;
       }
       const pressed = JustDown(key);
-      if (!key.isDown) continue;
+      if (!key.isDown && !pressed) continue;
       const r = s.skills.tryCast(entry);
       if (pressed && r !== 'ok' && r !== 'busy') {
         const msg = r === 'no_mp' ? 'Not enough MP.' : r === 'cooldown' ? 'That skill is still cooling down.'
@@ -197,7 +208,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     }
 
     // Z: pick up (repeats while held).
-    if (this.keyPickup.isDown && time >= this.nextPickupAt) {
+    if ((this.consumePress(this.keyPickup) || this.keyPickup.isDown) && time >= this.nextPickupAt) {
       s.drops.tryPickup();
       this.nextPickupAt = time + 110;
     }

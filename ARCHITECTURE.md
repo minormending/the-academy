@@ -242,3 +242,26 @@ Show heal numbers with `ctx.services.combat.showNumber(x, y, amount, 'heal')`.
 **Pixel VFX** must match the art pivot: reuse PX4's sheet kit in `src/art/particles.ts` (`pxFx`, palette ramps,
 `pixelizeCanvas`) and the CC0 sheets already in `public/assets/vfx/`; new freely licensed sheets go in
 `public/assets/vfx/<tree>/` listed in `src/art/manifests/<tree>.ts` with a `CREDITS.md`.
+
+---
+
+## Phase 4: "The Academy" — school years and a much bigger spellbook
+
+**Premise.** The game is now titled **The Academy**. You are a student mage at a magic school. Each job tier is a
+**school Year**: Year 1 = Apprentice (core curriculum, everyone), Year 2 = you declare a **School** (Fire, Ice,
+Lightning, Holy, Shadow), Year 3 and Year 4 deepen it; Year 4's job is your graduate title. Job advancement =
+passing the **Year-end Exam** (the trial quests). The town is the **Academy campus**; instructors are
+**Professors**, the Elder is the **Headmistress**, quests are **Assignments**. Save key and all existing ids
+(skills, jobs, maps, items, NPCs) stay unchanged so saves keep working — this is a re-theme of names and text.
+
+**Spellbook size (what makes it fun).** Target per school: **8 spells per Year → 24 per school** (Year 2, 3, 4),
+and **10 for Year 1** (apprentice core curriculum). Existing skills keep their ids; new ones are added.
+Per Year, aim for:
+- 3–4 **attacks with clearly different roles** (single-target nuke, AoE clear, line/beam or chain, control/mobility),
+- 1–2 **buffs/utility** (blink variants, MP/HP recovery, shields, fields via `onCast`),
+- 1–2 **passives**,
+- from Year 3: a **summon or persistent field**; Year 4: **two ultimates** with different flavors (long cooldowns).
+SP is 3/level and max levels are high enough that **nobody can max everything** — builds are choices.
+Every new spell needs its own readable pixel VFX (reuse/recolor the CC0 sheets in `public/assets/vfx/` via the
+kit in `src/art/particles.ts`; prefix keys with the tree prefix). Keep `requires` chains shallow enough that
+several build paths exist inside a Year (2–3 roots per Year, not one long chain).

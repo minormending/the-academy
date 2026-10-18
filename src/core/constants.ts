@@ -32,3 +32,6 @@ export const CONTROL_KEYS = { jump: ['SPACE', 'ALT'], pickup: 'Z', interact: 'UP
 export const SAVE_KEY = 'arcana-story-save-v1';
 export const START_MAP = 'mistvale';
 export const TOWN_MAP = 'mistvale';
+
+/** Pixel-art pivot: every source pixel is drawn as PIXEL_SCALE×PIXEL_SCALE screen pixels (integer scaling only). */
+export const PIXEL_SCALE = 2;

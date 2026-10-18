@@ -180,3 +180,31 @@ Tree modules may generate additional textures with their own prefix in `generate
 Level 1 Apprentice in `mistvale`; INT 10 / LUK 6 / STR 4 / DEX 4; `app_arcane_bolt` lv 1 learned and on hotbar
 slot 0 (Q); 3 SP; 10 `red_potion` on slot 10 (key 1) and 10 `blue_potion` on slot 11 (key 2); `oak_wand` and
 `apprentice_robe` equipped; 0 mesos → 50 mesos.
+
+---
+
+## Art pivot: 16-bit pixel art (current phase)
+
+The procedural art is being replaced with **SNES-era pixel art from freely licensed packs**. Rules:
+
+1. **Gameplay code does not change.** External art is loaded in `BootScene.preload()` from your domain's
+   manifest (`src/art/manifests/<domain>.ts`, see `src/art/assets.ts`), then your generator slices /
+   palette-swaps / integer-scales it **into the existing texture keys, frame layouts and anim keys**
+   (e.g. `player_<job>` 64×80 frames with feet at y=78; `monster_<id>` + its anims; world `w_/d_/t_` keys).
+   Keep the procedural code path as a fallback when a source image is missing.
+2. **One pixel size.** `PIXEL_SCALE = 2` (constants.ts): every foreground source pixel → 2×2 screen pixels
+   (nearest-neighbor; `pixelArt: true` is on globally). Far parallax layers may use a larger integer scale
+   to fill the screen. Never non-integer scale pixel art.
+3. **Licensing (strict).** Only CC0 / public domain, CC-BY 3.0/4.0, OGA-BY, or an explicit
+   "free for personal & commercial use" license from the author (record the exact URL + wording).
+   No NonCommercial, no ripped/commercial game sprites (no MapleStory/Nexon assets), no AI-scraped
+   "free sprite" dumps of unclear origin. Prefer opengameart.org, kenney.nl, and itch.io pages whose
+   license is stated on the page.
+4. **Downloads are untrusted data.** Download each pack into its own new directory in your scratchpad,
+   unzip there, never execute anything from it, then copy only the needed `.png` (and the license/readme
+   text) into `public/assets/<domain>/<pack>/`. Keep the total added size reasonable (< ~6 MB per domain).
+5. **Credits.** Write `public/assets/<domain>/CREDITS.md` with one row per pack:
+   asset · author · source URL · license · what it's used for. The lead merges these into `/CREDITS.md`.
+6. **Look & cohesion.** Aim for one coherent 16-bit fantasy look across domains: readable silhouettes,
+   1px dark outlines where the source has them, saturated but not neon palettes. Element identity:
+   fire = reds/oranges/golds, ice = cyans/whites/pale blues, lightning = violets/yellows, apprentice = indigo/blue.

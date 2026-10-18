@@ -5,3 +5,4 @@ body { font-family: "Trebuchet MS", "Segoe UI", sans-serif; color: #f2f2f2; user
 /* #ui-root is positioned/sized over the canvas by src/ui (A8). Pointer events only on children. */
 #ui-root { position: absolute; left: 0; top: 0; pointer-events: none; overflow: hidden; }
 #ui-root > * { pointer-events: auto; }
+#game canvas { image-rendering: pixelated; image-rendering: crisp-edges; }

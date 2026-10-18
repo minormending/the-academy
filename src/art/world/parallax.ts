@@ -2,6 +2,7 @@
 import Phaser from 'phaser';
 import type { MapTheme } from '../../core/types';
 import { PALETTES, TERRAIN, THEMES, TK, type ThemePalette } from './palettes';
+import { PIXEL_BG, bgSrcKey } from '../manifests/world';
 import {
   type Ctx, canopy, circle, css, darken, ellipse, glow, hashStr, lighten, makeTex, mix, periodicNoise, poly, rng, rr,
   star4, vGrad, wrapX, wrapXY,
@@ -11,6 +12,9 @@ const LW = TERRAIN.layerW, LH = TERRAIN.layerH;
 
 export function generateParallaxTextures(scene: Phaser.Scene) {
   for (const t of THEMES) {
+    // the 16-bit parallax stack replaces these large painted layers when its sky strip loaded
+    const pix = PIXEL_BG[t]?.[0];
+    if (pix && scene.textures.exists(bgSrcKey(t, pix.name))) continue;
     const p = PALETTES[t];
     makeTex(scene, TK.sky(t), 8, 512, (ctx, w, h) => {
       ctx.fillStyle = vGrad(ctx, 0, h, [[0, p.skyTop], [0.55, p.skyMid], [1, p.skyBottom]]);

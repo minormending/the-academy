@@ -5,6 +5,22 @@ import Phaser from 'phaser';
 import { DEPTH } from '../core/constants';
 import { maybeServices } from '../core/services';
 import type { AmbientKind } from './themes';
+import { PIXEL_KEYS } from '../art/world/pixel';
+
+type EmitterCfg = Phaser.Types.GameObjects.Particles.ParticleEmitterConfig;
+
+/** Pixel particles: whole-number scales only (1–2×) and no free rotation, so they stay crisp squares. */
+function pixelize(cfg: EmitterCfg): EmitterCfg {
+  const out: EmitterCfg = { ...cfg };
+  const sc = cfg.scale as { min?: number; max?: number } | number | undefined;
+  let lo = 1, hi = 1;
+  if (typeof sc === 'number') lo = hi = sc;
+  else if (sc && typeof sc === 'object' && 'min' in sc && sc.min !== undefined && sc.max !== undefined) { lo = sc.min; hi = sc.max; }
+  const a = Math.max(1, Math.round(lo * 1.6)), b = Math.max(a, Math.round(hi * 1.6));
+  out.scale = a === b ? a : { onEmit: () => (Math.random() < 0.5 ? a : b) } as unknown as EmitterCfg['scale'];
+  delete out.rotate;
+  return out;
+}
 
 type Emitter = Phaser.GameObjects.Particles.ParticleEmitter;
 type ZoneMode = 'view' | 'top' | 'bottom';
@@ -38,6 +54,7 @@ export class Ambient {
   private emitter(key: string, mode: ZoneMode, depth: number, cfg: Phaser.Types.GameObjects.Particles.ParticleEmitterConfig, prewarmMs: number) {
     if (!this.scene.textures.exists(key)) return;
     const rect = new Phaser.Geom.Rectangle(0, 0, 10, 10);
+    if (PIXEL_KEYS.has(key)) cfg = pixelize(cfg);
     const e = this.scene.add.particles(0, 0, key, {
       ...cfg,
       emitZone: { type: 'random', source: rect as unknown as Phaser.Types.GameObjects.Particles.RandomZoneSource },
@@ -145,6 +162,30 @@ export class Ambient {
     const pts: [number, number][] = [[x, y]];
     const endY = cam.height * (0.35 + Math.random() * 0.25);
     while (y < endY) { x += (Math.random() - 0.5) * 60; y += 20 + Math.random() * 30; pts.push([x, y]); }
+    if (PIXEL_KEYS.has('w_spark')) {
+      // 16-bit bolt: whole 4px blocks stepped along the path (halo, body, white core), plus a short fork
+      const B = 4;
+      const seg = (pts2: [number, number][], size: number, c: number, a: number) => {
+        g.fillStyle(c, a);
+        for (let i = 1; i < pts2.length; i++) {
+          const [x0, y0] = pts2[i - 1], [x1, y1] = pts2[i];
+          const n = Math.max(1, Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) / B));
+          for (let k = 0; k <= n; k++) {
+            const x = Math.round((x0 + (x1 - x0) * k / n) / B) * B, y = Math.round((y0 + (y1 - y0) * k / n) / B) * B;
+            g.fillRect(x - Math.floor(size / 2 / B) * B, y, size, B);
+          }
+        }
+      };
+      seg(pts, 12, 0x8fa8ff, 0.3); seg(pts, 8, 0xc8d8ff, 0.8); seg(pts, 4, 0xffffff, 1);
+      const fi = Math.floor(pts.length / 2);
+      if (pts[fi]) {
+        const fork: [number, number][] = [[pts[fi][0], pts[fi][1]]];
+        let fx = pts[fi][0], fy = pts[fi][1];
+        for (let i = 0; i < 4; i++) { fx += 15 + Math.random() * 20; fy += 15 + Math.random() * 20; fork.push([fx, fy]); }
+        seg(fork, 4, 0xe8eeff, 0.85);
+      }
+      return;
+    }
     for (const [w, c, a] of [[9, 0x8fa8ff, 0.25], [4, 0xc8d8ff, 0.7], [1.6, 0xffffff, 1]] as const) {
       g.lineStyle(w, c, a); g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
       for (const p of pts) g.lineTo(p[0], p[1]);

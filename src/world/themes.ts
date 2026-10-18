@@ -32,6 +32,8 @@ export interface ThemeRuntime {
   backTint: number;
   tints?: Record<string, number>;
   ladderKey: string;
+  /** Show the sun/moon sprite over the pixel parallax (false when the sky strip already paints one). */
+  pixelCelestial?: boolean;
 }
 
 export const THEME_RUNTIME: Record<MapTheme, ThemeRuntime> = {
@@ -107,6 +109,7 @@ export const THEME_RUNTIME: Record<MapTheme, ThemeRuntime> = {
       { key: 'near', fx: 0.3, fy: 0.22, screenTop: 210 },
     ],
     clouds: { speed: 0.003, fx: 0.03, screenTop: 0, alpha: 0.7 },
+    pixelCelestial: false,
     ambient: ['embers', 'ash'],
     scatter: {
       back: ['d_lava_spire', 'd_burnt_tree', 'd_lava_spire'], between: ['d_obsidian', 'd_rock_big', 'd_brazier'],
@@ -168,3 +171,25 @@ export const DECOR_GLOWS: Record<string, { dy: number; dx?: number; r: number; c
 };
 /** Decor that gently bobs (floating things). */
 export const DECOR_BOB: Record<string, number> = { d_crystal_float: 7 };
+
+/**
+ * Glow anchor for the pixel versions of glowing decor (their sprites differ in size from the procedural ones).
+ * dy(h) gets the displayed sprite height; null = no glow for the pixel version.
+ */
+export const PIXEL_GLOW_DY: Record<string, { dy: (h: number) => number; dx?: number } | null> = {
+  d_lamp: { dy: h => -(h - 22) },
+  t_lantern: { dy: h => -(h - 22) },
+  t_gate: null,
+  d_brazier: { dy: h => -(h - 12) },
+  d_brazier_arcane: { dy: h => -(h - 12) },
+  d_glow_shroom: { dy: h => -h * 0.55 },
+  d_ice_crystal: { dy: h => -h * 0.5 },
+  d_obsidian: { dy: h => -h * 0.45 },
+  d_runestone: { dy: h => -h * 0.5 },
+  d_crystal_float: { dy: h => -h * 0.5 },
+  d_lava_spire: { dy: () => -10 },
+  t_hall_fire: { dy: h => -h * 0.38, dx: -40 },
+  t_hall_ice: { dy: h => -h * 0.38, dx: -40 },
+  t_hall_storm: { dy: h => -h * 0.38, dx: -40 },
+  t_tower: { dy: h => -(h - 12) },
+};

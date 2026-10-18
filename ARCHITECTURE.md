@@ -265,3 +265,18 @@ SP is 3/level and max levels are high enough that **nobody can max everything** 
 Every new spell needs its own readable pixel VFX (reuse/recolor the CC0 sheets in `public/assets/vfx/` via the
 kit in `src/art/particles.ts`; prefix keys with the tree prefix). Keep `requires` chains shallow enough that
 several build paths exist inside a Year (2–3 roots per Year, not one long chain).
+
+### Phase 4 roster (current)
+
+- **Spellbook**: Year 1 core 10 (`app_`) + five Schools × 24 (`fire_`, `ice_`, `ltn_`, `holy_`, `shd_`), 8 per Year,
+  two ultimates each in Year 4. Many schools have an `onCast` self-recovery; Holy's healing stays strongest.
+- **NPC roles** (ids unchanged): `elder_maelis` Headmistress Maelis · `pyra`/`glacius`/`voltis`/`seraphine`/`morvane`
+  Professors (Pyromancy, Cryomancy, Storm Magic, Holy, Shadow) · `merchant_bram` Quartermaster · `smith_tilda`
+  Armorer · `scout_finn` Prefect Finn (field practicums). School helpers: `SCHOOLS`, `SCHOOL_NAME`,
+  `SCHOOL_PROFESSOR`, `isSchool()`, `yearOfTier()` in `src/data/jobs.ts`.
+- **Exams**: `q_job_flamebinder|frostbinder|stormbinder|priest|necromancer` (Year 3) and
+  `q_job_inferno_sage|glacial_sage|tempest_sage|hierophant|umbral_sage` (Year 4).
+- **New items**: `dawn_staff`, `grave_staff` (lv15), `sunlit_scepter`, `umbral_scepter` (lv35), `acolyte_vestments`,
+  `grave_robes`, exam drops `yeti_bone`, `seal_fragment`.
+- **Familiar**: Pip the owl (`src/systems/PetSystem.ts`) auto-loots drops near the player; `arcana.pet()` toggles.
+- **VFX hint**: `VfxOptions.groundY` = walkable surface under hits/areas; anchor ground effects on it.

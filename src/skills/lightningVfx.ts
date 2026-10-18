@@ -12,6 +12,11 @@ import {
   screenFlash, sparks, motes, stars, whileAlive, loopWhileAlive,
 } from './lightning/fx';
 import type { BoltStyle } from './lightning/fx';
+import {
+  needleCast, needleProj, repulsionArea, wardCast, wardAura, liveWireSigil,
+  capacitorArc, reversalCast, relayOut, relayIn, relayArrival, judgmentCage,
+  railCharge, railBeam, conductorSigil,
+} from './lightning/academyVfx';
 
 export function generateLightningTextures(scene: Phaser.Scene): void {
   generateTextures(scene);
@@ -312,11 +317,11 @@ function stormClouds(scene: Phaser.Scene, o: VfxOptions): void {
   for (let i = 0; i < count; i++) {
     const x = cx + (i - (count - 1) / 2) * (STORM.spreadX / (count - 1)) + rnd(-18, 18);
     const y = cy + rnd(-16, 16);
-    const c = scene.add.image(x, y, 'ltn_cloud').setDepth(DEPTH.VFX_TOP - 1).setScale(rnd(1.5, 2.3), rnd(1.1, 1.5)).setAlpha(0);
+    const c = scene.add.image(x, y, 'ltn_cloud').setDepth(DEPTH.VFX_TOP - 1).setScale(2).setAlpha(0);
     if (i % 2) c.setFlipX(true);
     clouds.push(c);
     scene.tweens.add({ targets: c, alpha: 0.96, duration: 420, delay: i * 50 });
-    scene.tweens.add({ targets: c, x: x + rnd(-24, 24), duration: rnd(1200, 1900), yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    loopWhileAlive(scene, c, { targets: c, x: x + Math.round(rnd(-12, 12)) * 2, duration: rnd(1200, 1900), yoyo: true, repeat: -1, ease: 'Stepped', easeParams: [6] });
   }
 
   const i2color = (): number => (Math.random() < 0.5 ? C.violet : C.yellow);
@@ -584,6 +589,22 @@ const surgeAura: VfxFn = (scene) => {
 // ───────────────────────────── registration ─────────────────────────────
 
 export function registerLightningVfx(): void {
+  // Academy expansion (passive sigils accent studied attack casts while learned).
+  registerVfx('ltn_needle_cast', needleCast);
+  registerVfx('ltn_needle_proj', needleProj);
+  registerVfx('ltn_repulsion_area', repulsionArea);
+  registerVfx('ltn_ward_cast', wardCast);
+  registerVfx('ltn_ward_aura', wardAura);
+  registerVfx('ltn_live_wire_sigil', liveWireSigil);
+  registerVfx('ltn_capacitor_arc', capacitorArc);
+  registerVfx('ltn_reversal_cast', reversalCast);
+  registerVfx('ltn_relay_out', relayOut);
+  registerVfx('ltn_relay_in', relayIn);
+  registerVfx('ltn_relay_arrival', relayArrival);
+  registerVfx('ltn_judgment_cage', judgmentCage);
+  registerVfx('ltn_rail_charge', railCharge);
+  registerVfx('ltn_rail_beam', railBeam);
+  registerVfx('ltn_conductor_sigil', conductorSigil);
   // casts
   registerVfx('ltn_cast_bolt', castBolt);
   registerVfx('ltn_cast_lance', castLance);

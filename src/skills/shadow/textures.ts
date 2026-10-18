@@ -11,6 +11,8 @@ export const ST = {
   mote: 'shd_tex_mote', ring: 'shd_tex_ring', bolt: 'shd_tex_bolt', cloud: 'shd_tex_cloud',
   slash: 'shd_tex_slash', scythe: 'shd_tex_scythe', skull: 'shd_tex_skull',
   skeleton: 'shd_tex_skeleton', lich: 'shd_tex_lich',
+  bone: 'shd_tex_bone', shackle: 'shd_tex_shackle', wraith: 'shd_tex_wraith',
+  dragon: 'shd_tex_dragon', scale: 'shd_tex_scale',
 } as const;
 
 /** Source IDs from the existing CC0 manifest; every derived texture/animation is shd_-prefixed. */
@@ -144,6 +146,57 @@ export function generateShadowTextures(scene: Phaser.Scene): void {
     ctx.fillStyle = css(C.pale); ctx.fillRect(15, 15, 3, 2); ctx.fillRect(24, 15, 3, 2); ctx.fillRect(33, 15, 3, 2);
   });
   make(scene, ST.skull, 12, 12, ctx => skull(ctx, 0, 0));
+  make(scene, ST.bone, 16, 8, ctx => {
+    ctx.fillStyle = css(C.ink); ctx.fillRect(1, 1, 4, 6); ctx.fillRect(4, 2, 8, 4); ctx.fillRect(11, 1, 4, 6);
+    ctx.fillStyle = css(C.pale); ctx.fillRect(2, 2, 2, 4); ctx.fillRect(4, 3, 8, 2); ctx.fillRect(12, 2, 2, 4);
+    ctx.fillStyle = css(C.green); ctx.fillRect(5, 3, 2, 1);
+  });
+  make(scene, ST.shackle, 16, 16, ctx => {
+    ctx.fillStyle = css(C.ink); ctx.fillRect(2, 2, 12, 12);
+    ctx.fillStyle = css(C.lilac); ctx.fillRect(3, 3, 10, 10);
+    ctx.clearRect(5, 5, 6, 6);
+    ctx.fillStyle = css(C.pale); ctx.fillRect(3, 3, 7, 1); ctx.fillRect(3, 4, 1, 5);
+    ctx.fillStyle = css(C.green); ctx.fillRect(11, 11, 4, 3);
+  });
+  make(scene, ST.scale, 16, 20, ctx => {
+    ctx.fillStyle = css(C.ink); ctx.fillRect(2, 1, 12, 13); ctx.fillRect(5, 14, 6, 5);
+    ctx.fillStyle = css(C.pale); ctx.fillRect(3, 2, 10, 11); ctx.fillRect(6, 13, 4, 4);
+    ctx.fillStyle = css(C.violet); ctx.fillRect(5, 4, 6, 7);
+    ctx.fillStyle = css(C.green); ctx.fillRect(7, 5, 2, 5);
+  });
+  make(scene, ST.wraith, 30, 36, ctx => {
+    ctx.fillStyle = css(C.ink);
+    ctx.beginPath(); ctx.moveTo(9, 1); ctx.lineTo(21, 1); ctx.lineTo(26, 14); ctx.lineTo(29, 32);
+    ctx.lineTo(21, 28); ctx.lineTo(18, 36); ctx.lineTo(12, 30); ctx.lineTo(5, 34); ctx.lineTo(1, 28); ctx.lineTo(5, 13); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = css(C.dark); ctx.fillRect(8, 10, 14, 17);
+    ctx.fillStyle = css(C.violet); ctx.fillRect(7, 18, 4, 10); ctx.fillRect(20, 16, 4, 11); ctx.fillRect(13, 25, 4, 7);
+    skull(ctx, 9, 4);
+    ctx.fillStyle = css(C.green); ctx.fillRect(13, 19, 4, 2); ctx.fillRect(14, 22, 2, 2);
+  });
+  make(scene, ST.dragon, 100, 66, ctx => {
+    // Right-facing skull, ribs, articulated tail and two torn bone wings at native 1×.
+    ctx.fillStyle = css(C.ink);
+    ctx.beginPath(); ctx.moveTo(37, 32); ctx.lineTo(12, 1); ctx.lineTo(40, 10); ctx.lineTo(53, 30);
+    ctx.lineTo(62, 3); ctx.lineTo(81, 10); ctx.lineTo(64, 35); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = css(C.dark);
+    ctx.beginPath(); ctx.moveTo(36, 29); ctx.lineTo(17, 5); ctx.lineTo(39, 13); ctx.lineTo(50, 31);
+    ctx.lineTo(63, 7); ctx.lineTo(76, 12); ctx.lineTo(62, 33); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = css(C.ink); ctx.fillRect(29, 29, 43, 19); ctx.fillRect(67, 20, 17, 19); ctx.fillRect(78, 24, 20, 14);
+    ctx.fillRect(84, 36, 12, 6); ctx.fillRect(6, 45, 26, 5); ctx.fillRect(1, 41, 10, 4);
+    ctx.fillStyle = css(C.pale); ctx.fillRect(30, 31, 44, 3); ctx.fillRect(69, 22, 13, 15); ctx.fillRect(81, 26, 15, 10);
+    ctx.fillRect(86, 38, 8, 2); ctx.fillRect(7, 46, 23, 2); ctx.fillRect(2, 42, 5, 2);
+    for (let i = 0; i < 5; i++) {
+      const x = 33 + i * 7;
+      ctx.fillRect(x, 35, 2, 9); ctx.fillRect(x + 2, 43, 4, 2);
+    }
+    ctx.fillRect(36, 47, 3, 12); ctx.fillRect(34, 58, 9, 3); ctx.fillRect(61, 47, 3, 12); ctx.fillRect(60, 58, 9, 3);
+    ctx.fillRect(26, 15, 2, 9); ctx.fillRect(31, 20, 2, 9); ctx.fillRect(64, 12, 2, 14);
+    ctx.fillStyle = css(C.violet); ctx.fillRect(35, 33, 30, 2); ctx.fillRect(12, 47, 11, 1);
+    ctx.fillStyle = css(C.ink); ctx.fillRect(76, 26, 6, 5); ctx.fillRect(91, 31, 3, 2);
+    ctx.fillStyle = css(C.green); ctx.fillRect(78, 27, 3, 2);
+    ctx.fillStyle = css(C.pale); ctx.fillRect(70, 16, 2, 6); ctx.fillRect(77, 15, 2, 7);
+    for (const x of [85, 89, 93]) ctx.fillRect(x, 35, 1, 4);
+  });
   make(scene, ST.skeleton, 32, 36, ctx => {
     skull(ctx, 9, 0);
     ctx.fillStyle = css(C.ink); ctx.fillRect(9, 12, 12, 13); ctx.fillRect(10, 24, 4, 11); ctx.fillRect(17, 24, 4, 11);

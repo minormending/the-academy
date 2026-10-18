@@ -2,6 +2,7 @@
 import Phaser from 'phaser';
 import { registerVfx } from '../core/vfx';
 import { generateShadowTextures as generate } from './shadow/textures';
+import * as academy from './shadow/academyFx';
 import {
   arc, aura, beam, bolt, buffCast, cast, heal, hex, hit, plague, summon,
   tideCast, tideImpact, tideProjectile,
@@ -35,4 +36,25 @@ export function registerShadowVfx(): void {
   registerVfx('shd_lich_bolt', (scene, o) => bolt(scene, o, true));
   registerVfx('shd_veil_cast', (scene, o) => { buffCast(scene, o, true); });
   registerVfx('shd_veil_aura', (scene, o) => aura(scene, o, true));
+
+  registerVfx('shd_grave_link', (scene, o) => { academy.graveLink(scene, o); });
+  registerVfx('shd_dread_pulse', academy.dreadPulse);
+  registerVfx('shd_step_out', (scene, o) => { academy.step(scene, o); });
+  registerVfx('shd_step_in', (scene, o) => { academy.step(scene, o, true); });
+  registerVfx('shd_grave_skin', academy.graveSkin);
+  registerVfx('shd_grave_chains', (scene, o) => { academy.graveLink(scene, o, true); });
+  registerVfx('shd_shackle_hit', academy.shackleHit);
+  registerVfx('shd_ward_cast', academy.wardCast);
+  registerVfx('shd_ward_aura', academy.wardAura);
+  registerVfx('shd_wraith', academy.wraith);
+  registerVfx('shd_wraith_wisp', academy.wraithWisp);
+  registerVfx('shd_wraith_hit', academy.wraithHit);
+  registerVfx('shd_lance_cast', academy.lanceCast);
+  registerVfx('shd_lance_proj', academy.lance);
+  registerVfx('shd_lance_hit', academy.lanceHit);
+  registerVfx('shd_dragon', academy.dragon);
+  registerVfx('shd_dragon_charge', academy.dragonCharge);
+  registerVfx('shd_dragon_breath', academy.dragonBreath);
+  registerVfx('shd_dragon_hit', academy.dragonHit);
+  registerVfx('shd_reservoir', academy.reservoir);
 }

@@ -214,6 +214,10 @@ export const SFX: Record<SfxKey, SfxRecipe> = {
     });
     ['E6', 'G6', 'C7'].forEach((n, i) => bell(s, N(n) * p, 0.34 + i * 0.07, 0.5, 0.035 * v, 3.5, 1.2));
   },
+  // holy/shadow aliases until bespoke synth voices land
+  cast_holy: (s, p, v) => SFX.heal(s, p * 1.25, v),
+  cast_shadow: (s, p, v) => SFX.whoosh(s, p * 0.6, v),
+  curse: (s, p, v) => SFX.whoosh(s, p * 0.45, v * 0.8),
   potion: (s, p, v) => {
     for (let i = 0; i < 3; i++) tone(s, { type: 'sine', f: 260 * p, f2: 520 * p, t: i * 0.08, dur: 0.07, v: 0.16 * v, filter: { type: 'lowpass', f: 1200 } });
     bell(s, N('A6') * p, 0.26, 0.35, 0.04 * v, 2, 1);

@@ -8,15 +8,17 @@ import type Phaser from 'phaser';
 
 // ───────────────────────────── Elements, jobs ─────────────────────────────
 
-export type Element = 'neutral' | 'fire' | 'ice' | 'lightning';
-export type Branch = 'none' | 'fire' | 'ice' | 'lightning';
+export type Element = 'neutral' | 'fire' | 'ice' | 'lightning' | 'holy' | 'shadow';
+export type Branch = 'none' | 'fire' | 'ice' | 'lightning' | 'holy' | 'shadow';
 export type JobTier = 1 | 2 | 3 | 4;
 
 export type JobId =
   | 'apprentice'                                   // tier 1 (start, lv 1)
   | 'pyromancer' | 'flamebinder' | 'inferno_sage'  // fire  tiers 2,3,4
   | 'cryomancer' | 'frostbinder' | 'glacial_sage'  // ice   tiers 2,3,4
-  | 'stormcaller' | 'stormbinder' | 'tempest_sage'; // lightning tiers 2,3,4
+  | 'stormcaller' | 'stormbinder' | 'tempest_sage' // lightning tiers 2,3,4
+  | 'cleric' | 'priest' | 'hierophant'            // holy  tiers 2,3,4
+  | 'occultist' | 'necromancer' | 'umbral_sage';  // shadow tiers 2,3,4
 
 export interface JobDef {
   id: JobId;
@@ -63,6 +65,8 @@ export interface DerivedStats {
   dmgFire: number;
   dmgIce: number;
   dmgLightning: number;
+  dmgHoly: number;
+  dmgShadow: number;
   castSpeed: number;   // fraction that reduces cast lock times (0.2 = 20% faster)
   cdr: number;         // fraction cooldown reduction
 }
@@ -79,7 +83,8 @@ export type IconGlyph =
   | 'bolt' | 'chain' | 'storm' | 'thunder_cloud' | 'spark' | 'orb'
   | 'arcane_star' | 'missile' | 'claw' | 'shield' | 'teleport' | 'book' | 'eye' | 'wind' | 'heart' | 'mana'
   | 'potion' | 'wand' | 'staff' | 'hat' | 'robe' | 'shoes' | 'gloves' | 'ring' | 'amulet'
-  | 'coin' | 'gem' | 'scroll' | 'shell' | 'jelly' | 'mushroom' | 'feather' | 'fur' | 'bone' | 'crystal' | 'scale';
+  | 'coin' | 'gem' | 'scroll' | 'shell' | 'jelly' | 'mushroom' | 'feather' | 'fur' | 'bone' | 'crystal' | 'scale'
+  | 'halo' | 'holy_cross' | 'sunburst' | 'wings' | 'skull' | 'scythe' | 'ghost' | 'poison' | 'paw';
 
 export interface IconSpec {
   glyph: IconGlyph;
@@ -95,7 +100,9 @@ export type StatusKind =
   | 'chill'   // slow: potency = fraction of move speed removed (0..0.9)
   | 'freeze'  // cannot move or attack; potency unused
   | 'shock'   // takes extra damage: potency = fraction bonus damage taken
-  | 'stun';   // cannot move or attack; potency unused
+  | 'stun'    // cannot move or attack; potency unused
+  | 'poison'  // DoT like burn (shadow): potency = damage per tick (ticks every 500ms)
+  | 'curse';  // weakened: takes extra damage AND deals less: potency = fraction (0..0.6)
 
 export interface StatusSpec {
   kind: StatusKind;
@@ -250,7 +257,7 @@ export type VfxFn = (scene: Phaser.Scene, o: VfxOptions) => Phaser.GameObjects.G
 export type SfxKey =
   | 'jump' | 'land' | 'portal' | 'pickup' | 'mesos' | 'levelup' | 'job_advance' | 'death'
   | 'player_hurt' | 'monster_hit' | 'monster_crit' | 'monster_die' | 'boss_roar'
-  | 'cast_arcane' | 'cast_fire' | 'cast_ice' | 'cast_lightning' | 'buff'
+  | 'cast_arcane' | 'cast_fire' | 'cast_ice' | 'cast_lightning' | 'cast_holy' | 'cast_shadow' | 'buff' | 'curse'
   | 'explosion' | 'freeze' | 'shatter' | 'thunder' | 'zap' | 'whoosh' | 'blink' | 'heal'
   | 'ui_click' | 'ui_open' | 'ui_close' | 'ui_error' | 'quest_complete' | 'potion';
 

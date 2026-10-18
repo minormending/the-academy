@@ -208,3 +208,37 @@ The procedural art is being replaced with **SNES-era pixel art from freely licen
 6. **Look & cohesion.** Aim for one coherent 16-bit fantasy look across domains: readable silhouettes,
    1px dark outlines where the source has them, saturated but not neon palettes. Element identity:
    fire = reds/oranges/golds, ice = cyans/whites/pale blues, lightning = violets/yellows, apprentice = indigo/blue.
+
+---
+
+## Phase 3: two more trees — Holy and Shadow
+
+| Tier | Level | Holy | Shadow |
+|---|---|---|---|
+| 2 | 10 | Cleric (`cleric`) | Occultist (`occultist`) |
+| 3 | 25 | Priest (`priest`) | Necromancer (`necromancer`) |
+| 4 | 40 | Hierophant (`hierophant`) | Umbral Sage (`umbral_sage`) |
+
+Contract additions (already in `src/core/types.ts`): `Element`/`Branch` += `holy`, `shadow`; `DerivedStats` +=
+`dmgHoly`, `dmgShadow`; `StatusKind` += `poison` (DoT like burn, potency = % of base hit per 500ms tick) and
+`curse` (potency 0..0.6: target takes ×(1+p) damage and deals ×(1−p) contact damage); `IconGlyph` += `halo`,
+`holy_cross`, `sunburst`, `wings`, `skull`, `scythe`, `ghost`, `poison`, `paw`; `SfxKey` += `cast_holy`,
+`cast_shadow`, `curse`. Job defs/looks are in `src/data/jobs.ts`.
+
+**Holy identity — sustain, smite, control.** Lower raw damage than fire; heals the caster, stuns (`stun` status),
+holy damage is the answer to undead/void (`lich_archon`, `void_wisp`, ice/void wisps get `weak: ['holy']`).
+Skill ids `holy_`. Heals use `onCast` (see below). Signature: an ultimate **Genesis**-style rain of light.
+
+**Shadow identity — attrition, curses, minions.** Poison DoTs, curses that amplify all damage and weaken foes,
+skeletal/wraith summons, life drain. Skill ids `shd_`. Signature: an ultimate **Night Tide**-style rain of
+shadow scythes and a big summon (e.g. Bone Dragon / Lich Shade).
+
+**Heals and drains via `onCast`** (no engine change): `onCast(ctx, lv)` replaces default behaviour after MP,
+cooldown, cast lock, sfx and `skill:cast` are handled. Use `ctx.runAttack(spec, origin)` for the damage part
+(origin = `{ x: player.x + 18·facing, y: player.y − 34, facing }`, read from `ctx.services.player`) and
+`ctx.services.progression.heal(hp, mp)` / `.derived().maxHp` for healing; play VFX with `playVfx(ctx.scene, key, opts)`.
+Show heal numbers with `ctx.services.combat.showNumber(x, y, amount, 'heal')`.
+
+**Pixel VFX** must match the art pivot: reuse PX4's sheet kit in `src/art/particles.ts` (`pxFx`, palette ramps,
+`pixelizeCanvas`) and the CC0 sheets already in `public/assets/vfx/`; new freely licensed sheets go in
+`public/assets/vfx/<tree>/` listed in `src/art/manifests/<tree>.ts` with a `CREDITS.md`.

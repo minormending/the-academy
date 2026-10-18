@@ -9,18 +9,18 @@ import { iconEl } from './uiIcons';
 export const STAT_LABELS: Record<DerivedStatKey, string> = {
   maxHp: 'Max HP', maxMp: 'Max MP', matk: 'Magic ATK', def: 'Defense', critRate: 'Crit Rate', critDmg: 'Crit Damage',
   mastery: 'Mastery', speed: 'Speed', jump: 'Jump', hpRegen: 'HP Regen', mpRegen: 'MP Regen', mpShield: 'Mana Shield',
-  dmgAll: 'All Damage', dmgFire: 'Fire Damage', dmgIce: 'Ice Damage', dmgLightning: 'Lightning Damage',
+  dmgAll: 'All Damage', dmgFire: 'Fire Damage', dmgIce: 'Ice Damage', dmgLightning: 'Lightning Damage', dmgHoly: 'Holy Damage', dmgShadow: 'Shadow Damage',
   castSpeed: 'Cast Speed', cdr: 'Cooldown Reduction',
 };
 
 /** Stats whose values are fractions (display as %). */
-export const FRACTION_STATS = new Set<DerivedStatKey>(['critRate', 'critDmg', 'mastery', 'mpShield', 'dmgAll', 'dmgFire', 'dmgIce', 'dmgLightning', 'castSpeed', 'cdr']);
+export const FRACTION_STATS = new Set<DerivedStatKey>(['critRate', 'critDmg', 'mastery', 'mpShield', 'dmgAll', 'dmgFire', 'dmgIce', 'dmgHoly', 'dmgShadow', 'dmgLightning', 'castSpeed', 'cdr']);
 
-export const ELEMENT_COLORS: Record<Element, string> = { neutral: '#b9a6ff', fire: '#ff8a4c', ice: '#7fd8ff', lightning: '#ffe25c' };
-export const BRANCH_COLORS: Record<Branch, string> = { none: '#c9b8ff', fire: '#ff8a4c', ice: '#7fd8ff', lightning: '#ffe25c' };
-export const BRANCH_NAMES: Record<Branch, string> = { none: 'Arcane', fire: 'Fire', ice: 'Ice', lightning: 'Lightning' };
+export const ELEMENT_COLORS: Record<Element, string> = { neutral: '#b9a6ff', fire: '#ff8a4c', ice: '#7fd8ff', lightning: '#ffe25c', holy: '#fff1a8', shadow: '#b48cff' };
+export const BRANCH_COLORS: Record<Branch, string> = { none: '#c9b8ff', fire: '#ff8a4c', ice: '#7fd8ff', lightning: '#ffe25c', holy: '#fff1a8', shadow: '#b48cff' };
+export const BRANCH_NAMES: Record<Branch, string> = { none: 'Arcane', fire: 'Fire', ice: 'Ice', lightning: 'Lightning', holy: 'Holy', shadow: 'Shadow' };
 export const SLOT_LABELS: Record<EquipSlot, string> = { weapon: 'Weapon', hat: 'Hat', robe: 'Robe', shoes: 'Shoes', gloves: 'Gloves', ring: 'Ring', amulet: 'Amulet' };
-const STATUS_NAMES: Record<StatusKind, string> = { burn: 'Burn', chill: 'Chill', freeze: 'Freeze', shock: 'Shock', stun: 'Stun' };
+const STATUS_NAMES: Record<StatusKind, string> = { burn: 'Burn', chill: 'Chill', freeze: 'Freeze', shock: 'Shock', stun: 'Stun', poison: 'Poison', curse: 'Curse' };
 const KIND_LABELS: Record<SkillDef['kind'], string> = { attack: 'Attack', buff: 'Buff', passive: 'Passive', movement: 'Movement', summon: 'Summon' };
 
 const r1 = (n: number) => +n.toFixed(1);
@@ -173,12 +173,12 @@ export function canEquip(def: ItemDef | undefined, level: number, branch: Branch
 }
 
 export const DERIVED_ORDER: DerivedStatKey[] = ['maxHp', 'maxMp', 'matk', 'def', 'critRate', 'critDmg', 'mastery', 'speed', 'jump',
-  'hpRegen', 'mpRegen', 'mpShield', 'dmgAll', 'dmgFire', 'dmgIce', 'dmgLightning', 'castSpeed', 'cdr'];
+  'hpRegen', 'mpRegen', 'mpShield', 'dmgAll', 'dmgFire', 'dmgIce', 'dmgHoly', 'dmgShadow', 'dmgLightning', 'castSpeed', 'cdr'];
 
 export function derivedRows(d: DerivedStats): { label: string; value: string }[] {
   return DERIVED_ORDER.filter(k => {
     // Hide zero elemental bonuses etc. to keep the panel readable.
-    if (['mpShield', 'dmgAll', 'dmgFire', 'dmgIce', 'dmgLightning', 'castSpeed', 'cdr'].includes(k)) return (d[k] ?? 0) !== 0;
+    if (['mpShield', 'dmgAll', 'dmgFire', 'dmgIce', 'dmgHoly', 'dmgShadow', 'dmgLightning', 'castSpeed', 'cdr'].includes(k)) return (d[k] ?? 0) !== 0;
     return true;
   }).map(k => ({ label: STAT_LABELS[k], value: fmtStatValue(k, d[k] ?? 0) + (k === 'hpRegen' || k === 'mpRegen' ? ' / 5s' : '') }));
 }

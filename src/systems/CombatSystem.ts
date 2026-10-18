@@ -29,7 +29,8 @@ export class CombatSystem implements ICombatSystem {
     const mastery = clamp(num(d?.mastery, 0.5), 0, 1);
     const roll = mastery + Math.random() * (1 - mastery);
     const elemBonus = element === 'fire' ? num(d?.dmgFire, 0) : element === 'ice' ? num(d?.dmgIce, 0)
-      : element === 'lightning' ? num(d?.dmgLightning, 0) : 0;
+      : element === 'lightning' ? num(d?.dmgLightning, 0) : element === 'holy' ? num(d?.dmgHoly, 0)
+      : element === 'shadow' ? num(d?.dmgShadow, 0) : 0;
     const def = target.def;
     let elemMult = 1;
     if (element !== 'neutral') {
@@ -85,7 +86,9 @@ export class CombatSystem implements ICombatSystem {
     const rawPot = num(spec.potency(lv), 0);
     let potency: number;
     switch (spec.kind) {
-      case 'burn': potency = Math.max(1, Math.round((num(baseHit, 1) * rawPot) / 100)); break;
+      case 'burn':
+      case 'poison': potency = Math.max(1, Math.round((num(baseHit, 1) * rawPot) / 100)); break;
+      case 'curse': potency = clamp(rawPot, 0, 0.6); break;
       case 'chill': potency = clamp(rawPot, 0, 0.9); break;
       case 'shock': potency = Math.max(0, rawPot); break;
       default: potency = rawPot;

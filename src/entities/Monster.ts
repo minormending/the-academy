@@ -35,6 +35,7 @@ export class Monster implements IMonster {
   protected readonly animBase: string | null;
   protected statuses = new Map<StatusKind, StatusInstance>();
   protected burnAcc = 0;
+  protected poisonAcc = 0;
   protected colliders: Phaser.Physics.Arcade.Collider[] = [];
   protected dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
   protected wanderMoving = false;
@@ -179,6 +180,7 @@ export class Monster implements IMonster {
     } else {
       this.statuses.set(s.kind, { kind: s.kind, durationMs: dur, potency: s.potency, element: s.element });
       if (s.kind === 'burn') this.burnAcc = 0;
+      if (s.kind === 'poison') this.poisonAcc = 0;
       this.onStatusStart(s.kind);
     }
     if (s.kind === 'freeze' || s.kind === 'stun') {
@@ -198,7 +200,14 @@ export class Monster implements IMonster {
 
   incomingDamageMult(): number {
     const sh = this.statuses.get('shock');
-    return sh ? 1 + Math.max(0, sh.potency) : 1;
+    const cu = this.statuses.get('curse');
+    return (sh ? 1 + Math.max(0, sh.potency) : 1) * (cu ? 1 + Math.max(0, cu.potency) : 1);
+  }
+
+  /** Multiplier on damage this monster deals (curse weakens it). */
+  outgoingDamageMult(): number {
+    const cu = this.statuses.get('curse');
+    return cu ? 1 - Math.min(0.6, Math.max(0, cu.potency)) : 1;
   }
 
   update(time: number, delta: number): void {
@@ -467,6 +476,19 @@ export class Monster implements IMonster {
         }
         if (!this._alive) return;
       }
+      if (kind === 'poison') {
+        this.poisonAcc += delta;
+        while (this.poisonAcc >= 500 && this._alive) {
+          this.poisonAcc -= 500;
+          const dmg = Math.max(1, Math.round(st.potency));
+          try {
+            this.services.combat.damageMonster(this, dmg, { kind: 'dot', element: st.element });
+          } catch {
+            this.takeDamage(dmg, {});
+          }
+        }
+        if (!this._alive) return;
+      }
       if (st.durationMs <= 0) expired.push(kind);
     }
     for (const k of expired) this.removeStatus(k);
@@ -561,6 +583,8 @@ export class Monster implements IMonster {
         const rx = () => b.x + Math.random() * b.width;
         if (this.statuses.has('burn')) this.spawnMote(MFX.ember, rx(), b.y + b.height * rand(0.3, 0.9), -rand(18, 34), 520, undefined, rand(0.7, 1.2));
         if (this.statuses.has('shock') && this.fxTick % 2 === 0) this.spawnMote(MFX.spark, rx(), b.y + Math.random() * b.height, rand(-6, 6), 200, undefined, rand(0.6, 1));
+        if (this.statuses.has('poison') && this.fxTick % 2 === 0) this.spawnMote(MFX.puff, rx(), b.y + b.height * rand(0.4, 0.9), -rand(10, 22), 600, 0x7dff5a, rand(0.6, 0.9));
+        if (this.statuses.has('curse') && this.fxTick % 3 === 0) this.spawnMote(MFX.puff, rx(), b.y + b.height * rand(0.1, 0.5), -rand(6, 14), 800, 0x9a5cff, rand(0.7, 1));
         if (this.statuses.has('chill') && !this.statuses.has('freeze') && this.fxTick % 3 === 0) this.spawnMote(MFX.snow, rx(), b.y + Math.random() * b.height * 0.5, rand(14, 24), 700, undefined, 1);
       }
     }
@@ -586,6 +610,8 @@ export class Monster implements IMonster {
     if (this.statuses.has('freeze')) return 0xc4ecff;
     if (this.statuses.has('burn')) return Math.floor(now / 110) % 2 ? 0xffa070 : 0xffcfa8;
     if (this.statuses.has('shock')) return Math.floor(now / 80) % 3 === 0 ? 0xfff27a : 0xffffd8;
+    if (this.statuses.has('poison')) return Math.floor(now / 140) % 2 ? 0xa8ff8c : 0xd4ffc4;
+    if (this.statuses.has('curse')) return 0xc9a6ff;
     if (this.statuses.has('chill')) return 0x9cc8ff;
     if (this.statuses.has('stun')) return 0xf4ecd0;
     return this.baseTint();

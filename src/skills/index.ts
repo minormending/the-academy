@@ -8,13 +8,18 @@ import { ICE_SKILLS } from './ice';
 import { registerIceVfx, generateIceTextures } from './iceVfx';
 import { LIGHTNING_SKILLS } from './lightning';
 import { registerLightningVfx, generateLightningTextures } from './lightningVfx';
+import { HOLY_SKILLS } from './holy';
+import { registerHolyVfx, generateHolyTextures } from './holyVfx';
+import { SHADOW_SKILLS } from './shadow';
+import { registerShadowVfx, generateShadowTextures } from './shadowVfx';
 import { registerCommonVfx } from '../art/particles';
 
-export const ALL_SKILLS: SkillDef[] = [...APPRENTICE_SKILLS, ...FIRE_SKILLS, ...ICE_SKILLS, ...LIGHTNING_SKILLS];
+export const ALL_SKILLS: SkillDef[] = [...APPRENTICE_SKILLS, ...FIRE_SKILLS, ...ICE_SKILLS, ...LIGHTNING_SKILLS, ...HOLY_SKILLS, ...SHADOW_SKILLS];
 
 export function generateSkillTextures(scene: Phaser.Scene) {
   generateApprenticeTextures(scene); generateFireTextures(scene); generateIceTextures(scene); generateLightningTextures(scene);
+  generateHolyTextures(scene); generateShadowTextures(scene);
 }
 export function registerAllVfx() {
-  registerCommonVfx(); registerApprenticeVfx(); registerFireVfx(); registerIceVfx(); registerLightningVfx();
+  registerCommonVfx(); registerApprenticeVfx(); registerFireVfx(); registerIceVfx(); registerLightningVfx(); registerHolyVfx(); registerShadowVfx();
 }

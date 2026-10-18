@@ -156,7 +156,8 @@ export class MonsterManager implements IMonsterManager {
     for (const m of this.list) {
       if (!m.canContact()) continue;
       if (Phaser.Geom.Intersects.RectangleToRectangle(m.getBounds(), pb)) {
-        s.combat.hitPlayer(m.def.touchDamage, m.x);
+        const weak = (m as { outgoingDamageMult?: () => number }).outgoingDamageMult?.() ?? 1;
+        s.combat.hitPlayer(Math.max(1, Math.round(m.def.touchDamage * weak)), m.x);
         return; // one contact hit per frame
       }
     }

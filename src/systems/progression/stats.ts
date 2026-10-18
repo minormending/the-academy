@@ -38,6 +38,8 @@ export function baseDerived(state: PlayerState): DerivedStats {
     dmgFire: 0,
     dmgIce: 0,
     dmgLightning: 0,
+    dmgHoly: 0,
+    dmgShadow: 0,
     castSpeed: 0,
     cdr: 0,
   };

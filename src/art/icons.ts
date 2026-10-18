@@ -123,6 +123,16 @@ function sparkle(ctx: Ctx, x: number, y: number, r: number, col = '#ffffff') {
 // ───────────────────────────── glyph painters ─────────────────────────────
 
 const P: Record<IconGlyph, Painter> = {
+  // ── holy / shadow / pet (aliases until bespoke painters land) ──
+  halo: (ctx, c, c2) => P.orb(ctx, c, c2),
+  holy_cross: (ctx, c, c2) => P.arcane_star(ctx, c, c2),
+  sunburst: (ctx, c, c2) => P.explosion(ctx, c, c2),
+  wings: (ctx, c, c2) => P.feather(ctx, c, c2),
+  skull: (ctx, c, c2) => P.bone(ctx, c, c2),
+  scythe: (ctx, c, c2) => P.claw(ctx, c, c2),
+  ghost: (ctx, c, c2) => P.eye(ctx, c, c2),
+  poison: (ctx, c, c2) => P.potion(ctx, c, c2),
+  paw: (ctx, c, c2) => P.heart(ctx, c, c2),
   // ── fire ──
   flame: (ctx, c, c2) => flame(ctx, c, c2),
   fireball: (ctx, c, c2) => {
@@ -739,6 +749,15 @@ const T = (n: PixelIconName): Cand => ({ n, tint: true });
  * otherwise a tinted (palette-swapped) candidate is used.
  */
 const PIXEL_ICONS: Record<IconGlyph, Cand[]> = {
+  halo: [...A('S_Holy01', 'S_Holy09'), T('S_Holy05')],
+  holy_cross: [...A('S_Holy05', 'S_Holy08'), T('S_Holy01')],
+  sunburst: [...A('S_Holy08', 'S_Light01', 'S_Light03'), T('S_Light02')],
+  wings: [...A('I_Feather02', 'S_Holy09'), T('I_Feather01')],
+  skull: [...A('S_Shadow08', 'I_Bone'), T('S_Shadow09')],
+  scythe: [...A('S_Shadow14', 'S_Shadow15'), T('S_Shadow02')],
+  ghost: [...A('S_Shadow11', 'S_Shadow09'), T('S_Shadow02')],
+  poison: [...A('P_Green01', 'S_Shadow02'), T('S_Water05')],
+  paw: [...A('I_FoxTail', 'I_WolfFur'), T('I_Fang')],
   flame: A('S_Fire03', 'S_Fire02', 'S_Fire04'),
   fireball: [...A('S_Fire01', 'S_Fire05'), T('S_Magic03')],
   meteor: A('S_Fire05', 'S_Fire06'),

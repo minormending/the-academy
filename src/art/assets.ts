@@ -13,6 +13,8 @@ import { MONSTER_ASSETS } from './manifests/monsters';
 import { WORLD_ASSETS } from './manifests/world';
 import { VFX_ASSETS } from './manifests/vfx';
 import { UI_ASSETS } from './manifests/ui';
+import { HOLY_ASSETS } from './manifests/holy';
+import { SHADOW_ASSETS } from './manifests/shadow';
 
 export interface AssetEntry {
   /** Phaser texture key; prefix with the domain, e.g. 'src_char_wizard_idle'. Use the `src_` prefix for raw source sheets. */
@@ -29,7 +31,7 @@ export function assetUrl(path: string): string {
 }
 
 export const ALL_ASSETS: AssetEntry[] = [
-  ...CHARACTER_ASSETS, ...MONSTER_ASSETS, ...WORLD_ASSETS, ...VFX_ASSETS, ...UI_ASSETS,
+  ...CHARACTER_ASSETS, ...MONSTER_ASSETS, ...WORLD_ASSETS, ...VFX_ASSETS, ...UI_ASSETS, ...HOLY_ASSETS, ...SHADOW_ASSETS,
 ];
 
 export function queueArtAssets(load: Phaser.Loader.LoaderPlugin): void {

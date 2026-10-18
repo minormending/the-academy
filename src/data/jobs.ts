@@ -66,9 +66,43 @@ export const JOBS: JobDef[] = [
     description: 'The storm wears a face. Tempest Sages summon thunder from clear skies and answer every question with a lightning strike.',
     look: look({ robe: 0x24104f, robeTrim: 0xfff36b, hat: 0xffe14d, hatTrim: 0xb46bff, staffGem: 0xffffff, hatStyle: 'crown', hair: 0x1c1430 }),
   },
+
+  // ── Holy ──
+  {
+    id: 'cleric', name: 'Cleric', branch: 'holy', tier: 2, requiredLevel: JOB_LEVELS[2], parent: 'apprentice',
+    description: 'Light given purpose. Clerics mend wounds between spells and smite the restless dead with radiant arrows.',
+    look: look({ robe: 0xf4efe0, robeTrim: 0xe3b84a, hat: 0xfaf5e8, hatTrim: 0xe3b84a, staffGem: 0xfff3a0, hatStyle: 'hood' }),
+  },
+  {
+    id: 'priest', name: 'Priest', branch: 'holy', tier: 3, requiredLevel: JOB_LEVELS[3], parent: 'cleric',
+    description: 'Their prayers are answered in blinding light. Priests bless allies, stun crowds with sacred rays and call guardian spirits.',
+    look: look({ robe: 0xfffaf0, robeTrim: 0xf2c94c, hat: 0xf6edd6, hatTrim: 0xf2c94c, staffGem: 0xfffbd0, hatStyle: 'pointed', hair: 0xc8a36a }),
+  },
+  {
+    id: 'hierophant', name: 'Hierophant', branch: 'holy', tier: 4, requiredLevel: JOB_LEVELS[4], parent: 'priest',
+    description: 'A living sanctuary. Hierophants open the heavens themselves, and nothing unholy survives the dawn they bring.',
+    look: look({ robe: 0xffffff, robeTrim: 0xffd54a, hat: 0xffd54a, hatTrim: 0x7fe7ff, staffGem: 0xffffff, hatStyle: 'crown', hair: 0xf0e2b8 }),
+  },
+
+  // ── Shadow ──
+  {
+    id: 'occultist', name: 'Occultist', branch: 'shadow', tier: 2, requiredLevel: JOB_LEVELS[2], parent: 'apprentice',
+    description: 'Students of the forbidden margins. Occultists poison, curse and wither — slow deaths for impatient foes.',
+    look: look({ robe: 0x2e2440, robeTrim: 0x7cff6b, hat: 0x231b33, hatTrim: 0x7cff6b, staffGem: 0x9dff7a, hatStyle: 'hood', hair: 0x1f1a2a }),
+  },
+  {
+    id: 'necromancer', name: 'Necromancer', branch: 'shadow', tier: 3, requiredLevel: JOB_LEVELS[3], parent: 'occultist',
+    description: 'Death is a resource. Necromancers raise skeletal servants, drain life from the living and leave curses that linger.',
+    look: look({ robe: 0x1d1626, robeTrim: 0x9a5cff, hat: 0x150f1f, hatTrim: 0x9a5cff, staffGem: 0xc59bff, hatStyle: 'pointed', hair: 0xe8e0f0, skin: 0xe9dcd2 }),
+  },
+  {
+    id: 'umbral_sage', name: 'Umbral Sage', branch: 'shadow', tier: 4, requiredLevel: JOB_LEVELS[4], parent: 'necromancer',
+    description: 'They walk where light forgets to reach. Umbral Sages command a legion of shades and drown whole fields in night.',
+    look: look({ robe: 0x120d1a, robeTrim: 0xb48cff, hat: 0x6a3fc2, hatTrim: 0x7dff5a, staffGem: 0x7dff5a, hatStyle: 'crown', hair: 0xf2f2f2, skin: 0xe4d6cc }),
+  },
 ];
 
 /** Tier-2 job for each branch (what Elder Maelis offers at level 10). */
-export const BRANCH_ROOT_JOB: Record<'fire' | 'ice' | 'lightning', JobId> = {
-  fire: 'pyromancer', ice: 'cryomancer', lightning: 'stormcaller',
+export const BRANCH_ROOT_JOB: Record<'fire' | 'ice' | 'lightning' | 'holy' | 'shadow', JobId> = {
+  fire: 'pyromancer', ice: 'cryomancer', lightning: 'stormcaller', holy: 'cleric', shadow: 'occultist',
 };

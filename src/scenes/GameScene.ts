@@ -1,0 +1,243 @@
+/**
+ * GameScene: constructs all services, owns map transitions and global input
+ * (hotbar, portals/NPC interaction, pickup). Owned by the lead.
+ */
+import Phaser from 'phaser';
+import { CONTROL_KEYS, DEPTH, HOTBAR_KEYS, SCENES, START_MAP, TOWN_MAP } from '../core/constants';
+import { bus } from '../core/events';
+import { setServices } from '../core/services';
+import { Registry } from '../core/registry';
+import { playVfx } from '../core/vfx';
+import { expToNext } from '../core/balance';
+import type { GameServices, IGameApi, IMapInstance, JobId, PlayerState } from '../core/types';
+import { Player } from '../entities/Player';
+import { SkillSystem } from '../systems/SkillSystem';
+import { CombatSystem } from '../systems/CombatSystem';
+import { MonsterManager } from '../systems/MonsterManager';
+import { DropManager } from '../systems/DropManager';
+import { Progression } from '../systems/Progression';
+import { NpcManager } from '../systems/NpcManager';
+import { getAudio } from '../systems/AudioSystem';
+import { UIRoot } from '../ui/UIRoot';
+import { loadMap } from '../world/MapLoader';
+
+export class GameScene extends Phaser.Scene implements IGameApi {
+  private s!: GameServices;
+  private map: IMapInstance | null = null;
+  private initialState!: PlayerState;
+  private inputBlocked = false;
+  private transitioning = false;
+  private hotkeys: Phaser.Input.Keyboard.Key[] = [];
+  private keyUp!: Phaser.Input.Keyboard.Key;
+  private keyPickup!: Phaser.Input.Keyboard.Key;
+  private nextPickupAt = 0;
+
+  constructor() { super(SCENES.GAME); }
+
+  init(data: { state: PlayerState }) {
+    this.initialState = data.state;
+    this.map = null;
+    this.inputBlocked = false;
+    this.transitioning = false;
+  }
+
+  create() {
+    const state = this.initialState;
+    const s = {} as GameServices;
+    s.scene = this;
+    s.game = this;
+    s.audio = getAudio();
+    s.progression = new Progression(s, state);
+    s.combat = new CombatSystem(this, s);
+    s.skills = new SkillSystem(this, s);
+    s.monsters = new MonsterManager(this, s);
+    s.drops = new DropManager(this, s);
+    s.npcs = new NpcManager(this, s);
+    s.player = new Player(this, s, 200, 200, state.job);
+    this.s = s;
+    setServices(s);
+    s.ui = new UIRoot(this, s);
+
+    this.wireEvents();
+    this.wireKeys();
+
+    const startMap = Registry.map(state.mapId) ? state.mapId : START_MAP;
+    this.loadMapNow(startMap);
+    this.cameras.main.fadeIn(400, 0, 0, 0);
+
+    this.exposeDebug();
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
+  }
+
+  // ─────────────────────────── IGameApi ───────────────────────────
+
+  changeMap(mapId: string, portalId?: string) {
+    if (this.transitioning) return;
+    if (!Registry.map(mapId)) { console.warn(`[game] unknown map ${mapId}`); return; }
+    this.transitioning = true;
+    this.s.player.setControlEnabled(false);
+    this.s.audio.play('portal');
+    const cam = this.cameras.main;
+    cam.fadeOut(220, 0, 0, 0);
+    cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+      this.loadMapNow(mapId, portalId);
+      cam.fadeIn(320, 0, 0, 0);
+      this.transitioning = false;
+      this.s.player.setControlEnabled(!this.inputBlocked);
+    });
+  }
+
+  currentMap() { return this.map; }
+
+  setInputBlocked(blocked: boolean) {
+    this.inputBlocked = blocked;
+    const kb = this.input.keyboard!;
+    if (blocked) { kb.disableGlobalCapture(); kb.resetKeys(); } else { kb.enableGlobalCapture(); }
+    this.s.player.setControlEnabled(!blocked && !this.transitioning);
+  }
+
+  isInputBlocked() { return this.inputBlocked; }
+
+  // ─────────────────────────── Internals ───────────────────────────
+
+  private loadMapNow(mapId: string, portalId?: string) {
+    const s = this.s;
+    s.skills.clearWorld();
+    s.monsters.clear();
+    s.drops.clear();
+    s.npcs.clear();
+    this.map?.destroy();
+
+    const map = loadMap(this, mapId);
+    this.map = map;
+    s.progression.state.mapId = mapId;
+
+    this.physics.world.setBounds(0, 0, map.widthPx, map.heightPx);
+    const cam = this.cameras.main;
+    cam.setBounds(0, 0, map.widthPx, map.heightPx);
+
+    s.player.bindMap(map);
+    const portal = portalId ? map.getPortalById(portalId) : null;
+    const spawn = portal ? { x: portal.x, y: portal.y } : map.getDefaultSpawn();
+    s.player.placeAt(spawn.x, spawn.y);
+    cam.startFollow(s.player.sprite, true, 0.12, 0.12, 0, 40);
+
+    s.monsters.bindMap(map);
+    s.drops.bindMap(map);
+    s.npcs.bindMap(map);
+
+    s.audio.playMusic(map.def.music);
+    bus.emit('map:changed', { mapId });
+    bus.emit('ui:banner', { text: map.def.name, sub: map.def.region });
+    s.progression.save();
+  }
+
+  private wireEvents() {
+    const s = this.s;
+    bus.on('player:levelup', ({ level }) => {
+      playVfx(this, 'levelup', { x: s.player.x, y: s.player.y, facing: s.player.facing });
+      s.audio.play('levelup');
+    });
+    bus.on('player:job', ({ job }) => {
+      s.player.setJob(job);
+      playVfx(this, 'job_advance', { x: s.player.x, y: s.player.y, facing: s.player.facing });
+      s.audio.play('job_advance');
+    });
+    bus.on('player:died', () => {
+      s.player.onDeath();
+      s.audio.play('death');
+      bus.emit('ui:death', {});
+    });
+    bus.on('player:revived', () => {
+      s.player.revive();
+      playVfx(this, 'respawn', { x: s.player.x, y: s.player.y, facing: s.player.facing });
+      this.changeMap(TOWN_MAP);
+    });
+  }
+
+  private wireKeys() {
+    const kb = this.input.keyboard!;
+    this.hotkeys = HOTBAR_KEYS.map(k => kb.addKey(Phaser.Input.Keyboard.KeyCodes[k]));
+    this.keyUp = kb.addKey(Phaser.Input.Keyboard.KeyCodes[CONTROL_KEYS.interact]);
+    this.keyPickup = kb.addKey(Phaser.Input.Keyboard.KeyCodes[CONTROL_KEYS.pickup]);
+  }
+
+  private handleInput(time: number) {
+    const s = this.s;
+    if (this.inputBlocked || this.transitioning || s.progression.isDead()) return;
+    const JustDown = Phaser.Input.Keyboard.JustDown;
+
+    // Hotbar: skills repeat while held (Maple-style), items fire once per press.
+    const hotbar = s.progression.state.hotbar;
+    for (let i = 0; i < this.hotkeys.length; i++) {
+      const key = this.hotkeys[i];
+      const entry = hotbar[i];
+      if (!entry) { JustDown(key); continue; }
+      if (entry.startsWith('item:')) {
+        if (JustDown(key)) s.progression.useItem(entry.slice(5));
+        continue;
+      }
+      const pressed = JustDown(key);
+      if (!key.isDown) continue;
+      const r = s.skills.tryCast(entry);
+      if (pressed && r !== 'ok' && r !== 'busy') {
+        const msg = r === 'no_mp' ? 'Not enough MP.' : r === 'cooldown' ? 'That skill is still cooling down.'
+          : r === 'not_learned' ? 'You have not learned that skill.' : r === 'passive' ? 'Passive skills are always active.' : '';
+        if (msg) { bus.emit('ui:log', { text: msg, color: '#ff9b9b' }); bus.emit('skill:fail', { skillId: entry, reason: r }); s.audio.play('ui_error'); }
+      }
+    }
+
+    // Up: portal first, then NPC (rope climbing is handled by the player).
+    if (JustDown(this.keyUp) && this.map) {
+      const portal = this.map.getPortalNear(s.player.x, s.player.y);
+      if (portal) { this.changeMap(portal.targetMap, portal.targetPortal); return; }
+      const npc = s.npcs.nearestInteractable();
+      if (npc) s.npcs.interact(npc);
+    }
+
+    // Z: pick up (repeats while held).
+    if (this.keyPickup.isDown && time >= this.nextPickupAt) {
+      s.drops.tryPickup();
+      this.nextPickupAt = time + 110;
+    }
+  }
+
+  update(time: number, delta: number) {
+    const s = this.s;
+    if (!this.map) return;
+    s.progression.update(time, delta);
+    s.player.update(time, delta);
+    s.monsters.update(time, delta);
+    s.skills.update(time, delta);
+    s.combat.update(time, delta);
+    s.drops.update(time, delta);
+    s.npcs.update(time, delta);
+    this.map.update(time, delta);
+    this.handleInput(time);
+    s.ui.update(time, delta);
+  }
+
+  private teardown() {
+    try { this.s.progression.save(); } catch { /* ignore */ }
+    this.s.ui.destroy();
+    this.map?.destroy();
+    bus.removeAll();
+    setServices(null);
+  }
+
+  private exposeDebug() {
+    const s = this.s;
+    const api = {
+      s,
+      levelTo: (n: number) => { while (s.progression.state.level < n) s.progression.gainExp(expToNext(s.progression.state.level) - s.progression.state.exp); },
+      give: (itemId: string, qty = 1) => s.progression.addItem(itemId, qty),
+      mesos: (n: number) => s.progression.addMesos(n),
+      warp: (mapId: string, portalId?: string) => this.changeMap(mapId, portalId),
+      job: (job: JobId) => s.progression.advanceJob(job),
+      heal: () => s.progression.heal(99999, 99999),
+      maps: () => Registry.maps().map(m => m.id),
+      depth: DEPTH,
+    };
+    (window as unknown as { arcana: typeof api }).arcana = api;
+  }
+}

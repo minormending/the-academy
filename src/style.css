@@ -1,0 +1,7 @@
+html, body { margin: 0; padding: 0; height: 100%; background: #0b0d16; overflow: hidden; }
+body { font-family: "Trebuchet MS", "Segoe UI", sans-serif; color: #f2f2f2; user-select: none; }
+#stage { position: relative; width: 100vw; height: 100vh; }
+#game { position: absolute; inset: 0; }
+/* #ui-root is positioned/sized over the canvas by src/ui (A8). Pointer events only on children. */
+#ui-root { position: absolute; left: 0; top: 0; pointer-events: none; overflow: hidden; }
+#ui-root > * { pointer-events: auto; }

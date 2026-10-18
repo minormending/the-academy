@@ -163,7 +163,7 @@ export class AttackRunner {
       const c = monsterCenter(m);
       let h = 40;
       try { h = m.getBounds().height; } catch { /* ignore */ }
-      playVfx(this.scene, spec.vfx.hit, { x: c.x, y: c.y, h, facing: m.x >= fromX ? 1 : -1, lv: info.lv });
+      playVfx(this.scene, spec.vfx.hit, { x: c.x, y: c.y, h, facing: m.x >= fromX ? 1 : -1, lv: info.lv, groundY: m.y });
     }
     for (let i = 0; i < lines; i++) {
       this.sched.after(i * interval, () => {
@@ -182,6 +182,15 @@ export class AttackRunner {
     }
   }
 
+  /** Walkable surface y at/below (x, yHint), falling back to yHint. */
+  private groundUnder(x: number, yHint: number): number {
+    try {
+      const p = this.svc().game.currentMap()?.platformAt(x, yHint, 160);
+      if (p && p.y >= yHint - 160) return p.y;
+    } catch { /* ignore */ }
+    return yHint;
+  }
+
   // ─────────────────────────── patterns ───────────────────────────
 
   private runMelee(info: CastInfo, o: Origin, delay: number) {
@@ -189,7 +198,7 @@ export class AttackRunner {
     const a = spec.area ?? { w: Math.max(80, spec.range), h: 100 };
     const cx = o.x + o.facing * num(a.offsetX, a.w / 2);
     const cy = o.y + num(a.offsetY, 0);
-    playVfx(this.scene, spec.vfx.area, { x: cx, y: cy, facing: o.facing, w: a.w, h: a.h, lv: info.lv });
+    playVfx(this.scene, spec.vfx.area, { x: cx, y: cy, facing: o.facing, w: a.w, h: a.h, lv: info.lv, groundY: this.groundUnder(cx, o.y + 34) });
     this.sched.after(delay, () => {
       for (const m of this.inRect(rectC(cx, cy, a.w, a.h), o.x, o.y, this.maxT(info))) this.strike(info, m, o.x);
     });
@@ -201,7 +210,7 @@ export class AttackRunner {
     // Centered on the caster's body, not the staff tip 18px ahead (novas must look centered on the mage).
     const cx = num(o.centerX, o.x) + o.facing * num(a.offsetX, 0);
     const cy = o.y + num(a.offsetY, 0);
-    playVfx(this.scene, spec.vfx.area, { x: cx, y: cy, facing: o.facing, w: a.w, h: a.h, lv: info.lv });
+    playVfx(this.scene, spec.vfx.area, { x: cx, y: cy, facing: o.facing, w: a.w, h: a.h, lv: info.lv, groundY: this.groundUnder(cx, o.y + 34) });
     this.sched.after(delay, () => {
       for (const m of this.inRect(rectC(cx, cy, a.w, a.h), cx, cy, this.maxT(info))) this.strike(info, m, cx);
     });
@@ -214,7 +223,7 @@ export class AttackRunner {
     const tc = t ? monsterCenter(t) : { x: o.x + o.facing * spec.range, y: o.y };
     const cx = tc.x + o.facing * num(a.offsetX, 0);
     const cy = tc.y + num(a.offsetY, 0);
-    playVfx(this.scene, spec.vfx.area, { x: cx, y: cy, facing: o.facing, w: a.w, h: a.h, targetX: cx, targetY: cy, lv: info.lv });
+    playVfx(this.scene, spec.vfx.area, { x: cx, y: cy, facing: o.facing, w: a.w, h: a.h, targetX: cx, targetY: cy, lv: info.lv, groundY: t ? this.groundUnder(cx, t.y) : this.groundUnder(cx, o.y + 34) });
     this.sched.after(delay, () => {
       for (const m of this.inRect(rectC(cx, cy, a.w, a.h), cx, cy, this.maxT(info))) this.strike(info, m, o.x);
     });

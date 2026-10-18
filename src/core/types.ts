@@ -243,6 +243,8 @@ export interface VfxOptions {
   lv?: number;
   scale?: number;
   angle?: number;          // radians, projectile heading
+  /** Walkable surface y under the effect (feet line) when the engine knows it — anchor ground effects here. */
+  groundY?: number;
 }
 
 /**

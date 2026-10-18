@@ -1,5 +1,6 @@
 // OWNER: A3 (fire-tree). Procedural white/tintable textures for the fire VFX (prefix `fire_`).
 import Phaser from 'phaser';
+import { pixelizeTexture } from '../../art/particles';
 
 export const FT = {
   soft: 'fire_soft',       // 64  soft radial blob
@@ -17,6 +18,9 @@ export const FT = {
   beam: 'fire_beam',       // 128x64 horizontal beam, soft on all edges
 } as const;
 
+/** Pixel cell per texture (default: autoCell by size). */
+const PIXEL_CELL: Record<string, number> = { [FT.ring]: 4, [FT.glow]: 8, [FT.comet]: 4, [FT.beam]: 4, [FT.scorch]: 4, [FT.wing]: 4 };
+
 type Draw = (ctx: CanvasRenderingContext2D, w: number, h: number) => void;
 
 function make(scene: Phaser.Scene, key: string, w: number, h: number, draw: Draw): void {
@@ -25,7 +29,8 @@ function make(scene: Phaser.Scene, key: string, w: number, h: number, draw: Draw
   if (!tex) return;
   const ctx = tex.getContext();
   draw(ctx, w, h);
-  tex.refresh();
+  // 16-bit pivot: chunky stepped-alpha pixels instead of smooth gradients.
+  pixelizeTexture(tex, PIXEL_CELL[key], key === FT.rock ? { posterize: 6 } : {});
 }
 
 function radial(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, stops: [number, number][]): CanvasGradient {

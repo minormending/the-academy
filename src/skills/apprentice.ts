@@ -2,7 +2,8 @@
 import Phaser from 'phaser';
 import type { SkillDef, VfxOptions } from '../core/types';
 import { registerVfx } from '../core/vfx';
-import { DEPTH } from '../core/constants';
+import { DEPTH, PIXEL_SCALE } from '../core/constants';
+import { pixelizeTexture, pxFx, pxLoop } from '../art/particles';
 
 // ───────────────────────────── palette ─────────────────────────────
 
@@ -162,7 +163,9 @@ function canvasTex(scene: Phaser.Scene, key: string, w: number, h: number, draw:
   const t = scene.textures.createCanvas(key, w, h);
   if (!t) return;
   try { draw(t.getContext(), w, h); } catch (e) { console.error(`[apprentice] texture ${key}`, e); }
-  t.refresh();
+  // 16-bit pivot: chunky stepped-alpha pixels (runes/claws get hard silhouettes).
+  pixelizeTexture(t, key === T.rune ? 2 : undefined,
+    key === T.rune ? { hard: true, cutoff: 0.3 } : key === T.claw ? { hard: true, cutoff: 0.3 } : key === T.bolt ? { posterize: 6 } : {});
 }
 
 function radial(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, stops: [number, string][]) {
@@ -379,30 +382,33 @@ function onDispose(scene: Phaser.Scene, go: Phaser.GameObjects.Container, fn?: (
 // ───────────────────────────── VFX ─────────────────────────────
 
 function vfxBoltCast(scene: Phaser.Scene, o: VfxOptions) {
-  flash(scene, T.rune, o.x, o.y, { tint: VIOLET_LT, from: 0.08, to: 0.32, dur: 300, alpha: 0.9, spin: o.facing * 1.2 });
-  flash(scene, tex(scene, 'px_flare', T.glow), o.x, o.y, { tint: VIOLET, from: 0.4, to: 1.4, dur: 220, alpha: 0.8 });
-  burst(scene, tex(scene, 'px_dot', T.dot), o.x, o.y, 8, {
+  flash(scene, T.rune, o.x, o.y, { tint: VIOLET_LT, from: 0.25, to: 0.25, dur: 260, alpha: 0.9 });
+  if (!pxFx(scene, 'g9_spark', o.x, o.y, { v: 'arcane', scale: PIXEL_SCALE, add: true, dur: 260, depth: DEPTH.VFX_TOP })) {
+    flash(scene, tex(scene, 'px_flare', T.glow), o.x, o.y, { tint: VIOLET, from: 0.4, to: 1.4, dur: 220, alpha: 0.8 });
+  }
+  burst(scene, tex(scene, 'px_dot', T.dot), o.x, o.y, 5, {
     speed: { min: 40, max: 140 }, angle: { min: 0, max: 360 }, lifespan: 320,
-    scale: { start: 0.9, end: 0 }, alpha: { start: 1, end: 0 }, tint: [VIOLET_LT, CYAN_LT, WHITE],
+    scale: { start: 1, end: 0.5 }, alpha: { start: 1, end: 0 }, tint: [VIOLET_LT, CYAN_LT, WHITE],
   });
 }
 
 function vfxBolt(scene: Phaser.Scene, o: VfxOptions): Phaser.GameObjects.GameObject {
   const c = scene.add.container(o.x, o.y).setDepth(DEPTH.VFX);
-  const glow = scene.add.image(-6, 0, tex(scene, 'px_flare', T.glow)).setTint(VIOLET).setBlendMode(Phaser.BlendModes.ADD).setScale(1.1, 0.75).setAlpha(0.75);
-  const body = scene.add.image(-14, 0, T.bolt).setBlendMode(Phaser.BlendModes.ADD);
-  const core = scene.add.image(4, 0, tex(scene, 'px_star', T.star)).setTint(CYAN_LT).setBlendMode(Phaser.BlendModes.ADD).setScale(0.9);
-  c.add([glow, body, core]);
+  // 16-bit arcane bolt: Emcee Flesher's pixel fireball palette-swapped to indigo/cyan
+  const px = pxLoop(scene, c, 'sf_fireball', 0, 0, { v: 'arcane', scale: PIXEL_SCALE, add: true });
+  if (!px) {
+    const glow = scene.add.image(-6, 0, tex(scene, 'px_flare', T.glow)).setTint(VIOLET).setBlendMode(Phaser.BlendModes.ADD).setScale(1, 0.75).setAlpha(0.75);
+    const body = scene.add.image(-14, 0, T.bolt).setBlendMode(Phaser.BlendModes.ADD);
+    c.add([glow, body]);
+  }
   c.setRotation(o.angle ?? (o.facing < 0 ? Math.PI : 0));
-  scene.tweens.add({ targets: core, rotation: Math.PI * 2, duration: 500, repeat: -1 });
-  scene.tweens.add({ targets: glow, alpha: 0.45, scaleY: 0.6, duration: 120, yoyo: true, repeat: -1 });
 
-  // Sparkle trail that lingers after the bolt is gone.
+  // Pixel sparkle trail that lingers after the bolt is gone.
   const trailKey = tex(scene, 'px_dot', T.dot);
   const trail = scene.add.particles(0, 0, trailKey, {
-    follow: c, frequency: 18, quantity: 1, lifespan: { min: 220, max: 420 },
+    follow: c, frequency: 30, quantity: 1, lifespan: { min: 220, max: 420 },
     speed: { min: 5, max: 30 }, angle: { min: 0, max: 360 },
-    scale: { start: 0.9, end: 0 }, alpha: { start: 0.9, end: 0 },
+    scale: { start: 1, end: 0.5 }, alpha: { start: 0.9, end: 0 },
     tint: [VIOLET, VIOLET_LT, CYAN], blendMode: 'ADD',
   });
   trail.setDepth(DEPTH.VFX - 1);
@@ -415,16 +421,13 @@ function vfxBolt(scene: Phaser.Scene, o: VfxOptions): Phaser.GameObjects.GameObj
 
 function vfxBoltHit(scene: Phaser.Scene, o: VfxOptions) {
   const s = Math.max(0.7, Math.min(1.6, (o.h ?? 40) / 45));
-  flash(scene, tex(scene, 'px_flare', T.glow), o.x, o.y, { tint: VIOLET_LT, from: 0.3 * s, to: 1.6 * s, dur: 240 });
-  flash(scene, tex(scene, 'px_ring', T.ring), o.x, o.y, { tint: CYAN, from: 0.2 * s, to: 1.5 * s, dur: 280, alpha: 0.9 });
-  flash(scene, tex(scene, 'px_star', T.star), o.x, o.y, { tint: WHITE, from: 1.6 * s, to: 0.2, dur: 200, spin: 1.5 });
-  burst(scene, tex(scene, 'px_spark', T.spark), o.x, o.y, 9, {
+  if (!pxFx(scene, 'sf_ring', o.x, o.y, { v: 'arcane', scale: s >= 1.3 ? 4 : PIXEL_SCALE, add: true, dur: 300, depth: DEPTH.VFX_TOP })) {
+    flash(scene, tex(scene, 'px_flare', T.glow), o.x, o.y, { tint: VIOLET_LT, from: 0.3 * s, to: 1.6 * s, dur: 240 });
+    flash(scene, tex(scene, 'px_ring', T.ring), o.x, o.y, { tint: CYAN, from: 0.2 * s, to: 1.5 * s, dur: 280, alpha: 0.9 });
+  }
+  burst(scene, tex(scene, 'px_spark', T.spark), o.x, o.y, 6, {
     speed: { min: 120, max: 300 }, angle: { min: 0, max: 360 }, rotate: { onUpdate: (p: Phaser.GameObjects.Particles.Particle) => Phaser.Math.RadToDeg(Math.atan2(p.velocityY, p.velocityX)) },
-    lifespan: { min: 180, max: 320 }, scale: { start: 1, end: 0.2 }, alpha: { start: 1, end: 0 }, tint: ARCANE_TINTS,
-  });
-  burst(scene, tex(scene, 'px_dot', T.dot), o.x, o.y, 8, {
-    speed: { min: 30, max: 110 }, angle: { min: 0, max: 360 }, gravityY: -60,
-    lifespan: { min: 300, max: 600 }, scale: { start: 0.8, end: 0 }, alpha: { start: 1, end: 0 }, tint: [VIOLET_LT, CYAN_LT],
+    lifespan: { min: 180, max: 320 }, scale: { start: 1, end: 0.5 }, alpha: { start: 1, end: 0 }, tint: ARCANE_TINTS,
   });
 }
 
@@ -432,75 +435,82 @@ function vfxClaw(scene: Phaser.Scene, o: VfxOptions) {
   const w = o.w ?? 150, h = o.h ?? 110;
   const sx = w / 150, sy = h / 110;
   const flip = o.facing < 0;
-  // Two swipes, one per hit line: first violet (down-forward), second cyan mirrored vertically.
-  const a = flash(scene, T.claw, o.x, o.y, { tint: VIOLET_LT, from: 0.75, to: 1.1, sx, sy, dur: 260, flipX: flip, rot: -0.25 * o.facing, spin: 0.25 * o.facing });
-  const b = flash(scene, T.claw, o.x + 8 * o.facing, o.y + 4, { tint: CYAN, from: 0.7, to: 1.05, sx, sy: -sy, dur: 260, delay: 110, flipX: flip, rot: 0.2 * o.facing, spin: -0.25 * o.facing });
-  void a; void b;
-  flash(scene, tex(scene, 'px_flare', T.glow), o.x, o.y, { tint: VIOLET, from: 1.2 * sx, to: 2.4 * sx, sy: 0.6, dur: 260, alpha: 0.5 });
-  burst(scene, tex(scene, 'px_spark', T.spark), o.x, o.y, 12, {
+  // Two pixel swipes (Emcee Flesher slash, arcane palette), one per hit line; the second is mirrored vertically.
+  const k = w >= 140 ? 4 : PIXEL_SCALE;
+  const a = pxFx(scene, 'sf_slash', o.x, o.y - 6, { v: 'arcane', scale: k, flipX: flip, dur: 240, add: true, depth: DEPTH.VFX_TOP });
+  if (a) {
+    pxFx(scene, 'sf_slash', o.x + 8 * o.facing, o.y + 10, { v: 'arcane', scale: k, flipX: flip, flipY: true, dur: 240, delay: 110, add: true, depth: DEPTH.VFX_TOP });
+  } else {
+    flash(scene, T.claw, o.x, o.y, { tint: VIOLET_LT, from: 0.75, to: 1.1, sx, sy, dur: 260, flipX: flip, rot: -0.25 * o.facing, spin: 0.25 * o.facing });
+    flash(scene, T.claw, o.x + 8 * o.facing, o.y + 4, { tint: CYAN, from: 0.7, to: 1.05, sx, sy: -sy, dur: 260, delay: 110, flipX: flip, rot: 0.2 * o.facing, spin: -0.25 * o.facing });
+  }
+  burst(scene, tex(scene, 'px_spark', T.spark), o.x, o.y, 8, {
     x: { min: -w * 0.35, max: w * 0.35 }, y: { min: -h * 0.3, max: h * 0.3 },
     speedX: { min: 60 * o.facing, max: 260 * o.facing }, speedY: { min: -60, max: 120 },
     rotate: o.facing > 0 ? 25 : 155,
-    lifespan: { min: 160, max: 320 }, scale: { start: 1.1, end: 0 }, alpha: { start: 1, end: 0 }, tint: ARCANE_TINTS,
+    lifespan: { min: 160, max: 320 }, scale: { start: 1, end: 0.5 }, alpha: { start: 1, end: 0 }, tint: ARCANE_TINTS,
   });
 }
 
 function vfxClawHit(scene: Phaser.Scene, o: VfxOptions) {
   const s = Math.max(0.7, Math.min(1.5, (o.h ?? 40) / 45));
-  flash(scene, tex(scene, 'px_spark', T.spark), o.x, o.y, { tint: CYAN_LT, from: 1.5 * s, to: 3.2 * s, sy: 1.4, rot: 0.7, dur: 200 });
-  flash(scene, tex(scene, 'px_spark', T.spark), o.x, o.y, { tint: VIOLET_LT, from: 1.5 * s, to: 3.2 * s, sy: 1.4, rot: -0.7, dur: 200, delay: 60 });
-  flash(scene, tex(scene, 'px_flare', T.glow), o.x, o.y, { tint: VIOLET, from: 0.4 * s, to: 1.3 * s, dur: 200 });
-  burst(scene, tex(scene, 'px_dot', T.dot), o.x, o.y, 7, {
+  if (!pxFx(scene, 'spark', o.x, o.y, { scale: s >= 1.3 ? 4 : PIXEL_SCALE, tint: CYAN_LT, add: true, depth: DEPTH.VFX_TOP })) {
+    flash(scene, tex(scene, 'px_spark', T.spark), o.x, o.y, { tint: CYAN_LT, from: 1.5 * s, to: 3.2 * s, sy: 1.4, rot: 0.7, dur: 200 });
+    flash(scene, tex(scene, 'px_spark', T.spark), o.x, o.y, { tint: VIOLET_LT, from: 1.5 * s, to: 3.2 * s, sy: 1.4, rot: -0.7, dur: 200, delay: 60 });
+  }
+  burst(scene, tex(scene, 'px_dot', T.dot), o.x, o.y, 5, {
     speed: { min: 50, max: 160 }, angle: { min: 0, max: 360 }, lifespan: 300,
-    scale: { start: 0.8, end: 0 }, alpha: { start: 1, end: 0 }, tint: [CYAN, VIOLET_LT, WHITE],
+    scale: { start: 1, end: 0.5 }, alpha: { start: 1, end: 0 }, tint: [CYAN, VIOLET_LT, WHITE],
   });
 }
 
 function vfxShieldCast(scene: Phaser.Scene, o: VfxOptions) {
   const cy = o.y - 34;
-  flash(scene, T.rune, o.x, o.y - 2, { tint: CYAN, from: 0.2, to: 0.75, sy: 0.32, dur: 600, spin: 1.4, alpha: 0.95 });
-  flash(scene, T.bubble, o.x, cy, { tint: CYAN_LT, from: 1.4, to: 0.62, dur: 380, ease: 'Back.easeOut', alpha: 0.9 });
-  flash(scene, tex(scene, 'px_flare', T.glow), o.x, cy, { tint: VIOLET, from: 0.6, to: 2.4, dur: 420, alpha: 0.7 });
-  burst(scene, tex(scene, 'px_star', T.star), o.x, o.y, 16, {
+  flash(scene, T.rune, o.x, o.y - 2, { tint: CYAN, from: 0.5, to: 0.75, sy: 0.5, dur: 600, alpha: 0.95 });
+  if (!pxFx(scene, 'cm_shield', o.x, cy, { v: 'arcane', scale: PIXEL_SCALE, add: true, dur: 520, depth: DEPTH.VFX_TOP })) {
+    flash(scene, T.bubble, o.x, cy, { tint: CYAN_LT, from: 1.4, to: 0.62, dur: 380, ease: 'Back.easeOut', alpha: 0.9 });
+  }
+  pxFx(scene, 'sf_heal', o.x, cy, { v: 'arcane', scale: 4, add: true, dur: 420 });
+  burst(scene, tex(scene, 'px_star', T.star), o.x, o.y, 10, {
     x: { min: -26, max: 26 }, speedY: { min: -160, max: -60 }, speedX: { min: -20, max: 20 },
-    lifespan: { min: 450, max: 800 }, scale: { start: 0.7, end: 0 }, alpha: { start: 1, end: 0 },
-    rotate: { min: 0, max: 360 }, tint: [CYAN, CYAN_LT, VIOLET_LT],
+    lifespan: { min: 450, max: 800 }, scale: { start: 1, end: 0.5 }, alpha: { start: 1, end: 0 },
+    tint: [CYAN, CYAN_LT, VIOLET_LT],
   });
 }
 
 function vfxShieldAura(scene: Phaser.Scene, o: VfxOptions): Phaser.GameObjects.GameObject {
   const c = scene.add.container(o.x, o.y).setDepth(DEPTH.PLAYER + 1);
   const cy = -34;
-  const bubble = scene.add.image(0, cy, T.bubble).setTint(CYAN).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.4).setScale(0.6, 0.66);
-  const rune = scene.add.image(0, -1, T.rune).setTint(VIOLET_LT).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.45).setScale(0.32, 0.1);
-  c.add([rune, bubble]);
-  scene.tweens.add({ targets: bubble, alpha: 0.22, scaleX: 0.63, scaleY: 0.69, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-  scene.tweens.add({ targets: rune, alpha: 0.2, duration: 1300, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  // pixel ward (CodeManu protection circle, arcane palette) instead of the smooth bubble
+  const ward = pxLoop(scene, c, 'cm_shield', 0, cy, { v: 'arcane', scale: PIXEL_SCALE, add: true, alpha: 0.5, fps: 10 });
+  if (!ward) {
+    const bubble = scene.add.image(0, cy, T.bubble).setTint(CYAN).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.4).setScale(0.6, 0.66);
+    c.add(bubble);
+    scene.tweens.add({ targets: bubble, alpha: 0.22, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  }
 
-  // Orbiting hex motes on a tilted ellipse (behind/in front via alpha + scale).
+  // Orbiting hex motes on a tilted ellipse (behind/in front via alpha), snapped to whole pixels.
   const moteKey = T.hex;
-  const motes = [0, 1, 2].map(() => scene.add.image(0, cy, moteKey).setTint(CYAN_LT).setBlendMode(Phaser.BlendModes.ADD).setScale(0.55));
+  const motes = [0, 1, 2].map(() => scene.add.image(0, cy, moteKey).setTint(CYAN_LT).setBlendMode(Phaser.BlendModes.ADD).setScale(0.5));
   c.add(motes);
   let t = Math.random() * 10;
   const onUpdate = (_time: number, delta: number) => {
     if (!c.scene) return;
     t += delta / 1000;
-    rune.rotation = t * 0.6;
     motes.forEach((m, i) => {
       const a = t * 2.1 + (i * Math.PI * 2) / 3;
       const depthF = Math.sin(a); // -1 back .. 1 front
-      m.setPosition(Math.cos(a) * 30, cy + depthF * 9 - 6 * Math.cos(a * 0.5));
-      m.setAlpha(0.35 + 0.55 * (depthF * 0.5 + 0.5)).setScale(0.4 + 0.25 * (depthF * 0.5 + 0.5));
-      m.rotation = a;
+      m.setPosition(Math.round(Math.cos(a) * 30), Math.round(cy + depthF * 9 - 6 * Math.cos(a * 0.5)));
+      m.setAlpha(depthF > 0 ? 0.9 : 0.4);
     });
   };
   scene.events.on(Phaser.Scenes.Events.UPDATE, onUpdate);
 
   // Occasional rising motes.
   const rise = scene.add.particles(0, 0, tex(scene, 'px_dot', T.dot), {
-    follow: c, followOffset: { x: 0, y: -10 }, frequency: 160, quantity: 1,
+    follow: c, followOffset: { x: 0, y: -10 }, frequency: 260, quantity: 1,
     x: { min: -22, max: 22 }, speedY: { min: -60, max: -25 }, lifespan: { min: 500, max: 900 },
-    scale: { start: 0.6, end: 0 }, alpha: { start: 0.8, end: 0 }, tint: [CYAN, CYAN_LT, VIOLET_LT], blendMode: 'ADD',
+    scale: { start: 1, end: 0.5 }, alpha: { start: 0.8, end: 0 }, tint: [CYAN, CYAN_LT, VIOLET_LT], blendMode: 'ADD',
   });
   rise.setDepth(DEPTH.PLAYER + 1);
   onDispose(scene, c, () => {
@@ -513,27 +523,30 @@ function vfxShieldAura(scene: Phaser.Scene, o: VfxOptions): Phaser.GameObjects.G
 
 function vfxBlinkOut(scene: Phaser.Scene, o: VfxOptions) {
   const cy = o.y - 32;
-  flash(scene, T.streak, o.x, cy, { tint: VIOLET_LT, from: 1, to: 1, sx: 1.6, sy: 1.1, dur: 260, ease: 'Quad.easeIn' });
-  flash(scene, tex(scene, 'px_flare', T.glow), o.x, cy, { tint: VIOLET, from: 1.4, to: 0.2, sy: 1.5, dur: 240 });
-  flash(scene, tex(scene, 'px_ring', T.ring), o.x, o.y - 2, { tint: CYAN, from: 0.6, to: 2.2, sy: 0.35, dur: 320, alpha: 0.9 });
+  if (!pxFx(scene, 'cm_midnight', o.x, cy, { v: 'arcane', scale: PIXEL_SCALE, add: true, dur: 320, depth: DEPTH.VFX_TOP })) {
+    flash(scene, T.streak, o.x, cy, { tint: VIOLET_LT, from: 1, to: 1, sx: 1.6, sy: 1.1, dur: 260, ease: 'Quad.easeIn' });
+    flash(scene, tex(scene, 'px_flare', T.glow), o.x, cy, { tint: VIOLET, from: 1.4, to: 0.2, sy: 1.5, dur: 240 });
+  }
+  flash(scene, tex(scene, 'px_ring', T.ring), o.x, o.y - 2, { tint: CYAN, from: 1, to: 2, sy: 0.5, dur: 320, alpha: 0.9 });
   // Dissolve: motes drift toward the destination.
   const dx = (o.targetX ?? o.x) - o.x, dy = (o.targetY ?? o.y) - o.y;
   const ang = Phaser.Math.RadToDeg(Math.atan2(dy, dx || o.facing));
-  burst(scene, tex(scene, 'px_dot', T.dot), o.x, cy, 22, {
+  burst(scene, tex(scene, 'px_dot', T.dot), o.x, cy, 14, {
     x: { min: -12, max: 12 }, y: { min: -28, max: 28 },
     speed: { min: 80, max: 260 }, angle: { min: ang - 25, max: ang + 25 },
-    lifespan: { min: 200, max: 420 }, scale: { start: 1, end: 0 }, alpha: { start: 1, end: 0 }, tint: ARCANE_TINTS,
+    lifespan: { min: 200, max: 420 }, scale: { start: 1, end: 0.5 }, alpha: { start: 1, end: 0 }, tint: ARCANE_TINTS,
   });
 }
 
 function vfxBlinkIn(scene: Phaser.Scene, o: VfxOptions) {
   const cy = o.y - 32;
-  flash(scene, tex(scene, 'px_ring', T.ring), o.x, cy, { tint: VIOLET_LT, from: 2.2, to: 0.3, dur: 220, ease: 'Quad.easeIn' });
-  flash(scene, T.streak, o.x, cy, { tint: CYAN_LT, from: 1.2, to: 0.2, sx: 2.4, sy: 1, dur: 280 });
-  flash(scene, tex(scene, 'px_flare', T.glow), o.x, cy, { tint: VIOLET, from: 0.4, to: 2, dur: 300, alpha: 0.85 });
-  burst(scene, tex(scene, 'px_star', T.star), o.x, cy, 10, {
+  if (!pxFx(scene, 'sf_ring', o.x, cy, { v: 'arcane', scale: 4, add: true, dur: 300, depth: DEPTH.VFX_TOP })) {
+    flash(scene, tex(scene, 'px_ring', T.ring), o.x, cy, { tint: VIOLET_LT, from: 2.2, to: 0.3, dur: 220, ease: 'Quad.easeIn' });
+    flash(scene, tex(scene, 'px_flare', T.glow), o.x, cy, { tint: VIOLET, from: 0.4, to: 2, dur: 300, alpha: 0.85 });
+  }
+  burst(scene, tex(scene, 'px_star', T.star), o.x, cy, 8, {
     x: { min: -20, max: 20 }, y: { min: -30, max: 30 }, speed: { min: 10, max: 60 }, angle: { min: 0, max: 360 },
-    lifespan: { min: 300, max: 600 }, scale: { start: 0.7, end: 0 }, alpha: { start: 1, end: 0 }, tint: [VIOLET_LT, CYAN_LT, WHITE],
+    lifespan: { min: 300, max: 600 }, scale: { start: 1, end: 0.5 }, alpha: { start: 1, end: 0 }, tint: [VIOLET_LT, CYAN_LT, WHITE],
   });
 }
 
@@ -557,22 +570,25 @@ function vfxNova(scene: Phaser.Scene, o: VfxOptions) {
   const w = o.w ?? 240, h = o.h ?? 150;
   const r = w / 2;
   const delay = 120;
-  // Ground rune spreading under the caster.
-  flash(scene, T.rune, o.x, o.y + h * 0.2, { tint: VIOLET, from: 0.3, to: (w / 160) * 1.05, sy: 0.3, dur: 620, spin: 1.2, alpha: 0.95, delay: delay - 40 });
-  // Shockwave rings.
-  flash(scene, tex(scene, 'px_ring', T.ring), o.x, o.y, { tint: CYAN, from: 0.3, to: r / 26, sy: h / w, dur: 380, delay });
-  flash(scene, tex(scene, 'px_ring', T.ring), o.x, o.y, { tint: VIOLET_LT, from: 0.2, to: (r / 26) * 0.8, sy: h / w, dur: 460, delay: delay + 60, alpha: 0.8 });
-  flash(scene, tex(scene, 'px_flare', T.glow), o.x, o.y, { tint: VIOLET, from: 0.6, to: r / 18, sy: h / w, dur: 360, delay, alpha: 0.6 });
-  flash(scene, tex(scene, 'px_star', T.star), o.x, o.y, { tint: WHITE, from: 0.5, to: 4, dur: 260, delay, spin: 0.8 });
+  // Ground rune spreading under the caster (pixelized rune, integer steps).
+  flash(scene, T.rune, o.x, o.y + h * 0.2, { tint: VIOLET, from: 0.5, to: Math.max(1, Math.round((w / 160) * 2)) / 2, sy: 0.5, dur: 620, alpha: 0.95, delay: delay - 40, ease: 'Stepped' });
+  // Pixel arcane burst + ring (CodeManu nebula / weapon-hit ring, arcane palette).
+  const neb = pxFx(scene, 'cm_nebula', o.x, o.y, { v: 'arcane', scale: PIXEL_SCALE, add: true, delay, dur: 520, depth: DEPTH.VFX_TOP });
+  if (neb) {
+    pxFx(scene, 'cm_ring', o.x, o.y, { v: 'arcane', scale: w >= 200 ? 6 : 4, add: true, delay: delay + 40, depth: DEPTH.VFX_TOP });
+  } else {
+    flash(scene, tex(scene, 'px_ring', T.ring), o.x, o.y, { tint: CYAN, from: 0.3, to: r / 26, sy: h / w, dur: 380, delay });
+    flash(scene, tex(scene, 'px_flare', T.glow), o.x, o.y, { tint: VIOLET, from: 0.6, to: r / 18, sy: h / w, dur: 360, delay, alpha: 0.6 });
+  }
   scene.time.delayedCall(delay, () => {
-    burst(scene, tex(scene, 'px_star', T.star), o.x, o.y, 20, {
+    burst(scene, tex(scene, 'px_star', T.star), o.x, o.y, 12, {
       speed: { min: r * 1.2, max: r * 2.4 }, angle: { min: 0, max: 360 },
-      lifespan: { min: 300, max: 520 }, scale: { start: 0.8, end: 0 }, alpha: { start: 1, end: 0 },
-      rotate: { min: 0, max: 360 }, tint: ARCANE_TINTS,
+      lifespan: { min: 300, max: 520 }, scale: { start: 1, end: 0.5 }, alpha: { start: 1, end: 0 },
+      tint: ARCANE_TINTS,
     });
-    burst(scene, tex(scene, 'px_dot', T.dot), o.x, o.y, 26, {
+    burst(scene, tex(scene, 'px_dot', T.dot), o.x, o.y, 14, {
       speed: { min: r * 0.6, max: r * 1.8 }, angle: { min: 0, max: 360 },
-      lifespan: { min: 300, max: 700 }, scale: { start: 1, end: 0 }, alpha: { start: 1, end: 0 }, tint: [VIOLET, CYAN, CYAN_LT],
+      lifespan: { min: 300, max: 700 }, scale: { start: 1, end: 0.5 }, alpha: { start: 1, end: 0 }, tint: [VIOLET, CYAN, CYAN_LT],
     });
     try { scene.cameras.main.shake(90, 0.0025); } catch { /* ignore */ }
   });
@@ -580,11 +596,12 @@ function vfxNova(scene: Phaser.Scene, o: VfxOptions) {
 
 function vfxNovaHit(scene: Phaser.Scene, o: VfxOptions) {
   const s = Math.max(0.7, Math.min(1.5, (o.h ?? 40) / 45));
-  flash(scene, tex(scene, 'px_flare', T.glow), o.x, o.y, { tint: CYAN, from: 0.3 * s, to: 1.4 * s, dur: 220 });
-  flash(scene, tex(scene, 'px_star', T.star), o.x, o.y, { tint: VIOLET_LT, from: 1.4 * s, to: 0.3, dur: 220, spin: -1.4 });
-  burst(scene, tex(scene, 'px_dot', T.dot), o.x, o.y, 6, {
+  if (!pxFx(scene, 'spark', o.x, o.y, { scale: s >= 1.3 ? 4 : PIXEL_SCALE, tint: VIOLET_LT, add: true, depth: DEPTH.VFX_TOP })) {
+    flash(scene, tex(scene, 'px_flare', T.glow), o.x, o.y, { tint: CYAN, from: 0.3 * s, to: 1.4 * s, dur: 220 });
+  }
+  burst(scene, tex(scene, 'px_dot', T.dot), o.x, o.y, 5, {
     speed: { min: 40, max: 140 }, angle: { min: 0, max: 360 }, lifespan: 320,
-    scale: { start: 0.8, end: 0 }, alpha: { start: 1, end: 0 }, tint: [CYAN_LT, VIOLET_LT],
+    scale: { start: 1, end: 0.5 }, alpha: { start: 1, end: 0 }, tint: [CYAN_LT, VIOLET_LT],
   });
 }
 

@@ -1,5 +1,6 @@
 // OWNER: A5 (lightning-tree). Procedural textures (all prefixed `ltn_`), drawn white/neutral so they tint.
 import Phaser from 'phaser';
+import { pixelizeTexture } from '../../art/particles';
 
 function canvasTex(scene: Phaser.Scene, key: string, w: number, h: number, draw: (ctx: CanvasRenderingContext2D) => void): void {
   if (scene.textures.exists(key)) return;
@@ -7,7 +8,8 @@ function canvasTex(scene: Phaser.Scene, key: string, w: number, h: number, draw:
     const t = scene.textures.createCanvas(key, w, h);
     if (!t) return;
     draw(t.getContext());
-    t.refresh();
+    // 16-bit pivot: chunky stepped pixels (clouds keep a posterised palette).
+    pixelizeTexture(t, key === 'ltn_ring' ? 2 : key === 'ltn_cloud' ? 4 : undefined, key === 'ltn_cloud' ? { posterize: 5 } : {});
   } catch {
     /* degrade gracefully: effects fall back to the engine's missing texture */
   }
@@ -120,4 +122,36 @@ export function generateTextures(scene: Phaser.Scene): void {
     ctx.fillRect(0, 40, 160, 40);
     ctx.globalCompositeOperation = 'source-over';
   });
+
+  // Pixel-art storm totem stone (22×28 grid of 2px pixels → 44×56), base at the bottom edge.
+  if (!scene.textures.exists('ltn_totem_px')) {
+    try {
+      const t = scene.textures.createCanvas('ltn_totem_px', 44, 56);
+      if (t) {
+        const ctx = t.getContext();
+        const px = (x: number, y: number, c: string): void => { ctx.fillStyle = c; ctx.fillRect(x * 2, y * 2, 2, 2); };
+        const GW = 22, GH = 28;
+        for (let y = 0; y < GH; y++) {
+          const cap = y < 2, base = y >= GH - 2;
+          const w = base ? 22 : cap ? 18 : 14 + Math.floor((y * 4) / GH);
+          const x0 = Math.floor((GW - w) / 2), x1 = x0 + w - 1;
+          for (let x = x0; x <= x1; x++) {
+            const edge = x === x0 || x === x1 || y === 0 || y === GH - 1 || y === 2 && !cap;
+            const rel = (x - x0) / Math.max(1, w - 1);
+            const col = edge ? '#120e2c' : cap || base ? '#2e2a58' : rel < 0.3 ? '#4a4486' : rel > 0.75 ? '#1d1a3c' : '#2c2854';
+            px(x, y, col);
+          }
+        }
+        // carved zig-zag rune glowing yellow with a white core
+        const zig = [0, -2, -2, 2, 2, -2, -2, 0];
+        for (let i = 0; i < 20; i++) {
+          const y = 23 - i;
+          const xo = zig[Math.floor(i / 2.6) % zig.length];
+          px(11 + xo, y, '#ffe94d');
+          px(10 + xo, y, i % 3 ? '#fff6c0' : '#ffe94d');
+        }
+        t.refresh();
+      }
+    } catch { /* fall back to the graphics totem */ }
+  }
 }

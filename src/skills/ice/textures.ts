@@ -1,5 +1,6 @@
 /** Procedural ice textures (all prefixed `ice_`). Drawn near-white/cyan so they also tint well. */
 import Phaser from 'phaser';
+import { pixelizeTexture } from '../../art/particles';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -10,7 +11,8 @@ function make(scene: Phaser.Scene, key: string, w: number, h: number, draw: (ctx
   const ctx = tex.getContext();
   ctx.clearRect(0, 0, w, h);
   draw(ctx, w, h);
-  tex.refresh();
+  // 16-bit pivot: chunky stepped pixels with a posterised (stepped) palette.
+  pixelizeTexture(tex, key === 'ice_rune' ? 4 : undefined, { posterize: 6 });
 }
 
 function radial(ctx: Ctx, cx: number, cy: number, r: number, stops: [number, string][]): void {

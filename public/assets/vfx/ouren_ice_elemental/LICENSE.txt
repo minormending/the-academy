@@ -1,0 +1,1 @@
+Ice Elemental by Ouren — https://opengameart.org/content/ice-elemental — License: CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/). Attribution: "Ice Elemental" by Ouren. Modified: idle crystal frames re-packed; palette-swapped at runtime.

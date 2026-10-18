@@ -1,0 +1,1 @@
+Komodo by teasloth — https://opengameart.org/content/komodo — License: CC0. Re-packed into a horizontal strip; palette-swapped to fire at runtime.

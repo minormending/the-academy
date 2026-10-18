@@ -38,13 +38,29 @@ export function jagged(x1: number, y1: number, x2: number, y2: number, jitter: n
   return pts;
 }
 
-function strokePts(g: Phaser.GameObjects.Graphics, pts: Pt[], width: number, color: number, alpha: number): void {
+/**
+ * 16-bit pivot: bolts are rasterised as axis-aligned pixel runs on a `cell` grid (2px for the core/band,
+ * 4px for the glow) instead of smooth anti-aliased strokes, so they stay jagged and chunky.
+ */
+function pixelSeg(g: Phaser.GameObjects.Graphics, a: Pt, b: Pt, cell: number, th: number): void {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const snap = (v: number): number => Math.floor(v / cell) * cell;
+  const half = snap(th / 2);
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    const n = Math.max(1, Math.ceil(Math.abs(dx) / cell));
+    const sx = Math.sign(dx) || 1;
+    for (let k = 0; k < n; k++) g.fillRect(snap(a.x + sx * k * cell), snap(a.y + (dy * k) / n) - half, cell, th);
+  } else {
+    const n = Math.max(1, Math.ceil(Math.abs(dy) / cell));
+    const sy = Math.sign(dy) || 1;
+    for (let k = 0; k < n; k++) g.fillRect(snap(a.x + (dx * k) / n) - half, snap(a.y + sy * k * cell), th, cell);
+  }
+}
+
+function strokePts(g: Phaser.GameObjects.Graphics, pts: Pt[], th: number, color: number, alpha: number, cell = 2): void {
   if (pts.length < 2) return;
-  g.lineStyle(Math.max(0.6, width), color, alpha);
-  g.beginPath();
-  g.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
-  g.strokePath();
+  g.fillStyle(color, alpha);
+  for (let i = 1; i < pts.length; i++) pixelSeg(g, pts[i - 1], pts[i], cell, th);
 }
 
 export interface BoltStyle {
@@ -59,10 +75,12 @@ export interface BoltStyle {
 
 /** Draw a layered bolt (wide soft glow → colored band → white core) along the given points. */
 export function drawBolt(g: Phaser.GameObjects.Graphics, pts: Pt[], w = 1, glow = C.violet, mid = C.yellow): void {
-  strokePts(g, pts, 12 * w, glow, 0.14);
-  strokePts(g, pts, 6.5 * w, glow, 0.32);
-  strokePts(g, pts, 3.4 * w, mid, 0.85);
-  strokePts(g, pts, 1.6 * w, C.white, 1);
+  const u = Math.max(1, Math.round(w));
+  const core = 2 * Math.max(1, Math.round(w * 0.9));
+  const bandW = core + 2 * u;
+  strokePts(g, pts, bandW + 4 * u, glow, 0.22, 4);
+  strokePts(g, pts, bandW, mid, 0.9);
+  strokePts(g, pts, core, C.white, 1);
 }
 
 /** Draw one jittered bolt + branching forks on `g` (call repeatedly for flicker). */

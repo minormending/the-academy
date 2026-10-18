@@ -157,9 +157,9 @@ export const FIRE_SKILLS: SkillDef[] = [
     icon: icon('phoenix', 0xffe27a, 0xff4a10), requires: [{ skillId: 'fire_salamander', level: 8 }],
     mpCost: Li(60, 85, 10), cooldownMs: L(80000, 60000, 10), castTimeMs: 700, sfx: 'cast_fire',
     summon: {
-      durationMs: L(30000, 50000, 10), attackIntervalMs: 800, offset: { x: -34, y: -96 }, follow: true, vfx: 'fire_phoenix',
+      durationMs: L(30000, 50000, 10), attackIntervalMs: 1300, offset: { x: -34, y: -96 }, follow: true, vfx: 'fire_phoenix',
       attack: {
-        pattern: 'projectile', damagePct: L(250, 380, 10), hits: K(1), maxTargets: K(4), range: 520,
+        pattern: 'projectile', damagePct: L(200, 300, 10), hits: K(1), maxTargets: K(4), range: 520,
         projectile: { speed: 600, radius: 16, pierce: true },
         status: burn(10, [0.5, 0.7], [4000, 5000], [14, 18]),
         vfx: { cast: 'fire_spit_cast', projectile: 'fire_phoenix_bolt', hit: 'fire_hit' },
@@ -175,7 +175,7 @@ export const FIRE_SKILLS: SkillDef[] = [
       durationMs: L(30000, 45000, 15),
       modifiers: (lv) => [
         { stat: 'castSpeed', add: L(0.12, 0.25, 15)(lv) },
-        { stat: 'dmgAll', add: L(0.08, 0.2, 15)(lv) },
+        { stat: 'dmgAll', add: L(0.05, 0.12, 15)(lv) },
       ],
       vfx: 'fire_ascension_cast', auraVfx: 'fire_ascension_aura',
     },

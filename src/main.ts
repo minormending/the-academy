@@ -14,7 +14,7 @@ const game = new Phaser.Game({
   height: GAME_HEIGHT,
   backgroundColor: '#0b0d16',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  physics: { default: 'arcade', arcade: { gravity: { x: 0, y: GRAVITY }, debug } },
+  physics: { default: 'arcade', arcade: { gravity: { x: 0, y: GRAVITY }, debug, fixedStep: false } },
   pixelArt: true,
   render: { antialias: false, roundPixels: true },
   disableContextMenu: true,

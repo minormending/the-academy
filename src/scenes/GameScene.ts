@@ -19,10 +19,12 @@ import { Progression } from '../systems/Progression';
 import { NpcManager } from '../systems/NpcManager';
 import { getAudio } from '../systems/AudioSystem';
 import { UIRoot } from '../ui/UIRoot';
+import { PetSystem } from '../systems/PetSystem';
 import { loadMap } from '../world/MapLoader';
 
 export class GameScene extends Phaser.Scene implements IGameApi {
   private s!: GameServices;
+  private pet: PetSystem | null = null;
   private map: IMapInstance | null = null;
   private initialState!: PlayerState;
   private inputBlocked = false;
@@ -59,6 +61,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     s.drops = new DropManager(this, s);
     s.npcs = new NpcManager(this, s);
     s.player = new Player(this, s, 200, 200, state.job);
+    this.pet = new PetSystem(this, s);
     this.s = s;
     setServices(s);
     s.ui = new UIRoot(this, s);
@@ -115,6 +118,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     s.monsters.clear();
     s.drops.clear();
     s.npcs.clear();
+    this.pet?.clear();
     this.map?.destroy();
 
     const map = loadMap(this, mapId);
@@ -134,6 +138,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     s.monsters.bindMap(map);
     s.drops.bindMap(map);
     s.npcs.bindMap(map);
+    this.pet?.bindMap(map);
 
     s.audio.playMusic(map.def.music);
     bus.emit('map:changed', { mapId });
@@ -230,6 +235,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     s.skills.update(time, delta);
     s.combat.update(time, delta);
     s.drops.update(time, delta);
+    this.pet?.update(time, delta);
     s.npcs.update(time, delta);
     this.map.update(time, delta);
     this.handleInput(time);
@@ -240,7 +246,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     const s = this.s;
     try { s.progression.save(); } catch { /* ignore */ }
     for (const fn of [() => s.ui.destroy(), () => s.skills.clearWorld(), () => s.monsters.clear(), () => s.drops.clear(),
-      () => s.npcs.clear(), () => s.player.destroy(), () => this.map?.destroy()]) {
+      () => s.npcs.clear(), () => this.pet?.destroy(), () => s.player.destroy(), () => this.map?.destroy()]) {
       try { fn(); } catch (e) { console.warn('[game] teardown step failed', e); }
     }
     this.map = null;
@@ -262,6 +268,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
       job: (job: JobId) => s.progression.advanceJob(job),
       heal: () => s.progression.heal(99999, 99999),
       maps: () => Registry.maps().map(m => m.id),
+      pet: (on?: boolean) => { const p = this.pet; if (!p) return false; p.setEnabled(on ?? !p.isEnabled()); return p.isEnabled(); },
       depth: DEPTH,
     };
     (window as unknown as { arcana: typeof api }).arcana = api;

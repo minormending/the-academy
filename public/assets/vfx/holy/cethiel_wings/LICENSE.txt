@@ -1,0 +1,3 @@
+"Angel Wings Effect" by Cethiel — https://opengameart.org/content/angel-wings-effect
+License: CC0 1.0 (public domain dedication) — https://creativecommons.org/publicdomain/zero/1.0/
+Modified for Arcana Story: white set "0", 5 frames, downsampled to half size with stepped alpha and packed into one strip.

@@ -1,0 +1,8 @@
+"Angels" — https://opengameart.org/content/angels
+License: CC-BY 3.0 or later / OGA-BY 3.0 or later (also listed CC-BY 4.0).
+Attribution notice (from the page): Created by Svetlana Kushnariova (Cabbit) <lana-chan@yandex.ru>, liftarn,
+johnny_automatic, freedo, & Jordan Irwin (AntumDeluge).
+Sources credited by the author: Cabbit 24x32 bases (https://opengameart.org/node/24944), Cabbit 24x32 characters
+(https://opengameart.org/node/72969), liftarn "Angel wings" (https://openclipart.org/detail/232340),
+freedo "Halo" (https://openclipart.org/detail/20950).
+Modified for Arcana Story: cropped the side-facing (east) row of angel-f-001_0.png (48x64 frames) into a 3-frame strip.

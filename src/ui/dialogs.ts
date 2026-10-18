@@ -15,13 +15,14 @@ export class DialogWindow extends UIWindow {
   private spec: DialogSpec | null = null;
   /** Incremented every time a new spec is shown — lets option handlers detect a chained dialog. */
   gen = 0;
-  private textEl: HTMLElement = h('div', { class: 'ax-dlg-text' });
+  /** Typed-so-far text; sits over an invisible copy of the full text so the box never resizes while typing. */
+  private textEl: HTMLElement = h('span', { class: 'ax-dlg-typed' });
   private full = '';
   private shown = 0;
   private busy = false;
 
   constructor(ctx: UICtx) {
-    super(ctx, 'dialog', 'Dialog', { width: 600, x: 340, y: 380, className: 'ax-dialog-win' });
+    super(ctx, 'dialog', 'Dialog', { width: 600, x: 340, y: 340, className: 'ax-dialog-win' });
   }
 
   show(spec: DialogSpec) {
@@ -43,9 +44,10 @@ export class DialogWindow extends UIWindow {
     if (!spec) return;
     const npc = Registry.npc(spec.npcId);
     this.setTitle(spec.npcName || npc?.name || 'Dialog');
-    this.textEl = h('div', { class: 'ax-dlg-text', title: 'Click to skip' });
+    this.textEl = h('span', { class: 'ax-dlg-typed' });
     this.textEl.textContent = this.full.slice(0, Math.floor(this.shown));
-    this.textEl.addEventListener('click', () => this.skip());
+    const box = h('div', { class: 'ax-dlg-text', title: 'Click to skip' }, h('span', { class: 'ax-dlg-ghost', 'aria-hidden': 'true' }, this.full), this.textEl);
+    box.addEventListener('click', () => this.skip());
     const opts = spec.options?.length ? spec.options : [{ label: 'OK' }];
     const buttons = opts.map((o, i) => h('button', {
       class: `ax-dlg-opt${opts.length === 1 ? ' ax-single' : ''}`,
@@ -56,7 +58,7 @@ export class DialogWindow extends UIWindow {
         h('div', { class: 'ax-dlg-left' }, portraitEl(npc?.look, 110, spec.npcName),
           h('div', { class: 'ax-dlg-name' }, spec.npcName || npc?.name || ''),
           npc?.title ? h('div', { class: 'ax-dlg-title' }, npc.title) : null),
-        h('div', { class: 'ax-dlg-right' }, this.textEl, h('div', { class: 'ax-dlg-opts' }, buttons))));
+        h('div', { class: 'ax-dlg-right' }, box, h('div', { class: 'ax-dlg-opts' }, buttons))));
   }
 
   /** Run option i: invoke action, then close unless closes===false or a new dialog arrived meanwhile. */
@@ -109,6 +111,8 @@ export class ShopWindow extends UIWindow {
   private spec: ShopSpec | null = null;
   private tab: ShopTab = 'buy';
   private qty = new Map<string, number>();
+  /** Sell row awaiting a confirming second click (equipment / valuable stacks). */
+  private confirmSell: string | null = null;
 
   constructor(ctx: UICtx) {
     super(ctx, 'shop', 'Shop', { width: 420, x: 430, y: 90, className: 'ax-shop-win' });
@@ -118,6 +122,7 @@ export class ShopWindow extends UIWindow {
     this.spec = spec;
     this.tab = 'buy';
     this.qty.clear();
+    this.confirmSell = null;
     this.setTitle(`${spec.npcName}'s Shop`);
     this.invalidate();
     if (!this.isOpen) this.open(); else this.bringToFront();
@@ -125,7 +130,7 @@ export class ShopWindow extends UIWindow {
 
   protected signature(): string {
     const st = this.ctx.s.progression.state;
-    return JSON.stringify([this.tab, st.mesos, st.inventory, [...this.qty]]);
+    return JSON.stringify([this.tab, st.mesos, st.inventory, [...this.qty], this.confirmSell]);
   }
 
   private stepper(key: string, max: number, onChange: () => void): HTMLElement {
@@ -171,7 +176,7 @@ export class ShopWindow extends UIWindow {
       if (!stacks.length) list.appendChild(h('div', { class: 'ax-empty-note' }, 'You have nothing to sell.'));
     }
     this.body.replaceChildren(
-      tabStrip<ShopTab>([{ id: 'buy', label: 'Buy' }, { id: 'sell', label: 'Sell' }], this.tab, (t) => { this.tab = t; this.invalidate(); this.ctx.sfx('ui_click'); }),
+      tabStrip<ShopTab>([{ id: 'buy', label: 'Buy' }, { id: 'sell', label: 'Sell' }], this.tab, (t) => { this.tab = t; this.confirmSell = null; this.invalidate(); this.ctx.sfx('ui_click'); }),
       list,
       h('div', { class: 'ax-win-footer' },
         h('div', { class: 'ax-mesos' }, h('span', { class: 'ax-coin' }), h('b', null, fmtNum(st.mesos)), h('span', { class: 'ax-dim' }, ' mesos')),
@@ -181,6 +186,9 @@ export class ShopWindow extends UIWindow {
   private sellRow(s: ItemStack, def: ItemDef, level: number, branch: Branch, rerender: () => void) {
     const key = `s:${s.uid}`;
     const q = Math.max(1, Math.min(s.qty, this.qty.get(key) ?? 1));
+    // Equipment and valuable stacks need a second click, so a stray click can't sell your staff.
+    const needsConfirm = def.type === 'equip' || def.sellPrice * q >= 1000;
+    const confirming = needsConfirm && this.confirmSell === key;
     const row = h('div', { class: 'ax-shop-row' },
       iconEl(def.icon, 32, def.name),
       h('div', { class: 'ax-shop-main' },
@@ -188,12 +196,15 @@ export class ShopWindow extends UIWindow {
         h('div', { class: 'ax-shop-price ax-good' }, h('span', { class: 'ax-coin ax-coin-sm' }), fmtNum(def.sellPrice * q))),
       s.qty > 1 ? this.stepper(key, s.qty, rerender) : h('div', { class: 'ax-stepper' }),
       h('button', {
-        class: 'ax-btn ax-btn-small ax-btn-secondary', onclick: () => {
+        class: `ax-btn ax-btn-small ${confirming ? 'ax-btn-danger' : 'ax-btn-secondary'} ax-sell-btn`, title: confirming ? 'Click again to sell' : '',
+        onclick: () => {
+          if (needsConfirm && !confirming) { this.confirmSell = key; this.ctx.sfx('ui_click'); this.invalidate(); return; }
+          this.confirmSell = null;
           if (safe(() => this.ctx.s.progression.sell(s.uid, q), false)) { this.ctx.sfx('mesos'); this.qty.delete(key); }
           else this.ctx.sfx('ui_error');
           this.invalidate();
         },
-      }, 'Sell'));
+      }, confirming ? 'Sure?' : 'Sell'));
     this.ctx.tooltip.attach(row.firstChild as HTMLElement, () => itemTooltip(def, { qty: s.qty, level, branch }, s.itemId));
     return row;
   }
@@ -204,8 +215,7 @@ export class ShopWindow extends UIWindow {
     if (safe(() => p.buy(itemId, price, qty), false)) {
       this.ctx.sfx('mesos');
     } else {
-      this.ctx.sfx('ui_error');
-      this.ctx.log('Your inventory is full.', '#ff9b9b');
+      this.ctx.sfx('ui_error'); // Progression logs the reason
     }
     this.invalidate();
   }

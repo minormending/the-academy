@@ -40,12 +40,14 @@ export class TitleMenu {
     this.root = uiRootEl();
     this.scaler = new UIScaler(this.root, scene.game);
     this.panel = h('div', { class: 'ax-title-panel' });
+    // Logo and menu panel share one flow column so they can never overlap (whatever font loads).
     this.el = h('div', { class: 'ax-title' },
-      h('div', { class: 'ax-logo' },
-        h('div', { class: 'ax-logo-orn' }),
-        h('div', { class: 'ax-logo-text' }, 'Arcana', h('span', null, ' Story')),
-        h('div', { class: 'ax-logo-sub' }, 'Every hero is a mage')),
-      this.panel,
+      h('div', { class: 'ax-title-col' },
+        h('div', { class: 'ax-logo' },
+          h('div', { class: 'ax-logo-orn' }),
+          h('div', { class: 'ax-logo-text' }, 'Arcana', h('span', null, ' Story')),
+          h('div', { class: 'ax-logo-sub' }, 'Every hero is a mage')),
+        this.panel),
       h('div', { class: 'ax-title-foot' }, 'Arrows move · Space jumps · Q W E R T cast · H for help'));
     this.el.addEventListener('mousedown', (e) => { if ((e.target as Element | null)?.closest?.('button')) e.preventDefault(); });
     this.root.appendChild(this.el);

@@ -15,7 +15,7 @@ export class InventoryWindow extends UIWindow {
   private tab: Tab = 'consumable';
 
   constructor(ctx: UICtx) {
-    super(ctx, 'inventory', 'Inventory', { width: 304, x: 940, y: 150, className: 'ax-inv-win' });
+    super(ctx, 'inventory', 'Inventory', { width: 304, x: 952, y: 120, className: 'ax-inv-win' });
   }
 
   protected signature(): string {
@@ -67,8 +67,7 @@ export class InventoryWindow extends UIWindow {
       let ok = false;
       if (def.type === 'consumable') ok = safe(() => p.useItem(def.id), false);
       else if (def.type === 'equip') {
-        ok = safe(() => p.equip(s.uid), false);
-        if (!ok) this.ctx.log(unusable ? `You can't equip ${def.name} yet.` : `Couldn't equip ${def.name}.`, '#ff9b9b');
+        ok = safe(() => p.equip(s.uid), false); // Progression logs why it failed (level / branch / full)
       }
       this.ctx.sfx(ok ? 'ui_click' : 'ui_error');
       this.markDirty();

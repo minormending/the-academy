@@ -26,12 +26,16 @@ export class ChatLog {
   /** Plain message. Identical consecutive messages collapse into "(×n)". */
   push(text: string, color?: string) {
     const t = this.stamp();
-    const last = this.lines[this.lines.length - 1];
-    if (last && !last.key && last.text === text && t - last.born < COALESCE_MS * 2) {
-      last.repeat++;
-      last.born = t;
-      last.el.textContent = `${text} (×${last.repeat})`;
-      last.el.classList.remove('ax-faded');
+    // Identical recent messages (even with other lines in between) collapse into one "(×n)" line at the bottom.
+    for (let i = this.lines.length - 1; i >= Math.max(0, this.lines.length - 6); i--) {
+      const l = this.lines[i];
+      if (l.key || l.text !== text || t - l.born > COALESCE_MS * 2) continue;
+      l.repeat++;
+      l.born = t;
+      l.el.textContent = `${text} (×${l.repeat})`;
+      l.el.classList.remove('ax-faded');
+      if (i !== this.lines.length - 1) { this.lines.splice(i, 1); this.lines.push(l); this.list.appendChild(l.el); }
+      this.list.scrollTop = this.list.scrollHeight;
       return;
     }
     this.add({ text, key: null, total: 0, repeat: 1, born: t }, color);
@@ -40,7 +44,7 @@ export class ChatLog {
   /** Accumulating message (EXP / mesos / item gains): sums amounts arriving close together. */
   gain(key: string, amount: number, fmt: (total: number) => string, color?: string) {
     const t = this.stamp();
-    for (let i = this.lines.length - 1; i >= Math.max(0, this.lines.length - 4); i--) {
+    for (let i = this.lines.length - 1; i >= Math.max(0, this.lines.length - 8); i--) {
       const l = this.lines[i];
       if (l.key === key && t - l.born < COALESCE_MS) {
         l.total += amount;

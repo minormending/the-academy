@@ -123,7 +123,7 @@ export function skillTooltip(def: SkillDef, o: SkillTipOpts): HTMLElement {
   }
   if (o.locked) el.appendChild(h('div', { class: 'ax-tt-req' }, o.locked));
   else if (lv > 0 && def.kind !== 'passive' && !o.hotbar) el.appendChild(h('div', { class: 'ax-tt-foot' }, 'Drag to the hotbar to use.'));
-  else if (o.hotbar) el.appendChild(h('div', { class: 'ax-tt-foot' }, 'Right-click to clear this slot.'));
+  else if (o.hotbar) el.appendChild(h('div', { class: 'ax-tt-foot' }, 'Right-click or drag off the bar to clear.'));
   return el;
 }
 

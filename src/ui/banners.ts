@@ -12,6 +12,9 @@ export class Banners {
   private bigUntil = 0;
   private bigTimer = 0;
   private timers: number[] = [];
+  private current: BigSpec | null = null;
+  private textEl: HTMLElement | null = null;
+  private pendingArea: [string, string | undefined, string | undefined] | null = null;
 
   constructor(private ctx: UICtx) {
     this.area = h('div', { class: 'ax-area-banner ax-passive' });
@@ -22,6 +25,8 @@ export class Banners {
 
   /** Map name / generic banner from `ui:banner`. */
   showArea(text: string, sub?: string, color?: string) {
+    // While a big banner is up, hold the area banner until it finishes (they would overlap).
+    if (this.bigUntil) { this.pendingArea = [text, sub, color]; return; }
     clear(this.area);
     append(this.area, [
       h('div', { class: 'ax-area-orn' }),
@@ -43,9 +48,21 @@ export class Banners {
   }
 
   private enqueue(b: BigSpec) {
-    // Collapse multiple level-ups (e.g. debug levelTo) into the latest one.
+    // Collapse multiple level-ups (e.g. several levels from one quest/debug levelTo) into the latest one:
+    // update the banner that is showing in place, or the one waiting in the queue.
     if (b.kind === 'level') {
+      if (this.current?.kind === 'level' && this.textEl && this.big.classList.contains('ax-show')) {
+        this.current = b;
+        this.textEl.textContent = b.text;
+        this.textEl.classList.remove('ax-bump'); void this.textEl.offsetWidth; this.textEl.classList.add('ax-bump');
+        this.armHide(b.durMs);
+        return;
+      }
       const i = this.queue.findIndex(q => q.kind === 'level');
+      if (i >= 0) { this.queue[i] = b; return; }
+    } else if (b.kind === 'job') {
+      // Several advancements at once (debug / skipped tiers): only announce the newest job.
+      const i = this.queue.findIndex(q => q.kind === 'job');
       if (i >= 0) { this.queue[i] = b; return; }
     }
     this.queue.push(b);
@@ -54,23 +71,38 @@ export class Banners {
 
   private next() {
     const b = this.queue.shift();
-    if (!b) { this.bigUntil = 0; return; }
+    this.current = b ?? null;
+    if (!b) {
+      this.bigUntil = 0; this.textEl = null;
+      const pa = this.pendingArea;
+      this.pendingArea = null;
+      if (pa) this.showArea(pa[0], pa[1], pa[2]);
+      return;
+    }
     this.bigUntil = 1;
+    // Never stack the map-name banner on top of a big banner.
+    window.clearTimeout(this.areaTimer);
+    this.area.classList.remove('ax-show');
     this.big.className = `ax-big-banner ax-passive ax-${b.kind}`;
     this.big.style.setProperty('--accent', b.color ?? '#ffd76a');
     clear(this.big);
+    this.textEl = h('div', { class: 'ax-big-text' }, b.text);
     append(this.big, [
       h('div', { class: 'ax-big-rays' }),
       h('div', { class: 'ax-big-title' }, b.title),
-      h('div', { class: 'ax-big-text' }, b.text),
+      this.textEl,
       b.sub ? h('div', { class: 'ax-big-sub' }, b.sub) : null]);
     void this.big.offsetWidth;
     this.big.classList.add('ax-show');
+    this.armHide(b.durMs);
+  }
+
+  private armHide(ms: number) {
     window.clearTimeout(this.bigTimer);
     this.bigTimer = window.setTimeout(() => {
       this.big.classList.remove('ax-show');
       this.timers.push(window.setTimeout(() => this.next(), 450));
-    }, b.durMs);
+    }, ms);
   }
 
   destroy() {

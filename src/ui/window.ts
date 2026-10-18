@@ -14,6 +14,8 @@ export interface WindowOpts {
 }
 
 let sigCounter = 0;
+/** Top edge of the bottom status bar (logical px) — windows are fitted above it. */
+const HUD_TOP = GAME_HEIGHT - 66;
 
 export abstract class UIWindow {
   readonly el: HTMLDivElement;
@@ -57,7 +59,7 @@ export abstract class UIWindow {
     this.lastSig = '';
     this.bringToFront();
     this.tick(0, 0);
-    this.clampIntoView();
+    this.clampIntoView('all');
     this.ctx.sfx('ui_open');
     this.onOpen();
   }
@@ -90,6 +92,8 @@ export abstract class UIWindow {
       if (sig !== this.lastSig) {
         this.lastSig = sig;
         try { this.render(); } catch (e) { console.warn(`[ui] ${this.id} render failed`, e); }
+        // Content height can change (tabs, dialog options): keep the whole window above the HUD.
+        if (!this.dragOff) this.clampIntoView('v');
       }
     }
     try { this.frame(time, delta); } catch { /* never throw in update */ }
@@ -107,11 +111,18 @@ export abstract class UIWindow {
     this.el.style.top = `${Math.round(y)}px`;
   }
 
-  protected clampIntoView() {
+  /**
+   * Keep the window reachable. While dragging only the title bar must stay on screen; with `fit`
+   * the window is pushed fully on-screen ('all', on open) or just above the status bar ('v', on re-render).
+   */
+  protected clampIntoView(fit: 'none' | 'v' | 'all' = 'none') {
     const w = this.el.offsetWidth || this.opts.width;
+    const ht = this.el.offsetHeight || 0;
     const x = parseFloat(this.el.style.left) || 0, y = parseFloat(this.el.style.top) || 0;
-    const nx = Math.max(-w + 80, Math.min(GAME_WIDTH - 80, x));
-    const ny = Math.max(0, Math.min(GAME_HEIGHT - 40, y));
+    let nx = Math.max(-w + 80, Math.min(GAME_WIDTH - 80, x));
+    let ny = Math.max(0, Math.min(GAME_HEIGHT - 40, y));
+    if (fit === 'all') nx = Math.max(0, Math.min(GAME_WIDTH - w, nx));
+    if (fit !== 'none') ny = Math.max(0, Math.min(HUD_TOP - 6 - ht, ny));
     if (nx !== x || ny !== y) this.setPos(nx, ny);
   }
 
@@ -136,6 +147,7 @@ export abstract class UIWindow {
     this.dragOff = null;
     try { this.titleBar.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
     this.el.classList.remove('ax-moving');
+    this.clampIntoView('v'); // settle above the status bar (re-renders would snap it there anyway)
     if (this.opts.persist !== false) this.ctx.layout.setPos(this.id, parseFloat(this.el.style.left) || 0, parseFloat(this.el.style.top) || 0);
   }
 
@@ -148,5 +160,5 @@ export function tabStrip<T extends string>(tabs: { id: T; label: string; locked?
     class: `ax-tab${t.id === active ? ' ax-active' : ''}${t.locked ? ' ax-locked' : ''}`,
     title: t.title ?? '',
     onclick: () => { if (t.id !== active) onPick(t.id); },
-  }, t.locked ? h('span', { class: 'ax-lock' }) : null, t.label)));
+  }, t.locked ? h('span', { class: 'ax-lock' }) : null, h('span', { class: 'ax-tab-label' }, t.label))));
 }

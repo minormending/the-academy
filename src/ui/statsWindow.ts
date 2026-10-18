@@ -23,7 +23,7 @@ export class StatsWindow extends UIWindow {
   private expSpan = h('span', { class: 'ax-dim' });
   private lastExp = '';
   constructor(ctx: UICtx) {
-    super(ctx, 'stats', 'Character', { width: 452, x: 330, y: 80, className: 'ax-stats-win' });
+    super(ctx, 'stats', 'Character', { width: 452, x: 420, y: 76, className: 'ax-stats-win' });
   }
 
   protected signature(): string {
@@ -82,8 +82,7 @@ export class StatsWindow extends UIWindow {
         stack ? iconEl(def?.icon, 34, def?.name ?? stack.itemId) : h('span', { class: 'ax-slot-label' }, SLOT_LABELS[slot]));
       if (stack) {
         cell.addEventListener('dblclick', () => {
-          const ok = safe(() => p.unequip(slot), false);
-          if (!ok) this.ctx.log('Your inventory is full.', '#ff9b9b');
+          const ok = safe(() => p.unequip(slot), false); // Progression logs "inventory is full"
           this.ctx.sfx(ok ? 'ui_click' : 'ui_error');
           this.markDirty();
         });

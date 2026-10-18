@@ -126,14 +126,14 @@ export class UIRoot implements IUI {
     this.on('player:changed', dirtyAll);
     this.on('player:damaged', () => this.status.onDamaged());
     this.on('player:levelup', ({ level }) => {
+      // Progression already logs "Level up! … (+SP, +AP)"; the UI only adds the banner.
       this.banners.levelUp(level);
-      this.chat.push(`Congratulations! You reached level ${level}.`, '#ffd76a');
       dirtyAll();
     });
     this.on('player:job', ({ job }) => {
       const def = safe(() => Registry.job(job), undefined);
       this.banners.jobAdvance(def?.name ?? jobName(job), def?.description ?? '', BRANCH_COLORS[def?.branch ?? 'none']);
-      this.chat.push(`You are now a ${def?.name ?? jobName(job)}! New skills await (K).`, '#ffd76a');
+      this.chat.push('New skills await in your Skills window (K).', '#b8c2ff');
       if (this.windows.jobs.isOpen) this.windows.jobs.close();
       dirtyAll();
     });
@@ -159,7 +159,11 @@ export class UIRoot implements IUI {
     this.on('ui:closeDialog', () => this.dialog.close());
     this.on('ui:shop', (spec) => { this.shop.show(spec); this.tooltip.hide(); });
     this.on('ui:banner', ({ text, sub, color }) => this.banners.showArea(text, sub, color));
-    this.on('ui:log', ({ text, color }) => this.chat.push(text, color));
+    this.on('ui:log', ({ text, color }) => {
+      // EXP gains are tracked (and coalesced) by trackExp(); drop per-kill "+N EXP" duplicates.
+      if (/^\+[\d,]+ EXP$/.test(String(text).trim())) return;
+      this.chat.push(text, color);
+    });
     this.on('ui:death', () => { this.dialog.close(); this.shop.close(); this.death.show(); });
     this.on('ui:open', ({ window: w }) => this.openWindow(w));
   }
@@ -170,10 +174,9 @@ export class UIRoot implements IUI {
     const prev = this.questStatus.get(questId);
     const now = pr?.status ?? '';
     if (q && now !== prev) {
+      // Progression logs accept / ready / turn-in lines; the UI adds the banner + a pointer to the giver.
       const giver = Registry.npc(q.giver)?.name ?? q.giver;
-      if (now === 'active' && !prev) this.chat.push(`New quest: ${q.name}`, '#c9b8ff');
-      else if (now === 'complete') { this.chat.push(`Quest objectives complete: ${q.name} — return to ${giver}.`, '#9fe8a8'); this.banners.showArea('Quest Complete', q.name, '#9fe8a8'); }
-      else if (now === 'turned_in') this.chat.push(`Quest finished: ${q.name}!`, '#ffd76a');
+      if (now === 'complete') { this.chat.push(`Return to ${giver} for your reward.`, '#9fe8a8'); this.banners.showArea('Quest Complete!', `${q.name} — return to ${giver}`, '#9fe8a8'); }
     }
     this.questStatus.set(questId, now);
     this.windows.quests.markDirty();
@@ -239,7 +242,15 @@ export class UIRoot implements IUI {
 
   private onDrop(p: DragPayload, target: Element | null) {
     const slotEl = target?.closest('[data-hotbar-slot]');
-    if (!slotEl) return;
+    if (!slotEl) {
+      // Maple-style: dragging a hotbar entry out onto the game world removes it from the bar.
+      if (p.fromSlot !== undefined && !target?.closest('.ax-hotbar, .ax-window, .ax-statusbar')) {
+        this.services.progression.setHotbar(p.fromSlot, null);
+        this.ctx.sfx('ui_close');
+        this.markAllDirty();
+      }
+      return;
+    }
     const slot = Number(slotEl.getAttribute('data-hotbar-slot'));
     if (!Number.isInteger(slot)) return;
     const prog = this.services.progression;

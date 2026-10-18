@@ -166,7 +166,7 @@ export class Hotbar {
     const p = this.ctx.s.progression;
     if (entry.startsWith('item:')) {
       const id = entry.slice(5);
-      return itemTooltip(Registry.item(id), { qty: p.countItem(id), level: p.state.level, branch: safe(() => p.jobDef().branch, 'none'), hint: 'Right-click to clear this slot.' }, id);
+      return itemTooltip(Registry.item(id), { qty: p.countItem(id), level: p.state.level, branch: safe(() => p.jobDef().branch, 'none'), hint: 'Right-click or drag off the bar to clear.' }, id);
     }
     const def = Registry.skill(entry);
     if (!def) return h('div', { class: 'ax-tt' }, entry);
@@ -276,14 +276,17 @@ export class BuffTray {
         const time = h('div', { class: 'ax-buff-time' });
         const ring = h('div', { class: 'ax-buff-ring' });
         const root = h('div', { class: 'ax-buff', title: '' }, iconEl(def?.icon, 30, def?.name ?? b.skillId), ring, time);
-        root.addEventListener('click', () => { try { this.ctx.s.skills.cancelBuff(b.skillId); this.ctx.sfx('ui_click'); } catch { /* ignore */ } });
-        root.addEventListener('contextmenu', (e) => { e.preventDefault(); try { this.ctx.s.skills.cancelBuff(b.skillId); } catch { /* ignore */ } });
+        // Maple-style: right-click cancels a buff (left-click does nothing, so it can't happen by accident).
+        root.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          try { this.ctx.s.skills.cancelBuff(b.skillId); this.ctx.sfx('ui_close'); this.ctx.tooltip.hide(); } catch { /* ignore */ }
+        });
         this.ctx.tooltip.attach(root, () => {
           const cur = safe(() => this.ctx.s.skills.getActiveBuffs().find(x => x.skillId === b.skillId), undefined);
           return h('div', { class: 'ax-tt' },
             h('div', { class: 'ax-tt-name' }, def?.name ?? b.skillId),
             h('div', { class: 'ax-tt-sub' }, cur ? `${fmtSec(cur.remainingMs)} remaining` : ''),
-            h('div', { class: 'ax-tt-foot' }, 'Click to cancel.'));
+            h('div', { class: 'ax-tt-foot' }, 'Right-click to cancel.'));
         });
         this.el.appendChild(root);
         this.items.set(b.skillId, { root, time, ring, last: '' });
@@ -321,7 +324,7 @@ export class Vignette {
     const max = Math.max(1, safe(() => p.derived().maxHp, 1));
     const r = p.state.hp / max;
     const dead = safe(() => p.isDead(), false);
-    const o = dead ? 0.85 : r < 0.3 ? 0.25 + ((0.3 - r) / 0.3) * 0.6 : 0;
+    const o = dead ? 0.85 : r < 0.3 ? 0.5 + ((0.3 - r) / 0.3) * 0.5 : 0;
     const q = Math.round(o * 50) / 50;
     if (q !== this.last) {
       this.last = q;

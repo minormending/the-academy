@@ -72,7 +72,7 @@ export class MenuWindow extends UIWindow {
 
 export class HelpWindow extends UIWindow {
   constructor(ctx: UICtx) {
-    super(ctx, 'help', 'How to Play', { width: 460, x: 410, y: 110, className: 'ax-help-win' });
+    super(ctx, 'help', 'How to Play', { width: 520, x: 380, y: 150, className: 'ax-help-win' });
   }
   protected signature() { return 'static'; }
   protected render() {
@@ -151,7 +151,7 @@ export class JobsWindow extends UIWindow {
           : 'You have reached the pinnacle of your path.'));
     }
     this.body.replaceChildren(
-      h('div', { class: 'ax-help-intro' }, cur ? `You are currently a ${cur.name}. Choose your path carefully — advancement is permanent.` : ''),
+      h('div', { class: 'ax-help-intro' }, cur ? `You are currently ${/^[AEIOU]/i.test(cur.name) ? 'an' : 'a'} ${cur.name}. Choose your path carefully — advancement is permanent.` : ''),
       cards);
   }
 }

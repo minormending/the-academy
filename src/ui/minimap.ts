@@ -19,6 +19,7 @@ export class Minimap {
   private hgt = 60;
   private nextDraw = 0;
   private visible: boolean;
+  private toggleBtn!: HTMLButtonElement;
 
   constructor(private ctx: UICtx) {
     this.canvas = h('canvas', { class: 'ax-minimap-canvas' });
@@ -26,17 +27,20 @@ export class Minimap {
     this.nameEl = h('div', { class: 'ax-mm-name' });
     this.subEl = h('div', { class: 'ax-mm-sub' });
     const toggle = h('button', { class: 'ax-mm-toggle', title: 'Toggle minimap (M)', onclick: () => this.toggle() }, '–');
+    this.toggleBtn = toggle;
     this.el = h('div', { class: 'ax-minimap' },
       h('div', { class: 'ax-mm-head' }, h('div', { class: 'ax-mm-titles' }, this.nameEl, this.subEl), toggle),
       h('div', { class: 'ax-mm-body' }, this.canvas));
     this.visible = ctx.layout.getFlag('minimap', true);
     this.el.classList.toggle('ax-collapsed', !this.visible);
+    toggle.textContent = this.visible ? '–' : '+';
     ctx.root.appendChild(this.el);
   }
 
   toggle() {
     this.visible = !this.visible;
     this.el.classList.toggle('ax-collapsed', !this.visible);
+    this.toggleBtn.textContent = this.visible ? '–' : '+';
     this.ctx.layout.setFlag('minimap', this.visible);
     this.ctx.sfx(this.visible ? 'ui_open' : 'ui_close');
     this.nextDraw = 0;

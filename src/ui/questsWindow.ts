@@ -12,7 +12,7 @@ export class QuestsWindow extends UIWindow {
   private expanded = new Set<string>();
 
   constructor(ctx: UICtx) {
-    super(ctx, 'quests', 'Quest Log', { width: 380, x: 860, y: 90, className: 'ax-quests-win' });
+    super(ctx, 'quests', 'Quest Log', { width: 380, x: 520, y: 96, className: 'ax-quests-win' });
   }
 
   protected signature(): string {
@@ -30,7 +30,9 @@ export class QuestsWindow extends UIWindow {
     const active = all.filter(q => { const s = prog(q)?.status; return s === 'active' || s === 'complete'; })
       .sort((a, b) => (prog(b)?.status === 'complete' ? 1 : 0) - (prog(a)?.status === 'complete' ? 1 : 0));
     const done = all.filter(q => prog(q)?.status === 'turned_in');
-    const available = all.filter(q => !prog(q) && q.minLevel <= st.level && (!q.requiredJobBranch || q.requiredJobBranch === 'none' || q.requiredJobBranch === branch));
+    // Closest-to-your-level first.
+    const available = all.filter(q => !prog(q) && q.minLevel <= st.level && (!q.requiredJobBranch || q.requiredJobBranch === 'none' || q.requiredJobBranch === branch))
+      .sort((a, b) => b.minLevel - a.minLevel);
     const lists: Record<Tab, QuestDef[]> = { active, available, done };
     const items = lists[this.tab];
 

@@ -15,7 +15,7 @@ export class SkillsWindow extends UIWindow {
   private tab = '';
 
   constructor(ctx: UICtx) {
-    super(ctx, 'skills', 'Skills', { width: 392, x: 120, y: 90, className: 'ax-skills-win' });
+    super(ctx, 'skills', 'Skills', { width: 420, x: 16, y: 120, className: 'ax-skills-win' });
   }
 
   private allJobs(): JobDef[] { return safe(() => Registry.jobs(), [] as JobDef[]).filter(Boolean); }
@@ -86,10 +86,10 @@ export class SkillsWindow extends UIWindow {
     }
 
     const footer = h('div', { class: 'ax-win-footer' },
-      h('span', { class: 'ax-dim' }, tab.locked ? 'Preview — not yet available' : 'Drag skills onto the hotbar. Right-click a slot to clear.'),
+      h('span', { class: 'ax-dim' }, tab.locked ? 'Preview — not yet available' : 'Drag a learned skill onto the hotbar.'),
       h('span', { class: 'ax-sp' }, 'Skill Points: ', h('b', null, String(st.sp))));
     this.body.replaceChildren(
-      tabStrip(tabs.map(t => ({ id: t.id, label: t.label, locked: t.locked, title: t.locked ? t.note : '' })), this.tab, (id) => { this.tab = id; this.invalidate(); this.ctx.sfx('ui_click'); }),
+      tabStrip(tabs.map(t => ({ id: t.id, label: t.label, locked: t.locked, title: t.locked ? `${t.label} — ${t.note ?? ''}` : t.label })), this.tab, (id) => { this.tab = id; this.invalidate(); this.ctx.sfx('ui_click'); }),
       list, footer);
   }
 

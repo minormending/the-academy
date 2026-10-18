@@ -95,13 +95,22 @@ export class DropManager implements IDropManager {
   }
 
   tryPickup(): boolean {
+    const p = this.services.player;
+    if (!p) return false;
+    return this.pickupNear(p.x, p.y, PICKUP_RANGE);
+  }
+
+  dropPositions(): { x: number; y: number }[] {
+    return this.drops.filter(d => d.state !== 'pick').map(d => ({ x: d.x, y: d.y }));
+  }
+
+  pickupNear(px: number, py: number, radius: number): boolean {
     const s = this.services;
     try {
       if (!s.player || s.progression?.isDead()) return false;
       const now = this.scene.time.now;
-      const px = s.player.x, py = s.player.y;
       let best: Drop | null = null;
-      let bestD = PICKUP_RANGE;
+      let bestD = radius;
       for (const d of this.drops) {
         if (d.state === 'pick') continue;
         if (d.state === 'fly' && now - d.born < 250) continue;

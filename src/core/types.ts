@@ -495,6 +495,10 @@ export interface IDropManager {
   bindMap(map: IMapInstance): void;
   /** Pick up the nearest drop in reach of the player (Z key). */
   tryPickup(): boolean;
+  /** Pick up the nearest drop within `radius` of (x, y) on the player's behalf (familiar auto-loot). */
+  pickupNear(x: number, y: number, radius: number): boolean;
+  /** Positions of drops currently on the ground (for the familiar to seek). */
+  dropPositions(): { x: number; y: number }[];
   update(time: number, delta: number): void;
   clear(): void;
 }

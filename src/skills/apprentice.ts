@@ -1,11 +1,13 @@
 // OWNER: A2 (skill-engine). Tier-1 Apprentice skills (arcane: violet / cyan) + their textures and VFX.
 import Phaser from 'phaser';
-import type { SkillDef, VfxOptions } from '../core/types';
+import type { SkillContext, SkillDef, VfxOptions } from '../core/types';
 import { playVfx, registerVfx } from '../core/vfx';
 import { bus } from '../core/events';
 import { maybeServices } from '../core/services';
 import { DEPTH, PIXEL_SCALE } from '../core/constants';
 import { pixelizeTexture, pxFx, pxLoop } from '../art/particles';
+import { lazyRegister } from '../art/lazy';
+import { castPracticeWard } from './apprentice/ward';
 
 // ───────────────────────────── palette ─────────────────────────────
 
@@ -246,7 +248,240 @@ export const APPRENTICE_SKILLS: SkillDef[] = [
       { stat: 'mastery', add: +(0.01 * lv).toFixed(3) },
     ],
   },
+  {
+    id: 'app_practice_ward',
+    name: 'Practice Ward',
+    description: 'Place one ward that pulses and briefly stuns intruders: a lesson in Fire fields and Holy control.',
+    element: 'neutral', job: 'apprentice', kind: 'summon', maxLevel: 10,
+    icon: { glyph: 'halo', color: CYAN, color2: VIOLET_LT, bg: 0x162048 },
+    mpCost: lv => Math.round(lerp(8, 12, lv, 10)),
+    cooldownMs: () => 6000, castTimeMs: 400, sfx: 'cast_arcane',
+    summon: {
+      durationMs: () => 4000, attackIntervalMs: 1000,
+      offset: { x: 64, y: -28 }, follow: false, vfx: 'app_practice_ward',
+      attack: {
+        pattern: 'aoe_self', damagePct: lv => Math.round(lerp(30, 40, lv, 10)),
+        hits: () => 1, maxTargets: () => 3, range: 56,
+        area: { w: 112, h: 80 },
+        status: { kind: 'stun', chance: () => 1, durationMs: () => 350, potency: () => 0 },
+        vfx: { area: 'app_ward_pulse' },
+      },
+    },
+    onCast: castPracticeWard,
+  },
+  {
+    id: 'app_seal_break',
+    name: 'Seal Break',
+    description: 'Snap a short line of arcane force, consuming chill for bonus damage: an Ice setup and payoff.',
+    element: 'neutral', job: 'apprentice', kind: 'attack', maxLevel: 10,
+    icon: { glyph: 'ice_shard', color: CYAN_LT, color2: VIOLET, bg: 0x17204a },
+    requires: [{ skillId: 'app_frost_primer', level: 1 }],
+    mpCost: lv => Math.round(lerp(9, 14, lv, 10)),
+    cooldownMs: () => 2400, castTimeMs: 460, sfx: 'shatter',
+    attack: {
+      pattern: 'beam', damagePct: lv => Math.round(lerp(70, 100, lv, 10)),
+      hits: () => 1, maxTargets: () => 3, range: 180,
+      area: { w: 180, h: 64 },
+      bonusVs: { status: 'chill', mult: 1.7, consume: true },
+      vfx: { area: 'app_seal_break', hit: 'app_seal_fragments' },
+    },
+  },
+  {
+    id: 'app_vital_ink',
+    name: 'Vital Ink',
+    description: 'Trade health for missing mana while preserving your last HP: a first lesson in Shadow sacrifice.',
+    element: 'neutral', job: 'apprentice', kind: 'buff', maxLevel: 10,
+    icon: { glyph: 'heart', color: VIOLET_LT, color2: CYAN, bg: 0x24143f },
+    mpCost: () => 0, cooldownMs: () => 10000, castTimeMs: 500, sfx: 'curse',
+    onCast: castVitalInk,
+  },
+  {
+    id: 'app_quill_step',
+    name: 'Quill Step',
+    description: 'Blink horizontally through foes, drawing a damaging arcane stroke: a lesson in Lightning mobility.',
+    element: 'neutral', job: 'apprentice', kind: 'movement', maxLevel: 10,
+    icon: { glyph: 'feather', color: CYAN_LT, color2: VIOLET_LT, bg: 0x171943 },
+    requires: [{ skillId: 'app_arcane_bolt', level: 1 }],
+    mpCost: lv => Math.round(lerp(9, 14, lv, 10)),
+    cooldownMs: () => 2200, castTimeMs: 180, sfx: 'blink',
+    movement: { kind: 'blink', distance: lv => Math.round(lerp(100, 150, lv, 10)), vfxIn: 'app_quill_arrive' },
+    attack: {
+      pattern: 'aoe_self', damagePct: lv => Math.round(lerp(45, 70, lv, 10)),
+      hits: () => 1, maxTargets: () => 3, range: 150,
+      area: { w: 150, h: 58 }, vfx: { area: 'app_quill_stroke' },
+    },
+    onCast: castQuillStep,
+  },
 ];
+
+function castVitalInk(ctx: SkillContext, lv: number): void {
+  const { progression: prog, player: p, combat } = ctx.services;
+  if (prog.isDead() || p.state === 'dead') return;
+  const hpBudget = Math.round(lerp(8, 12, lv, 10));
+  const mpBudget = Math.round(lerp(14, 24, lv, 10));
+  const hpAvailable = Math.max(0, Math.floor(prog.state.hp) - 1);
+  const mp = Math.max(0, Math.min(mpBudget, Math.floor(prog.derived().maxMp - prog.state.mp),
+    Math.floor(hpAvailable * mpBudget / hpBudget)));
+  if (!mp) return;
+  const hp = Math.ceil(mp * hpBudget / mpBudget);
+  prog.loseHp(hp);
+  // loseHp emits synchronously; never recover mana if a listener killed the player.
+  if (prog.isDead() || ctx.services.player.state === 'dead') return;
+  prog.heal(0, mp);
+  combat.showNumber(p.x, p.y - 72, hp, 'player');
+  combat.showNumber(p.x, p.y - 94, mp, 'mp');
+  playVfx(ctx.scene, 'app_vital_ink', { x: p.x, y: p.y, facing: p.facing, lv });
+}
+
+function castQuillStep(ctx: SkillContext, lv: number): void {
+  const { player: p, progression } = ctx.services;
+  if (progression.isDead() || p.state === 'dead') return;
+  const ox = p.x, oy = p.y;
+  const facing = p.getAimDir().x || p.facing;
+  p.blink(ctx.skill.movement!.distance(lv) * facing, 0);
+  const dx = Math.abs(p.x - ox), dy = Math.abs(p.y - oy);
+  playVfx(ctx.scene, 'app_quill_arrive', { x: p.x, y: p.y, facing, lv });
+  if (dx < 1 && dy < 1) return;
+  ctx.runAttack({ ...ctx.skill.attack!, range: dx,
+    area: { w: dx + 26, h: dy + 58 },
+  }, { x: (ox + p.x) / 2, y: (oy + p.y) / 2 - 29, facing });
+}
+
+// Phase 9 art is built only on first play; the existing boot texture set stays unchanged.
+const BT = {
+  ward: 'app_ward_pixels', seal: 'app_break_pixels', ink: 'app_ink_pixels', quill: 'app_quill_pixels',
+} as const;
+
+function generateSpellbookTextures(scene: Phaser.Scene): void {
+  curriculumTex(scene, BT.ward, 56, 40, c => {
+    // Sparse corners show the exact 112 x 80 trigger rectangle; the rune sits at foot level.
+    c.fillStyle = '#403065';
+    for (const x of [0, 51]) for (const y of [0, 35]) c.fillRect(x, y, 5, 5);
+    c.fillStyle = '#91b5eb';
+    for (const x of [1, 52]) for (const y of [1, 36]) c.fillRect(x, y, 3, 3);
+    for (let x = 8; x < 48; x += 4) {
+      const y = 34 - Math.floor(Math.abs(x - 28) / 7);
+      c.fillStyle = '#6250a6'; c.fillRect(x, y, 3, 1);
+      c.fillRect(x, 68 - y, 3, 1);
+    }
+    c.fillStyle = '#29204b'; c.fillRect(24, 17, 8, 18); c.fillRect(19, 22, 18, 7);
+    c.fillStyle = '#8f8cdb'; c.fillRect(26, 18, 4, 16); c.fillRect(20, 24, 16, 3);
+    c.fillStyle = '#d5efff'; c.fillRect(27, 19, 1, 13); c.fillRect(22, 24, 12, 1);
+  });
+  curriculumTex(scene, BT.seal, 13, 15, c => {
+    for (let y = 0; y < 15; y++) {
+      const half = Math.floor(Math.min(y, 14 - y) * 6 / 7);
+      c.fillStyle = '#25204d'; c.fillRect(6 - half, y, half * 2 + 1, 1);
+      c.fillStyle = '#889be0'; if (half) c.fillRect(7 - half, y, half * 2 - 1, 1);
+    }
+    c.fillStyle = '#d4faff'; c.fillRect(5, 3, 1, 8);
+    c.clearRect(0, 7, 6, 1); c.clearRect(6, 6, 7, 1);
+  });
+  curriculumTex(scene, BT.ink, 9, 13, c => {
+    c.fillStyle = '#2c194a'; c.fillRect(3, 0, 3, 12); c.fillRect(1, 6, 7, 5);
+    c.fillStyle = '#8b66bc'; c.fillRect(3, 3, 3, 8); c.fillRect(2, 7, 5, 3);
+    c.fillStyle = '#b9a0eb'; c.fillRect(3, 7, 1, 3);
+    c.fillStyle = '#8de4ff'; c.fillRect(4, 5, 1, 5);
+  });
+  curriculumTex(scene, BT.quill, 21, 13, c => {
+    for (let x = 2; x < 19; x++) {
+      const y = 11 - Math.floor(x / 2), half = Math.min(3, x - 1, 19 - x);
+      c.fillStyle = '#312550'; c.fillRect(x, y - half, 1, half * 2 + 1);
+      c.fillStyle = '#819bd7'; if (half > 0) c.fillRect(x, y - half + 1, 1, half * 2 - 1);
+      c.fillStyle = '#d0f4ff'; c.fillRect(x, y, 1, 1);
+    }
+    c.fillStyle = '#5ee0ff'; c.fillRect(0, 11, 4, 1);
+  });
+}
+
+function spellbookImage(scene: Phaser.Scene, key: string, x: number, y: number): Phaser.GameObjects.Image | null {
+  if (!scene.textures.exists(key)) generateSpellbookTextures(scene);
+  if (!scene.textures.exists(key)) return null;
+  return scene.add.image(Math.round(x / 2) * 2, Math.round(y / 2) * 2, key).setDepth(DEPTH.VFX);
+}
+
+/** Draw in source pixels; only integer rectangles reach the screen at exactly x2. */
+function spellbookGraphics(scene: Phaser.Scene, x: number, y: number): Phaser.GameObjects.Graphics {
+  return scene.add.graphics({ x: Math.round(x / 2) * 2, y: Math.round(y / 2) * 2 })
+    .setScale(PIXEL_SCALE).setDepth(DEPTH.VFX);
+}
+
+function vfxPracticeWard(scene: Phaser.Scene, o: VfxOptions): Phaser.GameObjects.GameObject {
+  const root = scene.add.container(o.x, o.y).setDepth(DEPTH.VFX);
+  const art = spellbookImage(scene, BT.ward, 0, 0);
+  if (art) root.add(art);
+  // CodeManu's CC0 circle, palette-swapped on demand, supplements the bespoke pixel fallback.
+  pxLoop(scene, root, 'cm_shield', 0, 0, { v: 'arcane', scale: PIXEL_SCALE, alpha: 0.25 });
+  if (art) scene.tweens.add({ targets: art, alpha: 0.6, duration: 500, yoyo: true, repeat: -1 });
+  onDispose(scene, root);
+  return root; // Symmetric body at rotation zero; authored facing +x.
+}
+
+function vfxWardPulse(scene: Phaser.Scene, o: VfxOptions): void {
+  pxFx(scene, 'cm_ring', o.x, o.y, { v: 'arcane', scale: PIXEL_SCALE, dur: 220, alpha: 0.65 });
+  const g = spellbookGraphics(scene, o.x, o.y);
+  const w = Math.floor((o.w ?? 112) / 4), h = Math.floor((o.h ?? 80) / 4);
+  for (const x of [-w + 2, -w + 8, w - 8, w - 2]) {
+    g.fillStyle(0x564088).fillRect(x, -h, 3, h * 2);
+    g.fillStyle(CYAN_LT).fillRect(x + 1, -h + 2, 1, h * 2 - 4);
+  }
+  curriculumFade(scene, g, 260);
+}
+
+function vfxSealBreak(scene: Phaser.Scene, o: VfxOptions): void {
+  const length = Math.round(Math.abs((o.targetX ?? o.x + 180 * o.facing) - o.x) / 2);
+  const g = spellbookGraphics(scene, o.x, o.y);
+  for (let i = 0; i < length; i++) {
+    const x = i * o.facing, y = i % 16 < 8 ? -1 : 1;
+    g.fillStyle(0x443568).fillRect(x, y - 2, 1, 5);
+    g.fillStyle(CYAN_LT).fillRect(x, y, 1, 1);
+    if (i % 16 === 8) {
+      g.fillStyle(0x9d9ee7).fillRect(x, -13, 1, 26);
+      g.fillStyle(WHITE).fillRect(x - 2, -2, 5, 5);
+    }
+  }
+  curriculumFade(scene, g, 260);
+}
+
+function vfxSealFragments(scene: Phaser.Scene, o: VfxOptions): void {
+  for (const direction of [-1, 1]) {
+    const p = spellbookImage(scene, BT.seal, o.x + 8 * direction, o.y);
+    if (!p) continue;
+    p.once(Phaser.GameObjects.Events.DESTROY, () => scene.tweens.killTweensOf(p));
+    scene.tweens.add({ targets: p, x: p.x + 20 * direction, alpha: 0, duration: 280,
+      ease: 'Stepped', easeParams: [10], onComplete: () => p.destroy() });
+  }
+}
+
+function vfxVitalInk(scene: Phaser.Scene, o: VfxOptions): void {
+  // Violet drops turn into pale blue mana strokes, without obscuring the caster.
+  for (const [dx, dy] of [[-22, -28], [22, -42], [-16, -64]]) {
+    const p = spellbookImage(scene, BT.ink, o.x + dx, o.y + dy);
+    if (p) curriculumFade(scene, p, 500);
+  }
+  const g = spellbookGraphics(scene, o.x, o.y - 42);
+  for (let i = 0; i < 7; i++) {
+    g.fillStyle(i < 3 ? VIOLET : CYAN_LT).fillRect(-12 + i * 4, 12 - i * 3, 3, 1);
+  }
+  curriculumFade(scene, g, 550);
+}
+
+function vfxQuillStroke(scene: Phaser.Scene, o: VfxOptions): void {
+  const g = spellbookGraphics(scene, o.x, o.y);
+  const half = Math.floor((o.w ?? 150) / 4);
+  for (let x = -half; x <= half; x += 2) {
+    const y = Math.floor((x + half) / 8) % 2;
+    g.fillStyle(0x403367).fillRect(x, y - 2, 2, 5);
+    g.fillStyle(CYAN_LT).fillRect(x, y, 2, 1);
+    if ((x + half) % 8 === 0) g.fillStyle(VIOLET_LT).fillRect(x, y - 6, 1, 3);
+  }
+  curriculumFade(scene, g, 260);
+}
+
+function vfxQuillArrive(scene: Phaser.Scene, o: VfxOptions): void {
+  const p = spellbookImage(scene, BT.quill, o.x, o.y - 30);
+  if (p) { p.setFlipX(o.facing < 0); curriculumFade(scene, p, 320); }
+}
 
 // ───────────────────────────── textures ─────────────────────────────
 
@@ -945,5 +1180,13 @@ export function registerApprenticeVfx(): void {
   registerVfx('app_frost_seal', vfxFrostSeal);
   registerVfx('app_frost_hit', vfxFrostHit);
   registerVfx('app_insight', vfxInsight);
+  const registerSpellbookVfx = lazyRegister('apprentice_spellbook', generateSpellbookTextures);
+  registerSpellbookVfx('app_practice_ward', vfxPracticeWard);
+  registerSpellbookVfx('app_ward_pulse', vfxWardPulse);
+  registerSpellbookVfx('app_seal_break', vfxSealBreak);
+  registerSpellbookVfx('app_seal_fragments', vfxSealFragments);
+  registerSpellbookVfx('app_vital_ink', vfxVitalInk);
+  registerSpellbookVfx('app_quill_stroke', vfxQuillStroke);
+  registerSpellbookVfx('app_quill_arrive', vfxQuillArrive);
   registerInsightObserver();
 }

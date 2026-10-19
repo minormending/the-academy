@@ -3,6 +3,7 @@
 // Max levels deliberately exceed the SP a student earns per year (3/level): builds are choices.
 import type { AttackSpec, IconSpec, SkillDef, StatusSpec } from '../core/types';
 import { castField, castHeal, castHolyStep, castRestore } from './holy/casts';
+import { castDawnRay, castDawnRush, castMartyr, castRetribution, castSanctuary } from './holy/phase9';
 
 /** Linear interpolation across levels 1..max (clamped). */
 const L = (a: number, b: number, max: number) => (lv: number) => a + ((b - a) * (Math.min(Math.max(lv, 1), max) - 1)) / Math.max(1, max - 1);
@@ -57,6 +58,51 @@ export const GENESIS = {
   intervalMs: 150,
   fallHeight: 600,
   area: { w: 150, h: 260 },
+};
+
+// ───────────────────────── Phase 9 specs ─────────────────────────
+
+const RUSH_MAX = 10;
+const rushDist = L(170, 240, RUSH_MAX);
+const RUSH_ATTACK: AttackSpec = {
+  pattern: 'beam', damagePct: L(110, 160, RUSH_MAX), hits: K(1), maxTargets: K(5), range: 200,
+  area: { w: 200, h: 90 }, delayMs: 40,
+  status: stun(RUSH_MAX, [0.15, 0.25], [800, 1100]),
+  vfx: { area: 'holy_rush_trail', hit: 'holy_hit' },
+};
+
+const MARTYR_MAX = 10;
+const MARTYR_ATTACK: AttackSpec = {
+  pattern: 'aoe_self', damagePct: L(150, 220, MARTYR_MAX), hits: K(2), maxTargets: K(8), range: 160,
+  area: { w: 320, h: 160 }, delayMs: 140, hitIntervalMs: 110, knockback: 30,
+  vfx: { area: 'holy_martyr_burst', hit: 'holy_hit' },
+};
+export const MARTYR = { payPct: 0.25, ticks: 5, tickMs: 1000, hotPct: L(0.07, 0.1, MARTYR_MAX) };
+
+const RETRIB_MAX = 15;
+const RETRIB_ATTACK: AttackSpec = {
+  pattern: 'aoe_target', damagePct: L(170, 250, RETRIB_MAX), hits: K(1), maxTargets: K(2), range: 420,
+  area: { w: 110, h: 160 }, delayMs: 120,
+  status: stun(RETRIB_MAX, [0.3, 0.5], [1000, 1500]),
+  vfx: { area: 'holy_retrib_strike', hit: 'holy_hit_big' },
+};
+
+const DAWN_MAX = 15;
+export const DAWN_RAY = { ticks: 10, tickMs: 130 };
+const DAWN_ATTACK: AttackSpec = {
+  pattern: 'beam', damagePct: L(80, 120, DAWN_MAX), hits: K(1), maxTargets: K(6), range: 560,
+  area: { w: 560, h: 64 },
+  status: stun(DAWN_MAX, [0.03, 0.06], [600, 900]),
+  bonusVs: { status: 'stun', mult: 1.3 },
+  vfx: { hit: 'holy_dawn_hit' },
+};
+
+const SANCT_MAX = 10;
+const SANCT_BURST: AttackSpec = {
+  pattern: 'aoe_self', damagePct: L(220, 320, SANCT_MAX), hits: K(2), maxTargets: K(10), range: 180,
+  area: { w: 360, h: 200 }, delayMs: 60, hitIntervalMs: 120, knockback: 50,
+  status: stun(SANCT_MAX, [0.4, 0.6], [1500, 2200]),
+  vfx: { area: 'holy_sanctuary_burst', hit: 'holy_hit_big' },
 };
 
 export const HOLY_SKILLS: SkillDef[] = [
@@ -139,6 +185,46 @@ export const HOLY_SKILLS: SkillDef[] = [
     icon: iconHeal('heart', 0xffffff, 0xffd84a), requires: [{ skillId: 'holy_heal', level: 5 }],
     mpCost: K(0),
     passive: (lv) => [{ stat: 'maxHp', mul: +(0.012 * lv).toFixed(3) }, { stat: 'hpRegen', add: 2 * lv }],
+  },
+
+  // Phase 9 — new kinds of play
+  {
+    id: 'holy_glyph', name: 'Warding Glyph', job: 'cleric', element: 'holy', kind: 'summon', maxLevel: 15,
+    description: 'Inscribe a glowing ward on the ground ahead; it flares and stuns any enemy that steps onto it.',
+    icon: icon('halo', 0xfff3b0, 0xffffff, 0x2a2410), requires: [{ skillId: 'holy_arrow', level: 2 }],
+    mpCost: Li(16, 26, 15), cooldownMs: L(12000, 8000, 15), castTimeMs: 420, sfx: 'cast_holy',
+    summon: {
+      durationMs: L(8000, 12000, 15), attackIntervalMs: 900, offset: { x: 80, y: 0 }, follow: false, vfx: 'holy_glyph',
+      attack: {
+        pattern: 'aoe_self', damagePct: L(80, 120, 15), hits: K(1), maxTargets: K(6), range: 70,
+        area: { w: 120, h: 110, offsetY: -50 },
+        status: stun(15, [0.45, 0.7], [1200, 1800]),
+        vfx: { area: 'holy_glyph_pulse', hit: 'holy_hit' },
+      },
+    },
+  },
+  {
+    id: 'holy_verdict', name: 'Verdict', job: 'cleric', element: 'holy', kind: 'attack', maxLevel: 15,
+    description: 'Drive a blade of light down on the nearest foe; a stunned target takes far more and is jolted awake.',
+    icon: icon('holy_cross', 0xffffff, 0xffc93a, 0x3a1a08), requires: [{ skillId: 'holy_arrow', level: 3 }],
+    mpCost: Li(15, 25, 15), cooldownMs: L(3000, 2000, 15), castTimeMs: 460, sfx: 'cast_holy',
+    attack: {
+      pattern: 'aoe_target', damagePct: L(130, 190, 15), hits: K(2), maxTargets: K(1), range: 360,
+      area: { w: 90, h: 140 }, delayMs: 200, hitIntervalMs: 120,
+      bonusVs: { status: 'stun', mult: 1.8, consume: true },
+      vfx: { cast: 'holy_cast', area: 'holy_verdict_area', hit: 'holy_hit_big' },
+    },
+  },
+  {
+    id: 'holy_dawn_rush', name: 'Dawn Rush', job: 'cleric', element: 'holy', kind: 'movement', maxLevel: RUSH_MAX,
+    description: 'Charge along the ground in a streak of dawn light, striking every foe you pass and mending more for each.',
+    icon: iconHeal('wings', 0xfff3b0, 0xffffff), requires: [{ skillId: 'holy_heal', level: 3 }],
+    mpCost: Li(14, 22, RUSH_MAX), cooldownMs: L(5000, 3500, RUSH_MAX), castTimeMs: 220, sfx: 'whoosh',
+    movement: { kind: 'blink', distance: rushDist, vfxOut: 'holy_rush_out', vfxIn: 'holy_rush_in' },
+    onCast: (ctx, lv) => castDawnRush(ctx, {
+      dist: rushDist(lv), healBase: L(0.02, 0.04, RUSH_MAX)(lv), healPerFoe: L(0.01, 0.02, RUSH_MAX)(lv), maxFoes: 5,
+      attack: RUSH_ATTACK,
+    }),
   },
 
   // ───────────────────────── Year 3 — Priest (lv 25) ─────────────────────────
@@ -226,6 +312,39 @@ export const HOLY_SKILLS: SkillDef[] = [
     icon: iconLight('book'), requires: [{ skillId: 'holy_prayer', level: 3 }],
     mpCost: K(0),
     passive: (lv) => [{ stat: 'maxMp', mul: +(0.015 * lv).toFixed(3) }, { stat: 'castSpeed', add: +(0.006 * lv).toFixed(3) }],
+  },
+
+  // Phase 9 — new kinds of play
+  {
+    id: 'holy_brand', name: 'Brand of Judgment', job: 'priest', element: 'holy', kind: 'attack', maxLevel: 15,
+    description: 'A searing brand leaps from foe to foe, marking each with a short, near-certain stun for your smites to cash in.',
+    icon: icon('sunburst', 0xffe066, 0xffffff, 0x3a1a08), requires: [{ skillId: 'holy_verdict', level: 3 }],
+    mpCost: Li(22, 32, 15), cooldownMs: L(6000, 4000, 15), castTimeMs: 420, sfx: 'cast_holy',
+    attack: {
+      pattern: 'chain', damagePct: L(80, 120, 15), hits: K(1), maxTargets: Li(3, 6, 15), range: 380,
+      chain: { jumpRange: 220, jumpDelayMs: 70 },
+      status: stun(15, [0.75, 1], [700, 1100]),
+      vfx: { cast: 'holy_cast', area: 'holy_brand_chain', hit: 'holy_brand_mark' },
+    },
+  },
+  {
+    id: 'holy_martyr', name: "Martyr's Vow", job: 'priest', element: 'holy', kind: 'attack', maxLevel: MARTYR_MAX,
+    description: 'Offer a quarter of your HP: it bursts from you as holy light, then a vow of renewal heals you strongly for 5 seconds.',
+    icon: iconHeal('heart', 0xffffff, 0xff8a6a), requires: [{ skillId: 'holy_faith', level: 3 }],
+    mpCost: Li(12, 20, MARTYR_MAX), cooldownMs: L(24000, 18000, MARTYR_MAX), castTimeMs: 500, sfx: 'heal',
+    attack: MARTYR_ATTACK,
+    onCast: (ctx, lv) => castMartyr(ctx, {
+      payPct: MARTYR.payPct, attack: MARTYR_ATTACK, hotPct: MARTYR.hotPct(lv), ticks: MARTYR.ticks, tickMs: MARTYR.tickMs,
+    }),
+  },
+  {
+    id: 'holy_retribution', name: 'Retribution', job: 'priest', element: 'holy', kind: 'buff', maxLevel: RETRIB_MAX,
+    description: 'For a while every blow you take calls judgment down on the nearest foe, and part of the damage is given back to you.',
+    icon: icon('holy_cross', 0xffe066, 0xff8a6a, 0x3a1a08), requires: [{ skillId: 'holy_smite', level: 5 }],
+    mpCost: Li(28, 40, RETRIB_MAX), cooldownMs: L(30000, 22000, RETRIB_MAX), castTimeMs: 500, sfx: 'buff',
+    onCast: (ctx, lv) => castRetribution(ctx, {
+      durationMs: L(12000, 20000, RETRIB_MAX)(lv), recoverPct: L(0.2, 0.35, RETRIB_MAX)(lv), icdMs: 300, attack: RETRIB_ATTACK,
+    }),
   },
 
   // ───────────────────────── Year 4 — Hierophant (lv 40) ─────────────────────────
@@ -324,5 +443,24 @@ export const HOLY_SKILLS: SkillDef[] = [
     icon: iconLight('halo'), requires: [{ skillId: 'holy_radiant_mastery', level: 10 }],
     mpCost: K(0),
     passive: (lv) => [{ stat: 'critRate', add: +(0.01 * lv).toFixed(3) }, { stat: 'cdr', add: +(0.008 * lv).toFixed(3) }],
+  },
+  // Phase 9 — new kinds of play
+  {
+    id: 'holy_dawn_ray', name: 'Ray of Dawn', job: 'hierophant', element: 'holy', kind: 'attack', maxLevel: DAWN_MAX,
+    description: 'Channel a sustained ray of dawn straight ahead, searing every foe in the line ten times; stunned foes burn brighter.',
+    icon: icon('sunburst', 0xffffff, 0xffe066, 0x3a1a08), requires: [{ skillId: 'holy_shining_ray', level: 5 }],
+    mpCost: Li(48, 70, DAWN_MAX), cooldownMs: L(10000, 7000, DAWN_MAX), castTimeMs: DAWN_RAY.ticks * DAWN_RAY.tickMs, sfx: 'cast_holy',
+    attack: DAWN_ATTACK,
+    onCast: (ctx) => castDawnRay(ctx, { ticks: DAWN_RAY.ticks, tickMs: DAWN_RAY.tickMs, attack: DAWN_ATTACK }),
+  },
+  {
+    id: 'holy_sanctuary', name: 'Sanctuary', job: 'hierophant', element: 'holy', kind: 'buff', maxLevel: SANCT_MAX,
+    description: 'Raise a dome of light that absorbs damage; when it breaks or fades, the stored light bursts out, harder the more it held.',
+    icon: icon('shield', 0xffffff, 0xffe066, 0x4a3204), requires: [{ skillId: 'holy_retribution', level: 5 }],
+    mpCost: Li(50, 70, SANCT_MAX), cooldownMs: L(40000, 30000, SANCT_MAX), castTimeMs: 550, sfx: 'buff',
+    attack: SANCT_BURST,
+    onCast: (ctx, lv) => castSanctuary(ctx, {
+      durationMs: L(10000, 15000, SANCT_MAX)(lv), poolPct: L(0.25, 0.45, SANCT_MAX)(lv), burst: SANCT_BURST,
+    }),
   },
 ];

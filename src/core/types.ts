@@ -265,7 +265,8 @@ export type SfxKey =
   | 'explosion' | 'freeze' | 'shatter' | 'thunder' | 'zap' | 'whoosh' | 'blink' | 'heal'
   | 'ui_click' | 'ui_open' | 'ui_close' | 'ui_error' | 'quest_complete' | 'potion';
 
-export type MusicKey = 'title' | 'town' | 'forest' | 'cave' | 'snow' | 'volcano' | 'storm' | 'boss';
+export type MusicKey = 'title' | 'town' | 'forest' | 'cave' | 'snow' | 'volcano' | 'storm' | 'boss'
+  | 'marsh' | 'grotto' | 'library';
 
 // ───────────────────────────── Items ─────────────────────────────
 

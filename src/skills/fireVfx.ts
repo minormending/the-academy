@@ -7,6 +7,7 @@ import { defineSchool, lazyRegister, scheduleIdle } from '../art/lazy';
 import type { VfxFn, VfxOptions } from '../core/types';
 import { generateFireTextures as genTextures, FT } from './fire/textures';
 import { generateFireSheets, fpx, fpxLoop } from './fire/sheets';
+import { registerFirePhase9Vfx } from './fire/vfx9';
 import {
   ADD, NORMAL, C, FIRE_TINTS, HOT_TINTS, ALIGN, img, tk, loop, shake, shock, flash, flare,
   burst, stream, attachTrail, tongue, zone,
@@ -1084,5 +1085,7 @@ export function registerFireVfx(): void {
   registerVfx('fire_immolate_area', immolateArea);
   registerVfx('fire_cauterize', cauterizeSelf);
   registerVfx('fire_cauterize_area', cauterizeArea);
+  // Phase 9 — eight more spells (src/skills/fire/vfx9.ts)
+  registerFirePhase9Vfx(registerVfx, { sparks, embers, smokePuff, hitFx, castFx, explosion, groundBelow, implode, scorchMark });
 }
 

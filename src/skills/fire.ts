@@ -1,7 +1,9 @@
 // OWNER: A3 (fire-tree). Pyromancer (Year 2) -> Flamebinder (Year 3) -> Inferno Sage (Year 4), 8 spells per Year.
+// Phase 9 adds 3 + 3 + 2 more (src/skills/fire/phase9.ts), spliced in per Year below → 32 total.
 // Identity: highest raw damage, burn DoT, explosions, big AoE, risk/reward (Overheat, Immolation).
 import type { AttackSpec, IconSpec, SkillContext, SkillDef, StatusSpec } from '../core/types';
 import { playVfx } from '../core/vfx';
+import { FIRE_Y2_EXTRA, FIRE_Y3_EXTRA, FIRE_Y4_EXTRA } from './fire/phase9';
 
 /** Linear interpolation across levels 1..max (clamped). */
 const L = (a: number, b: number, max: number) => (lv: number) => a + ((b - a) * (Math.min(Math.max(lv, 1), max) - 1)) / (max - 1);
@@ -179,6 +181,7 @@ export const FIRE_SKILLS: SkillDef[] = [
     mpCost: K(0),
     passive: (lv) => [{ stat: 'speed', add: 2 * lv }, { stat: 'jump', add: 3 * lv }, { stat: 'castSpeed', add: 0.007 * lv }],
   },
+  ...FIRE_Y2_EXTRA,
 
   // ───────────────────────── Year 3 — Flamebinder (lv 25) · roots: orb, pillar, pyre mastery ─────────────────────────
   {
@@ -278,6 +281,7 @@ export const FIRE_SKILLS: SkillDef[] = [
       vfx: 'fire_ward_cast', auraVfx: 'fire_ward_aura',
     },
   },
+  ...FIRE_Y3_EXTRA,
 
   // ───────────────────────── Year 4 — Inferno Sage (lv 40) · ultimates: Meteor Storm, Supernova ─────────────────────────
   {
@@ -371,4 +375,5 @@ export const FIRE_SKILLS: SkillDef[] = [
     attack: CAUTERIZE,
     onCast: castCauterize,
   },
+  ...FIRE_Y4_EXTRA,
 ];

@@ -63,6 +63,13 @@ function sheetDefs(): Record<string, HolySheet | null> {
     h_orb: shared('g9_spark', 'sun'),                                                // Gothicvania spark orb → light orb
     h_spin: shared('cm_firespin', 'sun'),                                                 // spinning sigil of light
     h_sparkle: shared('spark', 'sun'),                                                    // kurohina spark
+    // Phase 9 additions
+    h_lash: shared('cm_flamelash', 'sun'),                                                // CodeManu flame lash → dawn streak (Dawn Rush)
+    h_vortex: shared('cm_vortex', 'gold'),                                                // CodeManu vortex → martyr's offering swirl
+    h_skybolt: shared('g9_lightning', 'sun'),                                             // ansimuz lightning → bolt of judgment (Retribution)
+    h_boom: shared('ex3', 'sun'),                                                         // ansimuz explosion 3 → sanctuary burst
+    h_slash: shared('sf_slash', 'gold'),                                                  // Emcee Flesher slash → verdict cut
+    h_frost_l: shared('cm_freezing', 'light'),                                            // CodeManu freezing → crystalline dome bloom
     // ── holy-only sheets (public/assets/vfx/holy) ──
     h_wings: { src: 'src_vfx_holy_wings', rects: strip(94, 38, 5), fps: 12, ramp: 'gold' }, // Cethiel angel wings effect
     h_wings_l: { src: 'src_vfx_holy_wings', rects: strip(94, 38, 5), fps: 12, ramp: 'light' },

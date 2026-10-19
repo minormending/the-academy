@@ -10,6 +10,9 @@ export const HT = {
   halo: 'holy_halo',     // 32×12 flat halo ring
   ray: 'holy_ray',       // 8×64 thin ray, head at the bottom
   sigil: 'holy_sigil',   // 64  ring sigil with a cross + 8 rays (2px grid)
+  sword: 'holy_sword',   // 16×64 downward blade of light, hilt on top (2px grid) — Verdict
+  rune: 'holy_rune',     // 32  diamond ward rune with an inner cross (2px grid) — Warding Glyph / Brand
+  link: 'holy_link',     // 8×12 chain link (2px grid) — Brand of Judgment
 } as const;
 
 /** Paint a white texture cell by cell: fn → alpha (0..1) or [alpha, grey]. */
@@ -76,5 +79,28 @@ export function generateHolyProceduralTextures(scene: Phaser.Scene): void {
     const m = Math.atan2(dy, dx) / (Math.PI / 4);
     if (r > 10.6 && r < 12.8 && Math.abs(m - Math.round(m)) < 0.14) return 0.9;
     return 0;
+  });
+  // Phase 9 shapes (hard-edged, 2px cells = 1 source pixel at PIXEL_SCALE 2)
+  grid(scene, HT.sword, 16, 64, 2, (x, y, gw, gh) => {
+    // gw 8 × gh 32: crossguard rows 4-5, grip rows 0-3, blade rows 6..31 narrowing to a point
+    if (y <= 3) return x >= 3 && x <= 4 ? [1, 210] : 0;
+    if (y <= 5) return x >= 0 && x <= 7 ? (y === 4 ? 1 : [1, 225]) : 0;
+    const t = (y - 6) / (gh - 7);
+    const half = t < 0.8 ? 2 : t < 0.93 ? 1 : 0.5;
+    const d = Math.abs(x - 3.5);
+    if (d > half) return 0;
+    return d < 0.6 ? 1 : [1, 215];
+  });
+  grid(scene, HT.rune, 32, 32, 2, (x, y) => {
+    const dx = Math.abs(x - 7.5), dy = Math.abs(y - 7.5), m = dx + dy;
+    if (m >= 6.5 && m <= 7.5) return 1;                       // outer diamond
+    if (m >= 3.5 && m <= 4.2) return [0.75, 230];             // inner diamond
+    if ((dx < 0.6 && dy < 3) || (dy < 0.6 && dx < 3)) return 1; // centre cross
+    return 0;
+  });
+  grid(scene, HT.link, 8, 12, 2, (x, y, gw, gh) => {
+    const edge = x === 0 || x === gw - 1 || y === 0 || y === gh - 1;
+    const corner = (x === 0 || x === gw - 1) && (y === 0 || y === gh - 1);
+    return edge && !corner ? 1 : 0;
   });
 }

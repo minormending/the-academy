@@ -732,6 +732,345 @@ const salvationFx: VfxFn = (scene, o) => {
   }, DEPTH.VFX_TOP);
 };
 
+// ───────────────────────────── Phase 9 additions ─────────────────────────────
+
+/** Warding Glyph: a flat ward rune on the ground (x,y = feet) with a small cross hovering over it. Persistent. */
+const glyphBody: VfxFn = (scene, o) => {
+  const c = scene.add.container(o.x, o.y).setDepth(DEPTH.PLAYER - 1);
+  const pool = img(scene, HT.glow, 0, -4, { tint: C.gold, sx: 2, sy: 0.4, alpha: 0.4 });
+  const flat = scene.add.container(0, -3).setScale(1, 0.34);
+  const rune = img(scene, HT.rune, 0, 0, { tint: C.gold, scale: 4, alpha: 0.95 });
+  const inner = img(scene, HT.rune, 0, 0, { tint: C.white, scale: 2, alpha: 0.7 });
+  flat.add([rune, inner]);
+  const cross = img(scene, HT.cross, 0, -34, { tint: C.pale, scale: 2, alpha: 0.9 });
+  c.add([pool, flat, cross]);
+  loop(scene, c, { targets: cross, y: -40, duration: 500, yoyo: true, ease: 'Stepped', easeParams: [3] });
+  loop(scene, c, { targets: [rune, pool], alpha: 0.45, duration: 450, yoyo: true, ease: 'Stepped', easeParams: [2] });
+  loop(scene, c, { targets: inner, angle: 90, duration: 1200, yoyo: true, ease: 'Stepped', easeParams: [4] });
+  attachTrail(scene, c, HT.mote, 900, {
+    speedY: { min: -60, max: -25 }, speedX: { min: -5, max: 5 }, lifespan: { min: 600, max: 900 },
+    scale: { start: 2, end: 1 }, alpha: { start: 1, end: 0 }, tint: GOLD_TINTS, frequency: 160, quantity: 1,
+    emitZone: zone(new Phaser.Geom.Rectangle(-50, -6, 100, 6)),
+  });
+  // inscription flash when it is drawn
+  shock(scene, o.x, o.y - 2, 140, 0.3);
+  flash(scene, o.x, o.y - 10, C.white, 90, 260, 0.8);
+  return c;
+};
+
+/** Warding Glyph trigger: the rune flares, a short pillar of light spears up through whatever crossed it. */
+const glyphPulse: VfxFn = (scene, o) => {
+  const h = o.h ?? 110;
+  const gy = o.y + h / 2 - 5;
+  const x = o.x;
+  const flat = scene.add.container(x, gy - 3).setScale(1, 0.34).setDepth(DEPTH.VFX);
+  const rune = img(scene, HT.rune, 0, 0, { tint: C.white, scale: 4 });
+  flat.add(rune);
+  scene.tweens.add({ targets: rune, scale: 6, duration: 260, ease: 'Cubic.easeOut' });
+  tweenOut(scene, flat, { alpha: 0 }, 300, 'Stepped', 80);
+  lightShaft(scene, x, gy + 2, 44, h + 40, C.pale, 0, 380, DEPTH.VFX_TOP);
+  if (!hfx(scene, 'h_ringpop', x, gy - 40, { scale: 4, add: true, dur: 280, depth: DEPTH.VFX_TOP })) flash(scene, x, gy - 40, C.gold, 80, 240, 0.9);
+  shock(scene, x, gy - 2, 130, 0.28);
+  sparks(scene, x, gy - 30, 6, 160);
+};
+
+/** Verdict: a sigil opens over the target and a pixel blade of light plunges into the ground. */
+const verdictArea: VfxFn = (scene, o) => {
+  const gy = o.groundY ?? o.y + 30;
+  const x = o.x;
+  const sig = img(scene, HT.sigil, x, gy - 190, { tint: C.gold, alpha: 0, depth: DEPTH.VFX_TOP, scale: 0.5 });
+  sig.setScale(1, 0.4);
+  scene.tweens.add({ targets: sig, alpha: 0.9, scaleX: 2, scaleY: 0.7, duration: 160, ease: 'Back.easeOut' });
+  tweenOut(scene, sig, { alpha: 0 }, 260, 'Stepped', 260);
+  const sword = img(scene, HT.sword, x, gy - 150, { tint: C.pale, scale: 2, alpha: 0, origin: [0.5, 1], depth: DEPTH.VFX_TOP });
+  const ghost = img(scene, HT.sword, x, gy - 150, { tint: C.gold, scale: 2, alpha: 0, origin: [0.5, 1], depth: DEPTH.VFX });
+  scene.tweens.add({ targets: [sword, ghost], alpha: 1, duration: 40, delay: 30 });
+  tweenOut(scene, ghost, { y: gy - 40, alpha: 0 }, 170, 'Quad.easeIn', 40);
+  scene.tweens.add({
+    targets: sword, y: gy + 18, duration: 160, delay: 40, ease: 'Quad.easeIn',
+    onComplete: () => {
+      tweenOut(scene, sword, { alpha: 0 }, 300, 'Stepped', 220);
+      if (!hfx(scene, 'h_slash', x, gy - 50, { scale: 4, add: true, dur: 260, rot: Math.PI / 2, depth: DEPTH.VFX_TOP })) {
+        flash(scene, x, gy - 50, C.white, 90, 220, 1);
+      }
+      hfx(scene, 'h_sun', x, gy - 40, { scale: 2, dur: 380, depth: DEPTH.VFX });
+      shock(scene, x, gy - 2, 150, 0.28);
+      sparks(scene, x, gy - 30, 8, 220);
+      shake(scene, 80, 0.003);
+    },
+  });
+};
+
+/** Dawn Rush out: a burst of feathers of light where the charge starts. */
+const rushOut: VfxFn = (scene, o) => {
+  const { x, y, facing: f } = o;
+  lightShaft(scene, x, y + 2, 34, 110, C.pale, 0, 260);
+  if (!hfx(scene, 'h_wings', x - f * 6, y - 46, { scale: 2, add: true, dur: 260, alpha: 0.8, depth: DEPTH.VFX })) flash(scene, x, y - 36, C.gold, 70, 220, 0.8);
+  burst(scene, x, y - 30, HT.mote, 12, 600, {
+    speed: { min: 40, max: 140 }, angle: f > 0 ? { min: 140, max: 220 } : { min: -40, max: 40 }, lifespan: { min: 300, max: 600 },
+    scale: { start: 2, end: 1 }, alpha: { start: 1, end: 0 }, tint: GOLD_TINTS,
+  }, DEPTH.VFX_TOP);
+};
+
+/** Dawn Rush path (beam call: x,y = start, targetX = end): a low streak of dawn light with flames licking along it. */
+const rushTrail: VfxFn = (scene, o) => {
+  const sx = o.x, tx = o.targetX ?? o.x + o.facing * 200, y = o.y;
+  const len = Math.abs(tx - sx), dir = tx >= sx ? 1 : -1;
+  const th = (o.h ?? 90) * 0.45;
+  lightBeam(scene, { ...o, targetX: tx, targetY: y }, th, [C.amber, C.gold, C.white], false);
+  const n = Math.max(2, Math.min(5, Math.round(len / 60)));
+  const gy = y + 34;
+  for (let i = 0; i < n; i++) {
+    const px = sx + dir * len * ((i + 0.5) / n);
+    if (!hfx(scene, 'h_lash', px, gy - 20, { scale: 2, add: true, flipX: dir < 0, dur: 360, delay: i * 30, depth: DEPTH.VFX })) {
+      hfx(scene, 'h_flame', px, gy + 4, { scale: 2, oy: 1, add: true, dur: 360, delay: i * 30 });
+    }
+  }
+};
+
+/** Dawn Rush arrival: the light settles and mends (heal number comes from the cast). */
+const rushIn: VfxFn = (scene, o) => {
+  const { x, y, facing: f } = o;
+  lightShaft(scene, x, y + 2, 34, 180, C.white, 0, 320, DEPTH.VFX_TOP);
+  hfx(scene, 'h_heal', x, y - 34, { scale: 2, add: true, dur: 360, depth: DEPTH.VFX_TOP });
+  shock(scene, x, y - 2, 100, 0.3);
+  burst(scene, x, y - 4, 'px_star', 6, 500, {
+    speed: { min: 60, max: 160 }, angle: f > 0 ? { min: 190, max: 250 } : { min: -70, max: -10 }, gravityY: 300,
+    lifespan: { min: 260, max: 500 }, scale: { start: 1.5, end: 0.5 }, alpha: { start: 1, end: 0 }, tint: GOLD_TINTS,
+  }, DEPTH.VFX_TOP);
+  motes(scene, x, y - 4, 8, 34, HEAL_TINTS);
+};
+
+/** Brand of Judgment hop: a chain of golden links snaps from (x,y) to (targetX,targetY). */
+const brandChain: VfxFn = (scene, o) => {
+  const sx = o.x, sy = o.y, tx = o.targetX ?? o.x + o.facing * 160, ty = o.targetY ?? o.y;
+  const len = Math.max(16, Phaser.Math.Distance.Between(sx, sy, tx, ty));
+  const ang = Math.atan2(ty - sy, tx - sx);
+  const n = Math.max(3, Math.min(18, Math.floor(len / 14)));
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n;
+    const lk = img(scene, HT.link, sx + (tx - sx) * t, sy + (ty - sy) * t, {
+      tint: i % 2 ? C.gold : C.pale, alpha: 0, depth: DEPTH.VFX_TOP, rot: ang + (i % 2 ? 0 : Math.PI / 2), scale: 1,
+    });
+    scene.tweens.add({ targets: lk, alpha: 1, duration: 30, delay: i * 8 });
+    tweenOut(scene, lk, { alpha: 0 }, 260, 'Stepped', 180 + i * 8);
+  }
+  const b = img(scene, HT.beam, sx, sy, { tint: C.deep, origin: [0, 0.5], rot: ang, alpha: 0.6, depth: DEPTH.VFX });
+  b.setScale(len / 128, 0.25);
+  tweenOut(scene, b, { alpha: 0 }, 260, 'Stepped', 60);
+  flash(scene, sx, sy, C.pale, 40, 160, 0.8);
+};
+
+/** Brand mark on a struck foe: a gold rune burns above its head for a moment (the "judged" tell). */
+const brandMark: VfxFn = (scene, o) => {
+  const h = o.h ?? 40;
+  const top = o.y - h / 2 - 16;
+  const r = img(scene, HT.rune, o.x, top, { tint: C.gold, scale: 0.5, alpha: 0, depth: DEPTH.VFX_TOP });
+  scene.tweens.add({ targets: r, alpha: 1, scale: 1, duration: 140, ease: 'Back.easeOut' });
+  scene.tweens.add({ targets: r, y: top - 4, duration: 200, delay: 160, yoyo: true, repeat: 1, ease: 'Stepped', easeParams: [2] });
+  tweenOut(scene, r, { alpha: 0 }, 220, 'Stepped', 900);
+  if (!hfx(scene, 'h_burst', o.x, o.y, { scale: 2, dur: 300, depth: DEPTH.VFX_TOP })) flash(scene, o.x, o.y, C.gold, 50, 180, 0.9);
+  flash(scene, o.x, o.y, C.white, 26, 120, 0.9);
+};
+
+/** Martyr's Vow: light is drawn out of the caster into a spinning offering. */
+const martyrCast: VfxFn = (scene, o) => {
+  const { x, y } = o;
+  const cy = y - 36;
+  if (!hfx(scene, 'h_vortex', x, cy, { scale: 2, add: true, dur: 520, depth: DEPTH.VFX_TOP })) flash(scene, x, cy, C.deep, 140, 420, 0.8);
+  flash(scene, x, cy, C.white, 60, 200, 0.9);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const cr = img(scene, HT.cross, x + Math.cos(a) * 54, cy + Math.sin(a) * 40, { tint: i % 2 ? C.deep : C.white, depth: DEPTH.VFX_TOP, scale: 1 });
+    tweenOut(scene, cr, { x, y: cy, alpha: 0.2 }, 260, 'Quad.easeIn', i * 20);
+  }
+};
+
+/** Martyr's Vow burst: the offered HP explodes outward as holy light along the ground. */
+const martyrBurst: VfxFn = (scene, o) => {
+  const { w, h } = sizeOf(o, 320, 160);
+  const x = o.x, gy = o.groundY ?? o.y + h * 0.5 - 20;
+  const cy = gy - 36;
+  hfx(scene, 'h_nebula', x, cy, { scale: 2, dur: 480, alpha: 0.85, depth: DEPTH.VFX });
+  if (!hfx(scene, 'h_sun', x, cy, { scale: 2, dur: 380, depth: DEPTH.VFX_TOP })) flash(scene, x, cy, C.white, 140, 280, 1);
+  shock(scene, x, gy - 2, w * 1.05, 0.26);
+  shock(scene, x, cy, w * 0.6, 0.55, 80, DEPTH.VFX, C.deep);
+  for (let i = 0; i < 4; i++) {
+    const s = i % 2 ? 1 : -1, t = 0.2 + Math.floor(i / 2) * 0.2;
+    hfx(scene, 'h_flame', x + s * t * w, gy + 4, { scale: 2, oy: 1, add: true, dur: 400, delay: 40 + Math.floor(i / 2) * 60, flipX: s < 0 });
+  }
+  burst(scene, x, cy, 'px_star', 14, 700, {
+    speed: { min: w * 0.5, max: w * 0.9 }, angle: { min: 0, max: 360 }, lifespan: { min: 360, max: 700 },
+    scale: { start: 2, end: 0.5 }, alpha: { start: 1, end: 0 }, tint: [C.white, C.gold, C.deep],
+  }, DEPTH.VFX_TOP);
+  shake(scene, 110, 0.003);
+};
+
+/** Martyr's Vow renewal (persistent, at feet): a green-gold halo and crosses rising off the caster. */
+const martyrAura: VfxFn = (scene, o) => {
+  const c = scene.add.container(o.x, o.y).setDepth(DEPTH.VFX);
+  const halo = img(scene, HT.halo, 0, -84, { tint: C.green, scale: 1, alpha: 0.95 });
+  const glow = img(scene, HT.glow, 0, -36, { tint: C.green, sx: 0.9, sy: 1.2, alpha: 0.25 });
+  c.add([glow, halo]);
+  loop(scene, c, { targets: halo, y: -87, duration: 400, yoyo: true, ease: 'Stepped', easeParams: [2] });
+  loop(scene, c, { targets: glow, alpha: 0.1, duration: 500, yoyo: true, ease: 'Stepped', easeParams: [2] });
+  attachTrail(scene, c, HT.cross, 900, {
+    speedY: { min: -70, max: -40 }, speedX: { min: -6, max: 6 }, lifespan: { min: 600, max: 900 },
+    scale: 1, alpha: { start: 1, end: 0 }, tint: HEAL_TINTS, frequency: 220, quantity: 1,
+    emitZone: zone(new Phaser.Geom.Rectangle(-20, -60, 40, 50)),
+  }, DEPTH.VFX_TOP);
+  return c;
+};
+
+/** Retribution cast: a judging sigil turns over the caster. */
+const retribCast: VfxFn = (scene, o) => {
+  const { x, y } = o;
+  if (!hfx(scene, 'h_spin', x, y - 40, { scale: 2, add: true, dur: 520, depth: DEPTH.VFX_TOP })) flash(scene, x, y - 40, C.deep, 120, 400, 0.8);
+  const sig = img(scene, HT.sigil, x, y - 2, { tint: C.deep, alpha: 0, depth: DEPTH.PLAYER - 1 });
+  sig.setScale(0.5, 0.17);
+  scene.tweens.add({ targets: sig, scaleX: 2.5, scaleY: 0.8, alpha: 1, duration: 260, ease: 'Back.easeOut' });
+  tweenOut(scene, sig, { alpha: 0 }, 300, 'Quad.easeIn', 420);
+  lightShaft(scene, x, y + 2, 50, 200, C.gold, 0, 520);
+  shock(scene, x, y - 2, 150, 0.3, 0, DEPTH.VFX, C.deep);
+};
+
+/** Retribution aura (persistent, at feet): three crosses of judgment circling the caster. */
+const retribAura: VfxFn = (scene, o) => {
+  const c = scene.add.container(o.x, o.y).setDepth(DEPTH.VFX);
+  const ring = img(scene, HT.halo, 0, -6, { tint: C.deep, scale: 2, alpha: 0.6 });
+  c.add(ring);
+  const crosses = [0, 1, 2].map(i => img(scene, HT.cross, 0, -40, { tint: i === 0 ? C.white : C.gold, scale: 1 }));
+  c.add(crosses);
+  counter(scene, c, Math.PI * 2, 1800, (v) => {
+    crosses.forEach((cr, i) => {
+      const a = v + (i * Math.PI * 2) / 3;
+      // snap to whole pixels (2px grid) so the orbit stays crisp
+      cr.x = Math.round((Math.cos(a) * 30) / 2) * 2;
+      cr.y = Math.round((-40 + Math.sin(a) * 12) / 2) * 2;
+      cr.setDepth(Math.sin(a) > 0 ? DEPTH.VFX_TOP : DEPTH.PLAYER - 1);
+    });
+  });
+  loop(scene, c, { targets: ring, alpha: 0.25, duration: 500, yoyo: true, ease: 'Stepped', easeParams: [2] });
+  return c;
+};
+
+/** Retribution strike: a bolt of judgment falls from the sky onto the offender (x,y = target centre). */
+const retribStrike: VfxFn = (scene, o) => {
+  const gy = o.groundY ?? o.y + 30;
+  const x = o.x;
+  const bolt = hfx(scene, 'h_skybolt', x, gy + 6, { scale: 2, oy: 1, dur: 360, depth: DEPTH.VFX_TOP });
+  if (!bolt) lightShaft(scene, x, gy + 2, 30, 260, C.white, 0, 300, DEPTH.VFX_TOP);
+  lightShaft(scene, x, gy + 2, 50, 240, C.gold, 0, 320, DEPTH.VFX);
+  flash(scene, x, gy - 30, C.white, 90, 220, 0.9);
+  shock(scene, x, gy - 2, 120, 0.28);
+  sparks(scene, x, gy - 20, 6, 180);
+  shake(scene, 60, 0.002);
+};
+
+/** Sanctuary cast: crystalline light blooms into a dome. */
+const sanctuaryCast: VfxFn = (scene, o) => {
+  const { x, y } = o;
+  if (!hfx(scene, 'h_frost_l', x, y - 40, { scale: 2, add: true, dur: 560, depth: DEPTH.VFX_TOP })) flash(scene, x, y - 40, C.cyan, 160, 500, 0.8);
+  hfx(scene, 'h_wings_l', x, y - 50, { scale: 2, add: true, dur: 520, depth: DEPTH.PLAYER - 1 });
+  lightShaft(scene, x, y + 2, 70, 240, C.cyan, 0, 600);
+  shock(scene, x, y - 2, 180, 0.3, 0, DEPTH.VFX, C.cyan);
+  motes(scene, x, y - 10, 16, 80, LIGHT_TINTS);
+};
+
+/** Sanctuary dome (persistent, at feet). The cast dims it as the barrier is spent. */
+const sanctuaryAura: VfxFn = (scene, o) => {
+  const c = scene.add.container(o.x, o.y).setDepth(DEPTH.VFX);
+  const glow = img(scene, HT.glow, 0, -36, { tint: C.cyan, sx: 1.4, sy: 1.6, alpha: 0.22 });
+  c.add(glow);
+  const dome = hloop(scene, c, 'h_ward_l', 0, -36, { scale: 2, alpha: 0.85, add: true, fps: 10 });
+  if (!dome) {
+    const r = img(scene, 'px_ring', 0, -36, { tint: C.cyan, scale: 3, alpha: 0.6 });
+    c.add(r);
+  }
+  const cap = img(scene, HT.halo, 0, -84, { tint: C.white, scale: 2, alpha: 0.7 });
+  c.add(cap);
+  loop(scene, c, { targets: [glow, cap], alpha: 0.12, duration: 600, yoyo: true, ease: 'Stepped', easeParams: [3] });
+  attachTrail(scene, c, HT.mote, 800, {
+    speed: { min: 2, max: 10 }, lifespan: { min: 500, max: 800 }, scale: { start: 2, end: 1 },
+    alpha: { start: 1, end: 0 }, tint: LIGHT_TINTS, frequency: 120, quantity: 1,
+    emitZone: zone(new Phaser.Geom.Ellipse(0, -36, 76, 84), 'edge', 20),
+  });
+  return c;
+};
+
+/** Sanctuary absorbs a blow: the dome flares where it was struck. */
+const sanctuaryAbsorb: VfxFn = (scene, o) => {
+  const { x, y } = o;
+  flash(scene, x, y - 36, C.cyan, 110, 200, 0.7);
+  if (!hfx(scene, 'h_ringpop', x, y - 36, { scale: 4, add: true, dur: 240, depth: DEPTH.VFX_TOP })) flash(scene, x, y - 36, C.white, 60, 160, 0.9);
+  sparks(scene, x, y - 36, 5, 160, LIGHT_TINTS);
+};
+
+/** Sanctuary release: the stored light detonates outward. */
+const sanctuaryBurst: VfxFn = (scene, o) => {
+  const { w, h } = sizeOf(o, 360, 200);
+  const x = o.x, gy = o.groundY ?? o.y + h * 0.5 - 20;
+  const cy = gy - 40;
+  if (!hfx(scene, 'h_boom', x, gy + 4, { scale: 2, oy: 1, dur: 520, depth: DEPTH.VFX_TOP })) flash(scene, x, cy, C.white, w * 0.6, 360, 1);
+  hfx(scene, 'h_ward_l', x, cy, { scale: 4, add: true, dur: 300, depth: DEPTH.VFX });
+  flash(scene, x, cy, C.cyan, w * 0.7, 320, 0.7);
+  shock(scene, x, gy - 2, w * 1.1, 0.25, 0, DEPTH.VFX, C.cyan);
+  shock(scene, x, cy, w * 0.7, 0.6, 80);
+  burst(scene, x, cy, 'px_shard', 14, 700, {
+    speed: { min: w * 0.5, max: w * 1 }, angle: { min: 0, max: 360 }, rotate: { min: 0, max: 360 }, lifespan: { min: 380, max: 700 },
+    scale: { start: 1, end: 0.5 }, alpha: { start: 1, end: 0 }, tint: LIGHT_TINTS,
+  }, DEPTH.VFX_TOP);
+  shake(scene, 160, 0.004);
+};
+
+/** Ray of Dawn (persistent; x,y = staff tip, w = length, h = thickness). The cast moves it with the caster. */
+const dawnBeam: VfxFn = (scene, o) => {
+  const f = o.facing;
+  const len = o.w ?? 560;
+  const th = o.h ?? 64;
+  const snap = (v: number) => Math.max(4, Math.round(v / 4) * 4);
+  const c = scene.add.container(o.x, o.y).setDepth(DEPTH.VFX);
+  const band = (tint: number, thick: number, alpha: number) => {
+    const b = img(scene, HT.beam, 0, 0, { tint, origin: [0, 0.5], alpha });
+    b.setScale(0.05, snap(thick) / 32);
+    scene.tweens.add({ targets: b, scaleX: len / 128, duration: 110, ease: 'Cubic.easeOut' });
+    c.add(b);
+    return b;
+  };
+  const outer = band(C.deep, th * 1.1, 0.45);
+  const mid = band(C.gold, th * 0.65, 0.9);
+  const core = band(C.white, th * 0.28, 1);
+  loop(scene, c, { targets: outer, scaleY: (snap(th * 1.1) / 32) * 0.75, duration: 90, yoyo: true, ease: 'Stepped' });
+  loop(scene, c, { targets: core, alpha: 0.6, duration: 70, yoyo: true, ease: 'Stepped' });
+  loop(scene, c, { targets: mid, alpha: 0.7, duration: 120, yoyo: true, ease: 'Stepped' });
+  // muzzle bloom + far-end flare
+  const muzzle = hloop(scene, c, 'h_star', 4, 0, { scale: 2, add: true });
+  if (!muzzle) c.add(img(scene, HT.glow, 0, 0, { tint: C.white, scale: 0.5 }));
+  const tip = img(scene, HT.glow, len, 0, { tint: C.pale, scale: 0.6, alpha: 0.8 });
+  c.add(tip);
+  loop(scene, c, { targets: tip, scale: 0.4, duration: 100, yoyo: true, ease: 'Stepped' });
+  // light motes racing along the beam
+  for (let i = 0; i < 4; i++) {
+    const m = img(scene, 'px_star', 0, 0, { tint: i % 2 ? C.white : C.pale, scale: 1.5 });
+    c.add(m);
+    loop(scene, c, { targets: m, x: { from: 0, to: len }, y: { from: rnd(-th * 0.2, th * 0.2), to: rnd(-th * 0.2, th * 0.2) }, duration: 360, delay: i * 90, ease: 'Linear' });
+  }
+  c.setScale(f, 1);
+  attachTrail(scene, c, HT.mote, 600, {
+    speedY: { min: -50, max: -10 }, speedX: { min: -20, max: 20 }, lifespan: { min: 360, max: 600 },
+    scale: { start: 2, end: 1 }, alpha: { start: 1, end: 0 }, tint: GOLD_TINTS, frequency: 24, quantity: 1,
+    emitZone: zone(new Phaser.Geom.Rectangle(f > 0 ? 0 : -len, -th * 0.4, len, th * 0.8)),
+  });
+  flash(scene, o.x, o.y, C.white, 80, 220, 0.9);
+  shake(scene, 120, 0.0015);
+  return c;
+};
+
+/** Ray of Dawn per-tick hit: a light, cheap sparkle (ten ticks × many foes). */
+const dawnHit: VfxFn = (scene, o) => {
+  if (!hfx(scene, 'h_sparkle', o.x + rnd(-6, 6), o.y + rnd(-8, 8), { scale: 2, add: true, depth: DEPTH.VFX_TOP })) flash(scene, o.x, o.y, C.gold, 34, 140, 0.9);
+};
+
 // ───────────────────────────── registry ─────────────────────────────
 
 export function registerHolyVfx(): void {
@@ -778,4 +1117,26 @@ export function registerHolyVfx(): void {
   reg('holy_judgment_cast', judgmentCast);
   reg('holy_judgment_area', judgmentArea);
   reg('holy_salvation', salvationFx);
+
+  // Phase 9
+  reg('holy_glyph', glyphBody);
+  reg('holy_glyph_pulse', glyphPulse);
+  reg('holy_verdict_area', verdictArea);
+  reg('holy_rush_out', rushOut);
+  reg('holy_rush_trail', rushTrail);
+  reg('holy_rush_in', rushIn);
+  reg('holy_brand_chain', brandChain);
+  reg('holy_brand_mark', brandMark);
+  reg('holy_martyr_cast', martyrCast);
+  reg('holy_martyr_burst', martyrBurst);
+  reg('holy_martyr_aura', martyrAura);
+  reg('holy_retrib_cast', retribCast);
+  reg('holy_retrib_aura', retribAura);
+  reg('holy_retrib_strike', retribStrike);
+  reg('holy_sanctuary_cast', sanctuaryCast);
+  reg('holy_sanctuary_aura', sanctuaryAura);
+  reg('holy_sanctuary_absorb', sanctuaryAbsorb);
+  reg('holy_sanctuary_burst', sanctuaryBurst);
+  reg('holy_dawn_beam', dawnBeam);
+  reg('holy_dawn_hit', dawnHit);
 }

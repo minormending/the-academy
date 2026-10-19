@@ -86,6 +86,99 @@ const MOTE = [
   ['..........', '..........', '..........', '....o.....', '...oyo....', '....o.....', '..........', '..........', '..........', '..........'],
 ];
 
+
+// ───── Phase 9 hand-drawn sprites (1× grid; rows padded to the frame width) ─────
+const padTo = (w: number, rows: string[]): string[] => rows.map(r => r.padEnd(w, '.').slice(0, w));
+
+// 14×8 cinder mine: an iron dome with a molten core (3 frames: bright, flash, dull; held on the dull frame until armed)
+const MINE_A = padTo(14, [
+  '..............',
+  '.....kkkk.....',
+  '...kkdmmdkk...',
+  '..kdmogyomdk..',
+  '.kdrmoyyomrdk.',
+  'kkdrrmmmmrrdkk',
+  'kddddddddddddk',
+  '.kkkkkkkkkkkk.',
+]);
+const MINE_B = padTo(14, [
+  '......w.......',
+  '.....kkkk.....',
+  '...kkdmmdkk...',
+  '..kdmywwymdk..',
+  '.kdrmywwymrdk.',
+  'kkdrrmoomrrdkk',
+  'kddddddddddddk',
+  '.kkkkkkkkkkkk.',
+]);
+const MINE_C = padTo(14, [
+  '..............',
+  '.....kkkk.....',
+  '...kkdddkk....',
+  '..kddrmrddk...',
+  '.kdrrmmmrrdk..',
+  'kkdrrrrrrrrdkk',
+  'kddddddddddddk',
+  '.kkkkkkkkkkkk.',
+]);
+
+// 11×11 brand sigil hovering over a marked foe: flame inside a diamond (3 frames: outline pulses)
+const BRAND_BASE = [
+  '.....o.....',
+  '....oyo....',
+  '...o.g.o...',
+  '..o.ygy.o..',
+  '.o.ygwgy.o.',
+  'o.mgwwwgm.o',
+  '.o.mgygm.o.',
+  '..o.mmm.o..',
+  '...o...o...',
+  '....o.o....',
+  '.....o.....',
+];
+const BRAND = [
+  BRAND_BASE.map(r => r.replace(/o/g, 'm')),
+  BRAND_BASE,
+  BRAND_BASE.map(r => r.replace(/o/g, 'g').replace(/w/g, 'y')),
+];
+
+// 16×10 flamethrower gust: a hot puff that swells and breaks up as it travels (3 frames)
+const JET = [
+  padTo(16, [
+    '', '',
+    '.....oo',
+    '...ogyyo',
+    '..mgywwyo',
+    '..mgywwyo',
+    '...ogyyo',
+    '.....oo',
+  ]).concat(padTo(16, ['', ''])),
+  padTo(16, [
+    '',
+    '.....ooo',
+    '...mogyygo',
+    '..mogyyyygo',
+    '.mogyywwyygo',
+    '.mogyywwyygo',
+    '..mogyyyygo',
+    '...mogyygo',
+    '.....ooo',
+    '',
+  ]),
+  padTo(16, [
+    '......r.mm',
+    '...rmmoomm.r',
+    '..rmoogggoom',
+    '.rmoggyyyggom',
+    'rmooggyyyggoom',
+    '.rmoggyyyggomr',
+    '..rmoogggoom',
+    '...rmmoomm.r',
+    '......rmm',
+    '',
+  ]),
+];
+
 export const FIRE_SHEETS: Record<string, FireSheet> = {
   // CodeManu protection circle (CC0), green/pink → fire ward ring
   ward: { src: 'src_vfx_cm_shield', rects: strip(36, 36, 16), fps: 16, recolor: true },
@@ -99,6 +192,18 @@ export const FIRE_SHEETS: Record<string, FireSheet> = {
   bomb: { src: null, rects: strip(12, 12, 2), fps: 10, art: [BOMB_A, BOMB_B] },
   dart: { src: null, rects: strip(12, 6, 2), fps: 14, art: [DART_A, DART_B] },
   mote: { src: null, rects: strip(10, 10, 3), fps: 8, art: MOTE },
+  // ───── Phase 9 ─────
+  mine: { src: null, rects: strip(14, 8, 3), fps: 6, art: [MINE_A, MINE_B, MINE_C] },
+  brand: { src: null, rects: strip(11, 11, 3), fps: 6, art: BRAND },
+  jet: { src: null, rects: strip(16, 10, 3), fps: 12, art: JET },
+  // ansimuz dark bolt (CC0) → a white-hot ember falling from the sky (Last Ember)
+  bolt: { src: 'src_vfx_g9_darkbolt', rects: strip(88, 84, 8), fps: 16, recolor: true },
+  // CodeManu midnight (CC0) → a guttering star in the hand (Last Ember charge)
+  star: { src: 'src_vfx_cm_midnight', rects: strip(58, 58, 14), fps: 22, recolor: true },
+  // CodeManu vortex (CC0) → the Wandering Sun's corona
+  corona: { src: 'src_vfx_cm_vortex', rects: strip(76, 76, 14), fps: 20, recolor: true },
+  // ansimuz spark (CC0) → a burst ring (brand death-burst, flashover ignition)
+  pop: { src: 'src_vfx_g9_spark', rects: strip(30, 30, 7), fps: 18, recolor: true },
 };
 
 const texKey = (id: string) => `fire_pxs_${id}`;

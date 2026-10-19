@@ -145,6 +145,10 @@ const SONGS: Record<MusicKey, SongDef> = {
     arp: { pattern: ['0 1 2 1 0 1 2 3'], octave: 4, inst: 'pluck', vol: 0.03, everyOther: true },
     drums: { kick: ['x . x . x . x .'], snare: ['. . x . . . x x', '. . x . . x x x'], hat: ['x x x x x x x x'], vol: 0.75, crashOnLoop: true },
   },
+  // Placeholder aliases for the Phase 9 zones (replaced by bespoke tracks).
+  get marsh() { return SONGS.forest; },
+  get grotto() { return SONGS.cave; },
+  get library() { return SONGS.title; },
 };
 
 // ───────────────────────────── parsing ─────────────────────────────

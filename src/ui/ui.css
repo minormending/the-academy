@@ -1597,9 +1597,19 @@ html.ax-mobile #ui-root .ax-tc-slot.ax-empty { opacity: 0.55; }
 html.ax-mobile #ui-root .ax-title.ax-cs-on .ax-cs:has(.ax-cc) { padding-top: 6px; }
 html.ax-mobile #ui-root .ax-cc { width: 700px; max-height: 393px; overflow-y: auto; padding: 8px 12px 0; gap: 8px; }
 html.ax-mobile #ui-root .ax-cc .ax-cs-sub { display: none; }
-html.ax-mobile #ui-root .ax-cc-main { flex-direction: column; align-items: center; gap: 10px; }
-html.ax-mobile #ui-root .ax-cc-sprite { width: 160px; height: 160px; }
-html.ax-mobile #ui-root .ax-cc-pedestal { top: 144px; width: 90px; margin-left: -45px; }
+/* Landscape phone: preview left, swatches right, so everything fits without scrolling. */
+html.ax-mobile #ui-root .ax-cc-main { flex-direction: row; align-items: flex-start; justify-content: center; gap: 16px; }
+html.ax-mobile #ui-root .ax-cc-stage { padding: 4px 6px 8px; gap: 6px; }
+html.ax-mobile #ui-root .ax-cc-sprite { width: 168px; height: 168px; }
+html.ax-mobile #ui-root .ax-cc-pedestal { top: 150px; width: 90px; margin-left: -45px; }
+html.ax-mobile #ui-root .ax-cc-mode { min-width: 52px; padding: 0 6px; }
+html.ax-mobile #ui-root .ax-cc-rows { gap: 6px; }
+html.ax-mobile #ui-root .ax-cc-row { gap: 2px; }
+html.ax-mobile #ui-root .ax-cc-swatches { gap: 5px; }
+html.ax-mobile #ui-root .ax-cc-sw { width: 44px; height: 40px; }
+html.ax-mobile #ui-root .ax-cc-schools { margin-top: 0; }
+html.ax-mobile #ui-root .ax-cc-school { width: 60px; font-size: 0; padding-bottom: 0; }
+html.ax-mobile #ui-root .ax-cc-mini { width: 60px; height: 60px; }
 html.ax-mobile #ui-root .ax-cc-bar {
   position: sticky; bottom: 0; padding: 6px 0 8px; width: 100%; justify-content: center; background: var(--ax-indigo);
   box-shadow: 0 -2px 0 var(--ax-k);

@@ -21,11 +21,11 @@ a resumed session (after a usage-limit pause) reads it to pick up exactly where 
 - [x] **3. Holy & Shadow schools** — contract, jobs, statuses (poison/curse), trees.
 - [x] **4. The Academy** — rename + school-year premise; 10 Year-1 spells + 5 Schools × 24; professors,
       exams, campus with five halls; spellbook UI; two-page hotbar; familiar (Pip); field bosses + bounties.
-- [~] **5. Systems & feel**
+- [x] **5. Systems & feel**
   - [x] Respec (Tome of Unlearning, per-Year Unlearn)
   - [x] Gamepad bridge
   - [x] Trial Hall wave arena (+ GameScene wiring by lead)
-  - [~] Pacing playthrough QA levels 1–25
+  - [x] Pacing playthrough QA levels 1–25
 - [x] **6. Story & structure**
   - [x] Main questline across the four Years (13 `story_` quests, all five Schools reach graduation).
   - [x] Year 1 orientation/tutorial assignment chain.
@@ -33,12 +33,12 @@ a resumed session (after a usage-limit pause) reads it to pick up exactly where 
   - [x] UI wiring: graduation credits screen on `quest:updated` for `GRADUATION_QUEST_ID` turned_in;
         quest log hides locked story steps (`storyStepUnlocked`, `STORY_QUEST_IDS`); no banner flash for
         talk-only steps that go straight to turned_in; rename `q_maelis_archon` to avoid name overlap.
-- [~] **7. Quality of life & polish** (save slots + controls in progress)
+- [x] **7. Quality of life & polish**
   - [x] Multiple save slots / character select (MapleStory-style), with per-slot School + Year shown.
   - [x] Key rebinding + controls screen (keyboard + gamepad map), settings persistence.
   - [x] Help/UI mentions gamepad; damage-number readability options; screen-shake toggle.
-  - [ ] Pacing QA levels 25–50 (Years 3–4) per School; boss tuning pass (after the 1–25 pass lands).
-- [ ] **8. Ship**
+  - [x] Pacing QA levels 25–50 (Years 3–4) per School; boss tuning pass.
+- [~] **8. Ship**
   - Full regression QA (all five Schools, every map, bosses, arena, saves) + Codex final review.
   - [x] Performance pass (busy ultimates, load time), production build.
   - [x] README (how to play/run, credits); [x] final CREDITS merge.

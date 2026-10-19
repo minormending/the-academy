@@ -379,7 +379,7 @@ const glacialLance: SkillDef = {
   kind: 'attack',
   maxLevel: 20,
   icon: icon('icicle', 0xd8f8ff, 0x4aa8ff),
-  requires: [{ skillId: 'ice_lance', level: 10 }],
+  requires: [{ skillId: 'ice_lance', level: 5 }],
   mpCost: lerpR(45, 60, 20),
   // No cooldown: it is the tier-4 primary (fire/lightning primaries have none). A fanned volley shares one
   // hit set (AttackRunner), so a target takes ONE lance per cast: the per-hit % carries the single-target

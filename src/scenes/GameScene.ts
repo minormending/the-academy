@@ -43,6 +43,8 @@ export class GameScene extends Phaser.Scene implements IGameApi {
   private nextPickupAt = 0;
   /** Presses latched from key 'down' events so sub-frame taps are never lost (Phaser clears _justDown on keyup). */
   private pendingDest: { mapId: string; portalId?: string } | null = null;
+  /** A spell tapped while another cast was still locking the player; fired as soon as the lock ends. */
+  private castBuffer: { skillId: string; until: number } | null = null;
   private latched = new Set<Phaser.Input.Keyboard.Key>();
 
   constructor() { super(SCENES.GAME); }
@@ -55,6 +57,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     this.pendingDest = null;
     this.latched.clear();
     this.page = 0;
+    this.castBuffer = null;
   }
 
   create() {
@@ -276,6 +279,15 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     if (JustDown(this.keyPage)) this.setHotbarPage(this.page + 1);
     const hotbar = s.progression.state.hotbar;
     const offset = this.page * HOTBAR_PAGE_SIZE;
+    // Buffered tap from the previous cast lock: fire it the moment the player is free (≤350ms window).
+    if (this.castBuffer) {
+      if (time > this.castBuffer.until) this.castBuffer = null;
+      else if (!s.player.isBusy()) {
+        const id = this.castBuffer.skillId;
+        this.castBuffer = null;
+        s.skills.tryCast(id);
+      }
+    }
     for (let i = 0; i < this.hotkeys.length; i++) {
       const key = this.hotkeys[i];
       const entry = hotbar[offset + i];
@@ -287,6 +299,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
       const pressed = JustDown(key);
       if (!key?.isDown && !pressed) continue;
       const r = s.skills.tryCast(entry);
+      if (pressed && r === 'busy' && !key?.isDown) this.castBuffer = { skillId: entry, until: time + 350 };
       if (pressed && r !== 'ok' && r !== 'busy') {
         const msg = r === 'no_mp' ? 'Not enough MP.' : r === 'cooldown' ? 'That skill is still cooling down.'
           : r === 'not_learned' ? 'You have not learned that skill.' : r === 'passive' ? 'Passive skills are always active.' : '';

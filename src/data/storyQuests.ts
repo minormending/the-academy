@@ -95,7 +95,7 @@ export const STORY_QUESTS: QuestDef[] = [
   },
   {
     id: 'story_crack_in_seal', name: 'A Crack in the Seal', giver: 'seraphine', minLevel: 38,
-    description: 'With the stolen verses, something has begun to crack the Forbidden Wing\'s seal, and the pieces are blowing out over Stormspire Peak. Storm Harpies are carrying them to the Thunder Drakes\' nests. Ground 20 Storm Harpies and recover 4 Seal Fragments for Professor Seraphine.',
+    description: 'With the stolen verses, something has begun to crack the Forbidden Wing\'s seal, and the pieces are blowing out over Stormspire Peak. Storm Harpies are carrying them to the Thunder Drakes\' nests. Ground 20 Storm Harpies, then pry 4 Seal Fragments from the drakes (or the wisps of the Forbidden Wing) for Professor Seraphine.',
     objectives: [{ kind: 'kill', monsterId: 'storm_harpy', count: 20 }, { kind: 'collect', itemId: 'seal_fragment', count: 4 }],
     rewards: { exp: xp(39, 0.4), mesos: 9000, items: [{ itemId: 'elixir', qty: 5 }] },
   },

@@ -232,7 +232,7 @@ export const HOLY_SKILLS: SkillDef[] = [
   {
     id: 'holy_angel_ray', name: 'Angel Ray', job: 'hierophant', element: 'holy', kind: 'attack', maxLevel: 20,
     description: 'Hurl a spear of angelic light that pierces up to four enemies, striking each three times.',
-    icon: icon('wings', 0xffffff, 0xffd84a), requires: [{ skillId: 'holy_sacred_lance', level: 10 }],
+    icon: icon('wings', 0xffffff, 0xffd84a), requires: [{ skillId: 'holy_sacred_lance', level: 5 }],
     mpCost: Li(44, 66, 20), castTimeMs: 480, sfx: 'cast_holy',
     attack: {
       pattern: 'projectile', damagePct: L(125, 190, 20), hits: K(3), maxTargets: K(4), range: 600,

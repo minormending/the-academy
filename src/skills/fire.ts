@@ -283,7 +283,7 @@ export const FIRE_SKILLS: SkillDef[] = [
   {
     id: 'fire_inferno_lance', name: 'Inferno Lance', job: 'inferno_sage', element: 'fire', kind: 'attack', maxLevel: 20,
     description: 'Fire a piercing lance of white-hot flame that sears everything in a long line three times.',
-    icon: icon('meteor', 0xfff0a0, 0xff3a0c), requires: [{ skillId: 'fire_orb', level: 10 }],
+    icon: icon('meteor', 0xfff0a0, 0xff3a0c), requires: [{ skillId: 'fire_orb', level: 5 }],
     mpCost: Li(46, 70, 20), castTimeMs: 500, sfx: 'cast_fire',
     attack: {
       pattern: 'beam', damagePct: L(130, 205, 20), hits: K(3), maxTargets: K(6), range: 540,

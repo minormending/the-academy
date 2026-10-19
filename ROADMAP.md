@@ -74,3 +74,12 @@ Shared switch `src/ui/mobile.ts` (`isMobileLayout()`, `MOBILE_UI` 720×405, `MOB
       docs mention of the mobile layout, push, verify the Pages deploy on a phone-sized viewport.
 - [ ] Leftovers from Year 5: handbook lists only Year 3/4 exams (`src/guide/context.ts`, `schools.ts`, `walkthrough.ts`);
       tier-5 character decoration (`src/art/characters.ts:84`); "EXAM PASSED — YEAR 5" banner wording; README/devdocs for Year 5 + cap 70.
+
+### Phase 11b — 20-agent polish batch (2026-10-19, uncommitted until integrated)
+Character creation shipped (a879717, cc02d5e). Then 20 agents were launched on disjoint files. Resume protocol: run
+`npx tsc --noEmit`, `npm test`, `npm run build`, fix anything broken, check review findings, then commit with explicit paths and push.
+- Phones: canvas fills the screen (src/main.ts, mobile.ts, scaler.ts, index.html); camera bounds clear of the touch pads (GameScene camera); bigger sheet text (ui.css M2 block); touch haptics, cooldown sweeps and multi-touch (touchControls.ts)
+- Handbook Year 5 + "Design your mage" (src/guide/context.ts, schools.ts, walkthrough.ts); README/ARCHITECTURE/DEVDOCS refresh
+- Fellowship banner wording; Year 5 polish per School (src/skills/<school>/year5.ts, vfx5.ts); Year 5 Honors
+- "Change look" editor (src/ui/appearanceEditor.ts + statsWindow button); creator gamepad/polish; Large text setting
+- Tests: tests/appearance.test.ts (+ mobile); read-only reviews of the appearance, mobile HUD and mobile windows diffs

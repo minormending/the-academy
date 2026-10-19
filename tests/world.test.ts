@@ -129,7 +129,7 @@ describe('maps', () => {
     const p = problems();
     for (const m of MAPS) {
       p.check(m.width > 0 && m.height > 0, `${m.id} size`);
-      p.check(m.levelRange[0] >= 1 && m.levelRange[0] <= m.levelRange[1] && m.levelRange[1] <= 60, `${m.id} levelRange ${m.levelRange}`);
+      p.check(m.levelRange[0] >= 1 && m.levelRange[0] <= m.levelRange[1] && m.levelRange[1] <= 70, `${m.id} levelRange ${m.levelRange}`);
       p.check(m.platforms.some(pl => !pl.oneWay && pl.x1 <= 0 && pl.x2 >= m.width), `${m.id} has no ground spanning the map`);
       for (const pl of m.platforms) p.check(pl.x1 < pl.x2 && pl.y > 0 && pl.y <= m.height, `${m.id} platform ${JSON.stringify(pl)}`);
       for (const r of m.ropes) p.check(r.x >= 0 && r.x <= m.width && r.top < r.bottom, `${m.id} rope ${JSON.stringify(r)}`);

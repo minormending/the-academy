@@ -2,6 +2,7 @@
 import type { AttackSpec, IconSpec, SkillContext, SkillDef, StatusSpec } from '../core/types';
 import { playVfx } from '../core/vfx';
 import { SHADOW_SPELLBOOK_ADDITIONS } from './shadow/spellbook';
+import { SHADOW_Y5 } from './shadow/year5';
 
 /** Clamped interpolation across learned levels; percentages are per hit line. */
 const L = (a: number, b: number, max: number) => (lv: number) =>
@@ -314,4 +315,5 @@ export const SHADOW_SKILLS: SkillDef[] = [
     },
   },
   ...SHADOW_SPELLBOOK_ADDITIONS,
+  ...SHADOW_Y5,
 ];

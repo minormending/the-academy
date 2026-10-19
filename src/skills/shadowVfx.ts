@@ -4,6 +4,7 @@ import { defineSchool, lazyRegister, scheduleIdle } from '../art/lazy';
 import { generateShadowTextures as generateBase } from './shadow/textures';
 import * as academy from './shadow/academyFx';
 import * as spellbook from './shadow/spellbookFx';
+import { registerShadowYear5Vfx } from './shadow/vfx5';
 import {
   arc, aura, beam, bolt, buffCast, cast, heal, hex, hit, plague, summon,
   tideCast, tideImpact, tideProjectile,
@@ -79,4 +80,5 @@ export function registerShadowVfx(): void {
   registerVfx('shd_hex_relay', spellbook.hexRelay);
   registerVfx('shd_soul_ward', spellbook.soulWard);
   registerVfx('shd_soul_ward_pulse', spellbook.soulWardPulse);
+  registerShadowYear5Vfx(registerVfx);
 }

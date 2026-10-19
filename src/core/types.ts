@@ -445,6 +445,10 @@ export interface PlayerState {
   mapId: string;
   quests: Record<string, QuestProgress>;
   playTimeMs: number;
+  /** Academy Merits — earned in the Trial Hall, spent at the Academy (optional for old saves). */
+  merits?: number;
+  /** Best Trial Hall wave reached. */
+  arenaBest?: number;
 }
 
 // ───────────────────────────── Service interfaces ─────────────────────────────
@@ -563,6 +567,9 @@ export interface IProgression {
   setHotbar(slot: number, entry: string | null): void;
   acceptQuest(questId: string): void;
   turnInQuest(questId: string): boolean;
+  addMerits(amount: number): void;
+  /** Unlearn every skill of the job at `tier` in the player's lineage; refunds its SP. Returns SP refunded. */
+  respecTier(tier: JobTier): number;
   save(): void;
   update(time: number, delta: number): void;   // regen, playtime, autosave
 }

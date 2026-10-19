@@ -1,5 +1,6 @@
 // OWNER: A9 (progression). Player state, derived stats, leveling, AP/SP, jobs, inventory, equipment, shops, quests.
 import type {
+  JobTier,
   BaseStatKey, DerivedStats, EquipSlot, GameServices, IMonster, IProgression, ItemDef, JobDef, JobId,
   PlayerState, QuestDef, SfxKey, StatModifier,
 } from '../core/types';
@@ -138,6 +139,35 @@ export class Progression implements IProgression {
       this.save();
     }
     this.changed();
+  }
+
+  addMerits(amount: number) {
+    amount = Math.floor(amount);
+    if (!amount) return;
+    this.state.merits = Math.max(0, (this.state.merits ?? 0) + amount);
+    if (amount > 0) bus.emit('ui:log', { text: `+${amount} Academy Merit${amount === 1 ? '' : 's'}`, color: '#ffd76a' });
+    this.changed();
+  }
+
+  respecTier(tier: JobTier): number {
+    const job = Registry.jobLineage(this.state.job).find(j => j.tier === tier);
+    if (!job) return 0;
+    let refund = 0;
+    for (const sk of Registry.skillsForJob(job.id)) {
+      const lv = this.state.skills[sk.id] ?? 0;
+      if (lv <= 0) continue;
+      // The free starting Arcane Bolt level is not refundable (it was never bought with SP).
+      const free = sk.id === 'app_arcane_bolt' ? 1 : 0;
+      refund += Math.max(0, lv - free);
+      if (free) this.state.skills[sk.id] = free; else delete this.state.skills[sk.id];
+      if (!free) this.state.hotbar = this.state.hotbar.map(e => (e === sk.id ? null : e));
+    }
+    if (!refund) return 0;
+    this.state.sp += refund;
+    this.invalidate();
+    bus.emit('ui:log', { text: `You unlearned your ${job.name} spells (+${refund} SP).`, color: '#c9b8ff' });
+    this.changed();
+    return refund;
   }
 
   addMesos(amount: number) {

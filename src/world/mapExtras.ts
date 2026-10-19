@@ -138,7 +138,7 @@ export const MAP_EXTRAS: Record<string, MapExtras> = {
       { key: 'd_brazier_arcane', x: 1600, layer: 'mid' },
       { key: 'd_brazier_arcane', x: 2450, layer: 'mid' },
       { key: 'd_crystal_float', x: 820, y: 760, layer: 'back' },
-      { key: 'd_crystal_float', x: 1300, y: 600, layer: 'back', scale: 1.3 },
+      { key: 'd_crystal_float', x: 1300, y: 470, layer: 'back', scale: 1.1 },  // above the observatory portal on the dais
       { key: 'd_crystal_float', x: 1780, y: 760, layer: 'back' },
       { key: 'd_crystal_float', x: 420, y: 560, layer: 'back', scale: 0.8 },
       { key: 'd_crystal_float', x: 2180, y: 560, layer: 'back', scale: 0.8 },
@@ -193,6 +193,52 @@ export const MAP_EXTRAS: Record<string, MapExtras> = {
       // drifting tomes in the background (dimmed so they never read as the animated_tome monsters)
       ...([[330, 1150], [2700, 1130], [560, 870], [1980, 860], [1500, 400], [2480, 650]] as const)
         .map(([x, y]) => ({ key: 'd_book_float', x, y, layer: 'far' as const, alpha: 0.6, tint: 0x9888b0 })),
+    ],
+  },
+  // ── endgame chain ──
+  // Astral Observatory: brass telescopes (gilded runestones) on the dais, an orrery circle, star charts on banners.
+  astral_observatory: {
+    look: 'astral',
+    spawn: { x: 200, y: 1380 },
+    clearZones: [[0, 220], [3000, 3200]],
+    decor: [
+      { key: 'd_brazier_arcane', x: 220, layer: 'mid', tint: 0xffe0a0 },
+      { key: 'd_brazier_arcane', x: 2990, layer: 'mid', tint: 0xffe0a0 },
+      { key: 'd_arcane_circle', x: 1600, y: 1322, layer: 'front', alpha: 0.7, tint: 0xffd890 },
+      { key: 'd_runestone', x: 1480, y: 1290, layer: 'back', scale: 1.4, tint: 0xe0c070 },
+      { key: 'd_runestone', x: 1720, y: 1290, layer: 'back', scale: 1.4, tint: 0xe0c070, flip: true },
+      ...[1250, 1950].map(x => ({ key: 'd_banner_arcane', x, layer: 'back' as const, tint: 0x6a80d8 })),
+      ...([[400, 900], [1600, 380], [2700, 880], [900, 560], [2400, 560]] as const)
+        .map(([x, y]) => ({ key: 'd_crystal_float', x, y, layer: 'far' as const, alpha: 0.7, tint: 0x9fd0ff })),
+    ],
+  },
+  // The Void Rift: violet shards hanging in nothing, broken pillars at the rift edges.
+  void_rift: {
+    look: 'rift',
+    spawn: { x: 200, y: 1380 },
+    clearZones: [[0, 220], [3200, 3400]],
+    decor: [
+      { key: 'd_runestone', x: 200, layer: 'mid', tint: 0xc890ff },
+      { key: 'd_runestone', x: 3210, layer: 'mid', tint: 0xc890ff },
+      { key: 'd_obsidian', x: 1020, y: 1300, layer: 'back', tint: 0xb070ff },
+      { key: 'd_obsidian', x: 2430, y: 1295, layer: 'back', tint: 0xb070ff, flip: true },
+      ...([[500, 650], [1150, 420], [1700, 330], [2300, 450], [2950, 600], [3200, 950], [150, 900]] as const)
+        .map(([x, y], i) => ({ key: 'd_crystal_float', x, y, layer: (i % 2 ? 'far' : 'back') as DecorLayer, scale: 0.8 + (i % 3) * 0.25, tint: 0xd08aff })),
+    ],
+  },
+  // The Archon Spire: gilded pillars and violet banners up the tower; the arena under a ring of braziers.
+  archon_spire: {
+    look: 'spire',
+    spawn: { x: 200, y: 1880 },
+    clearZones: [[0, 220], [2580, 2800]],
+    decor: [
+      ...[40, 2760].map(x => ({ key: 'd_pillar', x, layer: 'back' as const, tint: 0xf0d080 })),
+      { key: 'd_brazier_arcane', x: 220, layer: 'mid', tint: 0xffe0a0 },
+      { key: 'd_brazier_arcane', x: 2600, layer: 'mid', tint: 0xffe0a0 },
+      ...[450, 1000, 1400, 1800, 2350].map(x => ({ key: 'd_brazier_arcane', x, y: 1015, layer: 'mid' as const, tint: 0xffe0a0 })),
+      ...[700, 1200, 1600, 2100].map(x => ({ key: 'd_banner_arcane', x, y: 1015, layer: 'back' as const, tint: 0xb070e0 })),
+      { key: 'd_arcane_circle', x: 1400, y: 1047, layer: 'front', alpha: 0.75, tint: 0xffd070 },
+      { key: 'd_crystal_float', x: 1400, y: 760, layer: 'back', scale: 1.5, tint: 0xe0b0ff },
     ],
   },
   // Trial Hall: an intact, well-lit Academy hall (the same sanctum kit, no broken pillars).

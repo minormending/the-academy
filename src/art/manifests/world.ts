@@ -12,9 +12,12 @@ export const PIXEL_THEMES: MapTheme[] = ['town', 'forest', 'mushroom', 'snow', '
  * A map opts in via MAP_EXTRAS[id].look; anything that fails to load falls back to the base theme's art.
  *  marsh   — forest at night (Moonlit Marsh) · grotto — snow inside an ice cave (Glacier Grotto)
  *  library — sanctum as a magical library (The Restricted Stacks)
+ *  astral  — sanctum under a starry sky, navy + brass (Astral Observatory)
+ *  rift    — storm torn open into a purple void (The Void Rift) · spire — sanctum in gold and violet (The Archon Spire)
+ * The endgame looks are offline gradient-mapped recolours of the sanctum / storm kits (same sizes and layouts).
  */
-export type WorldLook = 'marsh' | 'grotto' | 'library';
-export const PIXEL_LOOKS: WorldLook[] = ['marsh', 'grotto', 'library'];
+export type WorldLook = 'marsh' | 'grotto' | 'library' | 'astral' | 'rift' | 'spire';
+export const PIXEL_LOOKS: WorldLook[] = ['marsh', 'grotto', 'library', 'astral', 'rift', 'spire'];
 
 export const PIXEL_DECOR_KEYS = [
   'd_oak', 'd_oak_dark', 'd_tree_round', 'd_tree_blossom', 'd_bush', 'd_bush_berry', 'd_bush_flower', 'd_flowers', 'd_tuft',
@@ -117,6 +120,22 @@ export const PIXEL_BG_LOOK: Record<WorldLook, PixelBgLayer[]> = {
     { name: 'sky', w: 64, h: 272, k: 3, y: 'top', fx: 0.02, fy: 0.02, top: 0x0a060e, bottom: 0x22141e },
     { name: 'far', w: 256, h: 200, k: 2, y: 660, fx: 0.06, fy: 0.05, bottom: 0x100909 },
     { name: 'mid', w: 320, h: 150, k: 2, y: 740, fx: 0.15, fy: 0.12, bottom: 0x2b1a15 },
+  ],
+  astral: [
+    { name: 'sky', w: 64, h: 272, k: 3, y: 'top', fx: 0.02, fy: 0.02, top: 0x050a1e, bottom: 0x0a1430 },
+    { name: 'far', w: 256, h: 272, k: 2, y: 660, fx: 0.05, fy: 0.05, bottom: 0x0a1430 },
+    { name: 'mid', w: 352, h: 240, k: 2, y: 780, fx: 0.14, fy: 0.12, bottom: 0x080e22 },
+  ],
+  rift: [
+    { name: 'sky', w: 112, h: 304, k: 3, y: 'top', fx: 0.02, fy: 0.02, top: 0x0c0418, bottom: 0x3a1858 },
+    { name: 'far', w: 544, h: 160, k: 3, y: 610, fx: 0.05, fy: 0.05, bottom: 0x140826 },
+    { name: 'clouds', w: 544, h: 236, k: 2, y: 560, fx: 0.04, fy: 0.03, alpha: 0.8, drift: 0.02, bottom: 0x1c0c30 },
+    { name: 'mid', w: 616, h: 110, k: 2, y: 700, fx: 0.14, fy: 0.12, bottom: 0x1e0e34 },
+  ],
+  spire: [
+    { name: 'sky', w: 64, h: 272, k: 3, y: 'top', fx: 0.02, fy: 0.02, top: 0x12061e, bottom: 0x2a1032 },
+    { name: 'far', w: 256, h: 272, k: 2, y: 660, fx: 0.05, fy: 0.05, bottom: 0x1a0a26 },
+    { name: 'mid', w: 352, h: 240, k: 2, y: 780, fx: 0.14, fy: 0.12, bottom: 0x14081e },
   ],
 };
 

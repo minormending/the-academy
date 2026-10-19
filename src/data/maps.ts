@@ -246,7 +246,11 @@ const arcane_sanctum: MapDef = (() => {
     platforms: [ground(0, W, G), A, B, D, A2, B2, D2, C],
     walls: [],
     ropes: [rope(500, D.y, B.y), rope(2100, D2.y, B2.y), rope(1100, C.y, G), rope(1500, C.y, G)],
-    portals: [portal('west', 70, G, 'stormspire_peak', 'east'), portal('town', 2530, G, 'mistvale', 'east')],
+    portals: [
+      portal('west', 70, G, 'stormspire_peak', 'east'), portal('town', 2530, G, 'mistvale', 'east'),
+      // Endgame: the Astral Observatory, up the ropes on the central dais (C).
+      portal('observatory', 1300, C.y, 'astral_observatory', 'west'),
+    ],
     spawns: [
       span('lich_archon', 1000, 1600, G, 1, 180000),
       on('void_wisp', A, 2, 7000), on('void_wisp', A2, 2, 7000), on('void_wisp', D, 2, 7000), on('void_wisp', D2, 2, 7000), on('void_wisp', C, 2, 7000),
@@ -378,4 +382,109 @@ const restricted_stacks: MapDef = (() => {
   };
 })();
 
-export const MAPS: MapDef[] = [mistvale, whisperwood, shroom_hollow, frostfang_cliffs, cinder_caverns, stormspire_peak, arcane_sanctum, trial_hall, moonlit_marsh, glacier_grotto, restricted_stacks];
+// ───────────────────────────── Endgame: The Forbidden Wing above the clouds (50–70) ─────────────────────────────
+//
+// A chain past the Arcane Sanctum: Observatory → Void Rift → Archon Spire (raid boss). Each has its own look
+// (MAP_EXTRAS[id].look). Tiers follow the usual 85px jump / rope-or-ladder rhythm.
+
+// Astral Observatory (50–57): brass telescopes on a central dais, star-chart galleries climbing to the dome crown.
+const astral_observatory: MapDef = (() => {
+  const W = 3200, H = 1500, G = 1380;
+  const dais = wall(1400, 1290, 400, 90);
+  const A = plat(250, 650, 1295), B = plat(900, 1250, 1295), C = plat(1950, 2300, 1295), D = plat(2550, 2950, 1295);
+  const E = plat(500, 950, 1210), F = plat(1450, 1850, 1210), Gp = plat(2200, 2650, 1210);
+  const Hh = plat(200, 750, 1035), I = plat(950, 1450, 1035), J = plat(1750, 2250, 1035), K = plat(2400, 2950, 1035);
+  const L = plat(650, 1100, 950), M = plat(2050, 2500, 950);
+  const N = plat(300, 850, 775), O = plat(1200, 1950, 775), P = plat(2300, 2900, 775);
+  const Q = plat(850, 1200, 690), R = plat(1950, 2300, 690);
+  const S = plat(1200, 2000, 515);
+  return {
+    id: 'astral_observatory', name: 'Astral Observatory', region: 'The Forbidden Wing · Above the Clouds', theme: 'sanctum', music: 'astral',
+    width: W, height: H, levelRange: [50, 57],
+    platforms: [ground(0, W, G), A, B, C, D, E, F, Gp, Hh, I, J, K, L, M, N, O, P, Q, R, S],
+    walls: [dais],
+    ropes: [
+      rope(600, Hh.y, E.y), rope(1100, I.y, B.y), rope(1800, J.y, F.y), rope(2500, K.y, Gp.y),
+      rope(750, N.y, L.y), ladder(1300, O.y, I.y), rope(2400, P.y, M.y), ladder(1600, S.y, O.y),
+    ],
+    portals: [portal('west', 90, G, 'arcane_sanctum', 'observatory'), portal('east', 3110, G, 'void_rift', 'west')],
+    spawns: [
+      span('astral_sentinel', 300, 1350, G, 2), span('astral_sentinel', 1850, 2900, G, 2), span('astral_sentinel', 1440, 1760, dais.y, 1),
+      on('astral_sentinel', C, 1), on('astral_sentinel', I, 1), on('astral_sentinel', O, 1),
+      on('star_moth', E, 1), on('star_moth', Gp, 1), on('star_moth', Hh, 1), on('star_moth', K, 1), on('star_moth', L, 1),
+      on('star_moth', M, 1), on('star_moth', N, 1), on('star_moth', P, 1), on('star_moth', S, 1),
+    ],
+    npcs: [],
+  };
+})();
+
+// The Void Rift (57–64): a torn-open stretch of nothing. Floating shard rocks on the floor, broken ledges in two
+// rope-linked bands and a shattered bridge across the top of the rift.
+const void_rift: MapDef = (() => {
+  const W = 3400, H = 1500, G = 1380;
+  const shardA = wall(900, 1300, 240, 80), shardB = wall(2300, 1295, 260, 85);
+  const A = plat(200, 560, 1295), B = plat(1300, 1700, 1295), C = plat(1900, 2200, 1295), D = plat(2800, 3150, 1295);
+  const E = plat(450, 850, 1210), F = plat(1050, 1400, 1210), Gp = plat(1650, 2000, 1210), Hh = plat(2450, 2850, 1210);
+  const I = plat(250, 700, 1035), J = plat(1000, 1450, 1035), K = plat(1700, 2150, 1035), L = plat(2500, 3000, 1035);
+  const M = plat(600, 1050, 950), N = plat(1400, 1800, 950), O = plat(2150, 2550, 950);
+  const P = plat(300, 800, 775), Q = plat(1100, 1650, 775), R = plat(1950, 2450, 775), S = plat(2750, 3250, 775);
+  const T = plat(850, 1150, 690), U = plat(2500, 2800, 690);
+  const V = plat(1300, 2100, 515);
+  return {
+    id: 'void_rift', name: 'The Void Rift', region: 'The Forbidden Wing · Beyond the Stars', theme: 'storm', music: 'rift',
+    width: W, height: H, levelRange: [57, 64],
+    platforms: [ground(0, W, G), A, B, C, D, E, F, Gp, Hh, I, J, K, L, M, N, O, P, Q, R, S, T, U, V],
+    walls: [shardA, shardB],
+    ropes: [
+      rope(600, I.y, E.y), rope(1200, J.y, F.y), rope(1800, K.y, Gp.y), rope(2700, L.y, Hh.y),
+      rope(700, P.y, M.y), rope(1500, Q.y, N.y), rope(2300, R.y, O.y), rope(2850, S.y, L.y), rope(1600, V.y, Q.y),
+    ],
+    portals: [portal('west', 90, G, 'astral_observatory', 'east'), portal('east', 3310, G, 'archon_spire', 'west')],
+    spawns: [
+      span('rift_stalker', 300, 850, G, 2), span('rift_stalker', 1200, 2250, G, 2), span('rift_stalker', 2620, 3200, G, 1), on('rift_stalker', B, 1),
+      on('null_wisp', E, 1), on('null_wisp', Hh, 1), on('null_wisp', I, 1), on('null_wisp', L, 1), on('null_wisp', P, 1),
+      on('null_wisp', S, 1), on('null_wisp', V, 1),
+      span('shard_horror', 940, 1100, shardA.y, 1), span('shard_horror', 2340, 2520, shardB.y, 1),
+      on('shard_horror', J, 1), on('shard_horror', K, 1), on('shard_horror', Q, 1), on('shard_horror', R, 1),
+    ],
+    npcs: [],
+  };
+})();
+
+// The Archon Spire (64–70, raid boss): the inside of a gold-and-violet tower. Galleries climb in rope/ladder-linked
+// bands to the Archon's arena — one wide flat floor across the top — where The Unwritten waits.
+const archon_spire: MapDef = (() => {
+  const W = 2800, H = 2000, G = 1880;
+  const A = plat(250, 650, 1795), B = plat(1150, 1650, 1795), C = plat(2150, 2550, 1795);
+  const D = plat(550, 1000, 1710), E = plat(1800, 2250, 1710);
+  const F = plat(200, 700, 1535), Gp = plat(1000, 1800, 1535), Hh = plat(2100, 2600, 1535);
+  const I = plat(650, 1050, 1450), J = plat(1750, 2150, 1450);
+  const K = plat(300, 800, 1275), L = plat(1100, 1700, 1275), M = plat(2000, 2500, 1275);
+  const N = plat(800, 1150, 1190), O = plat(1650, 2000, 1190);
+  const arena = plat(400, 2400, 1015);
+  const galW = plat(500, 850, 930), galE = plat(1950, 2300, 930);
+  return {
+    id: 'archon_spire', name: 'The Archon Spire', region: 'The Forbidden Wing · The Unwritten Throne', theme: 'sanctum', music: 'boss',
+    width: W, height: H, levelRange: [64, 70],
+    platforms: [ground(0, W, G), A, B, C, D, E, F, Gp, Hh, I, J, K, L, M, N, O, arena, galW, galE],
+    walls: [],
+    ropes: [
+      rope(600, F.y, D.y), rope(1200, Gp.y, B.y), rope(2200, Hh.y, E.y),
+      rope(700, K.y, I.y), rope(1500, L.y, Gp.y), rope(2100, M.y, J.y),
+      ladder(500, arena.y, K.y), ladder(2300, arena.y, M.y),
+    ],
+    portals: [portal('west', 90, G, 'void_rift', 'east'), portal('town', 2710, G, 'mistvale', 'east')],
+    spawns: [
+      span('archon_knight', 300, 1000, G, 2), span('archon_knight', 1100, 2600, G, 2),
+      on('archon_knight', B, 1), on('archon_knight', Gp, 1), on('archon_knight', L, 1),
+      on('unwritten_page', D, 1), on('unwritten_page', E, 1), on('unwritten_page', F, 1), on('unwritten_page', Hh, 1),
+      on('unwritten_page', I, 1), on('unwritten_page', J, 1), on('unwritten_page', K, 1), on('unwritten_page', M, 1),
+      on('unwritten_page', N, 1),
+      // Raid boss: the whole arena floor between the two ladders.
+      span('the_unwritten', 800, 2000, arena.y, 1, 300000),
+    ],
+    npcs: [],
+  };
+})();
+
+export const MAPS: MapDef[] = [mistvale, whisperwood, shroom_hollow, frostfang_cliffs, cinder_caverns, stormspire_peak, arcane_sanctum, trial_hall, moonlit_marsh, glacier_grotto, restricted_stacks, astral_observatory, void_rift, archon_spire];

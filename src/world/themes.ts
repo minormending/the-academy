@@ -205,6 +205,53 @@ export const LOOK_RUNTIME: Record<WorldLook, ThemeRuntime> = {
     tints: { d_pillar: 0xc8a8a0 },
     ladderKey: 'w_ladder',
   },
+  // Astral Observatory: the sanctum kit at night above the clouds — star field, moon, brass-tinted pillars, motes.
+  astral: {
+    layers: THEME_RUNTIME.sanctum.layers,
+    stars: 1,
+    celestial: { key: 'w_moon', x: 0.7, y: 90, alpha: 0.85, tint: 0xd8e4ff },
+    ambient: ['glints', 'motes'],
+    scatter: {
+      back: ['d_pillar', 'd_crystal_float', 'd_pillar', 'd_runestone'], between: ['d_brazier_arcane', 'd_runestone', 'd_rock'],
+      front: ['d_candles', 'd_rock', 'd_candles'], onPlatforms: ['d_candles', 'd_book_pile'], hanging: [],
+      backSpacing: [200, 340], frontSpacing: [120, 240],
+    },
+    backTint: 0x9aa8d8,
+    tints: { d_pillar: 0xe0c890, d_pillar_broken: 0xe0c890, d_runestone: 0xb8c8ff, d_crystal_float: 0x9fd0ff, d_rock: 0x8a94b8, d_banner_arcane: 0x6a80d8 },
+    ladderKey: 'w_ladder_gold',
+  },
+  // The Void Rift: the storm kit torn open — violet void, floating shards, broken pillars, no sun.
+  rift: {
+    layers: THEME_RUNTIME.storm.layers,
+    pixelCelestial: false,
+    stars: 0.6,
+    ambient: ['motes', 'ash', 'lightning'],
+    scatter: {
+      back: ['d_crystal_float', 'd_broken_pillar', 'd_pillar_broken', 'd_crystal_float'], between: ['d_obsidian', 'd_rock_big', 'd_runestone'],
+      front: ['d_rock', 'd_ice_crystal', 'd_rock'], onPlatforms: ['d_rock', 'd_ice_crystal'], hanging: [],
+      backSpacing: [200, 360], frontSpacing: [110, 220],
+    },
+    backTint: 0x9a7ac8,
+    tints: {
+      d_crystal_float: 0xd08aff, d_broken_pillar: 0x8a70b0, d_pillar_broken: 0x8a70b0, d_obsidian: 0xb070ff, d_rock_big: 0x7a6098,
+      d_rock: 0x806aa0, d_ice_crystal: 0xd8a0ff, d_runestone: 0xc890ff,
+    },
+    ladderKey: 'w_ladder',
+  },
+  // The Archon Spire: the sanctum kit as a gold-and-violet throne tower — banners, braziers, gilded pillars.
+  spire: {
+    layers: THEME_RUNTIME.sanctum.layers,
+    pixelCelestial: false,
+    ambient: ['motes', 'dust'],
+    scatter: {
+      back: ['d_pillar', 'd_banner_arcane', 'd_pillar', 'd_crystal_float'], between: ['d_brazier_arcane', 'd_candles'],
+      front: ['d_candles', 'd_book_pile'], onPlatforms: ['d_candles'], hanging: [],
+      backSpacing: [180, 300], frontSpacing: [130, 240],
+    },
+    backTint: 0xd0b0d8,
+    tints: { d_pillar: 0xf0d080, d_pillar_broken: 0xf0d080, d_banner_arcane: 0xb070e0, d_crystal_float: 0xe0b0ff, d_brazier_arcane: 0xffe0a0 },
+    ladderKey: 'w_ladder_gold',
+  },
 };
 
 /** Light sources attached to decor (offsets in texture px from the bottom-center origin). */

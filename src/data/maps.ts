@@ -238,7 +238,7 @@ const arcane_sanctum: MapDef = (() => {
     portals: [portal('west', 70, G, 'stormspire_peak', 'east'), portal('town', 2530, G, 'mistvale', 'east')],
     spawns: [
       span('lich_archon', 1000, 1600, G, 1, 180000),
-      on('void_wisp', A, 1, 9000), on('void_wisp', A2, 1, 9000), on('void_wisp', D, 1, 9000), on('void_wisp', D2, 1, 9000), on('void_wisp', C, 1, 9000),
+      on('void_wisp', A, 2, 7000), on('void_wisp', A2, 2, 7000), on('void_wisp', D, 2, 7000), on('void_wisp', D2, 2, 7000), on('void_wisp', C, 2, 7000),
     ],
     npcs: [],
   };

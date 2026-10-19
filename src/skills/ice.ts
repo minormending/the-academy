@@ -388,7 +388,7 @@ const glacialLance: SkillDef = {
   sfx: 'cast_ice',
   attack: {
     pattern: 'projectile',
-    damagePct: lerp(350, 500, 20),
+    damagePct: lerp(380, 540, 20),
     hits: () => 1,
     maxTargets: lv => 2 + Math.floor(lv / 10),
     range: 700,

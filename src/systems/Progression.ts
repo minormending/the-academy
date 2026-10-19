@@ -39,7 +39,7 @@ const LOG = {
 export function killExpMultiplier(playerLevel: number, monsterLevel: number): number {
   const diff = playerLevel - monsterLevel;
   if (diff >= 10) return Math.max(0.1, 0.7 - (diff - 10) * 0.06);
-  if (diff < 0) return 1 + Math.min(0.3, -diff * 0.05);
+  if (diff < 0) return 1 + Math.min(0.15, -diff * 0.05);
   return 1;
 }
 

@@ -49,7 +49,7 @@ export const LIGHTNING_SKILLS: SkillDef[] = [
     sfx: 'cast_lightning',
     attack: {
       pattern: 'chain',
-      damagePct: lin(170, 250, 20),
+      damagePct: lin(155, 230, 20),
       hits: () => 1,
       maxTargets: (lv) => 2 + Math.floor(lv / 8),
       range: 360,

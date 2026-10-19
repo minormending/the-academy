@@ -213,9 +213,12 @@ export class Monster implements IMonster {
   }
 
   /** Multiplier on damage this monster deals (curse weakens it). */
+  /** Extra damage multiplier for this instance (Trial Hall scales waves above the zone's natural damage). */
+  damageMul = 1;
+
   outgoingDamageMult(): number {
     const cu = this.statuses.get('curse');
-    return cu ? 1 - Math.min(0.6, Math.max(0, cu.potency)) : 1;
+    return this.damageMul * (cu ? 1 - Math.min(0.6, Math.max(0, cu.potency)) : 1);
   }
 
   update(time: number, delta: number): void {

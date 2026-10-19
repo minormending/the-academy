@@ -19,7 +19,7 @@ import type { GameServices, IMapInstance, IMonster, MonsterDef } from '../core/t
 import { bus } from '../core/events';
 import { Registry } from '../core/registry';
 import { DEPTH } from '../core/constants';
-import { refMonsterExp, refMonsterHp } from '../core/balance';
+import { refMonsterExp, refMonsterHp, refMonsterTouch } from '../core/balance';
 
 export const ARENA_MAP_ID = 'trial_hall';
 
@@ -384,7 +384,7 @@ export class ArenaSystem {
       boss = bosses[0] ?? null;
       if (!boss) bossElite = [...picks].sort((a, b) => b.level - a.level)[0] ?? null;
     }
-    const elites = bossWave ? 0 : n >= 6 ? Math.floor((n - 1) / 5) : 0;
+    const elites = bossWave ? 0 : n >= 6 ? 1 + Math.floor((n - 6) / 3) : 0;
     const label = boss ? `${boss.name} approaches!`
       : bossElite ? `An Elite ${bossElite.name} approaches!`
         : `${count} challengers${elites ? ` · ${elites} elite${elites > 1 ? 's' : ''}` : ''}`;
@@ -449,6 +449,10 @@ export class ArenaSystem {
       const max = Math.max(1, Math.round(m.maxHp * p.hpMul));
       try { (m as unknown as { maxHp: number }).maxHp = max; m.hp = max; } catch { /* ignore */ }
     }
+    // Hit as hard as the wave's target level (late waves outgrow the strongest natural monsters).
+    const targetLv = this.plan?.targetLv ?? p.def.level;
+    const touchMul = Math.min(3, Math.max(1, refMonsterTouch(targetLv) / Math.max(1, p.def.touchDamage)));
+    (m as { damageMul?: number }).damageMul = touchMul * (p.elite ? 1.3 : 1);
     (m as { provoke?: (ms: number) => void }).provoke?.(60000);
     this.ring(pos.x, pos.y, p.boss ? 0xff9b6b : p.elite ? 0xffd36b : 0xb58cff);
     const t: Tracked = { m, elite: p.elite, aura: null, tag: null };

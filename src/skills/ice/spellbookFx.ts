@@ -185,6 +185,7 @@ export const hailLoomBeam: VfxFn = (scene, o) => {
   tween(scene, c, shuttle, { x: n * 2, duration: 750, ease: 'Stepped', easeParams: [30] });
   tween(scene, c, c, { alpha: 0.35, duration: 75, yoyo: true, repeat: 5 });
   finish(scene, c, 820, 100);
+  return c; // Returned so a broken channel can remove the threads early.
 };
 
 export const rimeRecallAnchor: VfxFn = (scene, o) => {

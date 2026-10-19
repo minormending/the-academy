@@ -50,13 +50,16 @@ function bloodTithe(ctx: SkillContext, lv: number): void {
   const { progression, player, combat } = ctx.services;
   const stats = progression.derived();
   const price = Math.max(1, Math.round(stats.maxHp * 0.08));
-  const paid = Math.min(price, Math.max(0, progression.state.hp - 1));
+  const fullReturn = Math.max(1, Math.floor(stats.maxMp * L(0.06, 0.12, 10)(lv)));
+  const missing = Math.max(0, Math.floor(stats.maxMp - progression.state.mp));
+  // Never pay HP for mana that does not fit, and never pay the last HP.
+  const paid = Math.min(price, Math.max(0, Math.floor(progression.state.hp) - 1), Math.ceil(missing * price / fullReturn));
   if (paid <= 0) return;
   const beforeHp = progression.state.hp, beforeMp = progression.state.mp;
   progression.loseHp(paid);
   if (!living(ctx)) return;
   const actualPaid = Math.max(0, beforeHp - progression.state.hp);
-  progression.heal(0, Math.floor(stats.maxMp * L(0.06, 0.12, 10)(lv) * actualPaid / price));
+  progression.heal(0, Math.min(missing, Math.floor(fullReturn * actualPaid / price)));
   combat.showNumber(player.x, player.y - 62, Math.max(0, progression.state.mp - beforeMp), 'mp');
   playVfx(ctx.scene, 'shd_blood_tithe', { x: player.x, y: player.y, facing: player.facing, lv });
 }
@@ -135,7 +138,7 @@ export const SHADOW_SPELLBOOK_ADDITIONS: SkillDef[] = [
   },
   {
     id: 'shd_blood_tithe', name: 'Blood Tithe', job: 'occultist', element: 'shadow', kind: 'buff', maxLevel: 10,
-    description: 'Trade 8% maximum HP for 6–12% maximum MP; partial payments restore proportionally less mana.',
+    description: 'Trade 8% maximum HP for 6–12% maximum MP; partial payments restore proportionally less mana, and you never pay for mana you cannot hold.',
     icon: icon('mana'), mpCost: K(0), cooldownMs: K(25000), castTimeMs: 500, sfx: 'curse', onCast: bloodTithe,
   },
   {

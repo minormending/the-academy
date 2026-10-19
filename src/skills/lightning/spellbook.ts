@@ -78,7 +78,7 @@ export const SPELLBOOK_LIGHTNING_SKILLS: SkillDef[] = [
     icon: icon('staff'), mpCost: int(32, 44, 15), cooldownMs: int(7000, 5500, 15), castTimeMs: 1000, sfx: 'cast_lightning',
     onCast: channelArcs,
     attack: {
-      pattern: 'beam', damagePct: lin(24, 34, 15), hits: () => 2, maxTargets: () => 4,
+      pattern: 'beam', damagePct: lin(50, 70, 15), hits: () => 2, maxTargets: () => 4,
       range: 460, area: { w: 460, h: 54 }, hitIntervalMs: 45,
       vfx: { area: 'ltn_channel_arc' },
     },

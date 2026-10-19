@@ -2,7 +2,7 @@
 import Phaser from 'phaser';
 import { bus } from '../../core/events';
 import { playVfx } from '../../core/vfx';
-import type { SkillContext, VfxOptions } from '../../core/types';
+import type { AttackSpec, SkillContext, VfxOptions } from '../../core/types';
 
 interface WorldEffect { x: number; y: number; stop: () => void }
 const effects = new WeakMap<Phaser.Scene, Map<string, WorldEffect>>();
@@ -135,6 +135,8 @@ export function castRimeRecall(ctx: SkillContext, lv: number): void {
     anchor.stop();
     ctx.runAttack(ctx.skill.attack, { x: p.x, y: p.y - 34, facing: p.facing });
     p.blink(x - p.x, y - p.y);
+    // A diagonal blink stops at the first wall; the anchor is a spot the player stood on, so finish the recall.
+    if (Math.hypot(p.x - x, p.y - y) > 4) p.placeAt(x, y);
     playVfx(ctx.scene, 'ice_rime_recall_arrive', { x: p.x, y: p.y, facing: p.facing, lv });
   } else {
     worldEffect(ctx, 'ice_rime_recall_anchor', { x: p.x, y: p.y, facing: 1, lv }, 6000 + 4000 * (lv - 1) / 9);
@@ -153,4 +155,44 @@ export function castDiamondReckoning(ctx: SkillContext): void {
   ctx.runAttack({ ...attack, damagePct: lv => attack.damagePct(lv) * (armor ? 2 : 1) }, {
     x: p.x + 18 * p.facing, y: p.y - 34, facing: p.facing,
   });
+}
+
+/** Six single-line threads from a fixed stance; moving (incl. knockback) or taking damage breaks the channel. */
+export function castHailLoom(ctx: SkillContext, lv: number): void {
+  if (!living(ctx) || !ctx.skill.attack) return;
+  const { scene, services } = ctx;
+  const p = services.player, attack = ctx.skill.attack;
+  const at = { x: p.x + 18 * p.facing, y: p.y - 34, facing: p.facing };
+  const startX = p.x, startY = p.y, map = services.game.currentMap();
+  const lines = Math.max(1, Math.round(attack.hits(lv))), interval = attack.hitIntervalMs ?? 150;
+  const beam = playVfx(scene, attack.vfx.area, {
+    x: at.x, y: at.y, targetX: at.x + at.facing * attack.range, targetY: at.y,
+    w: attack.range, h: attack.area?.h, facing: at.facing, lv,
+  });
+  // The beam visual is drawn once; hit sparks only on the first thread (engine rule: one hit VFX per target per cast).
+  const thread = (first: boolean): AttackSpec => ({ ...attack, hits: () => 1, delayMs: 0, vfx: first ? { hit: attack.vfx.hit } : {} });
+  const start = scene.time.now;
+  let fired = 0, stopped = false;
+  const stop = (broken: boolean) => {
+    if (stopped) return;
+    stopped = true;
+    scene.events.off(Phaser.Scenes.Events.UPDATE, update);
+    scene.events.off(Phaser.Scenes.Events.SHUTDOWN, shutdown);
+    offMap(); offDeath(); offHurt();
+    if (broken) beam?.destroy();
+  };
+  const shutdown = () => stop(true);
+  const fire = () => { ctx.runAttack(thread(fired === 0), at); fired++; };
+  const update = () => {
+    if (stopped) return;
+    if (!living(ctx) || services.game.currentMap() !== map || Math.hypot(p.x - startX, p.y - startY) > 24) { stop(true); return; }
+    while (fired < lines && scene.time.now - start >= fired * interval) fire();
+    if (fired >= lines) stop(false);
+  };
+  const offMap = bus.on('map:changed', shutdown);
+  const offDeath = bus.on('player:died', shutdown);
+  const offHurt = bus.on('player:damaged', ({ amount }) => { if (amount > 0) stop(true); });
+  scene.events.on(Phaser.Scenes.Events.UPDATE, update);
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, shutdown);
+  fire();
 }

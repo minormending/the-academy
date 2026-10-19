@@ -4,7 +4,7 @@
 import { playVfx } from '../core/vfx';
 import type { IconSpec, SkillContext, SkillDef, StatusSpec } from '../core/types';
 import {
-  castColdExchange, castDiamondReckoning, castFractureRoute, castRimeBrand, castRimeRecall, castRimeSnare,
+  castColdExchange, castDiamondReckoning, castFractureRoute, castHailLoom, castRimeBrand, castRimeRecall, castRimeSnare,
 } from './ice/spellbook';
 
 // ───────────────────────────── helpers ─────────────────────────────
@@ -623,16 +623,17 @@ const coldExchange: SkillDef = {
 
 const hailLoom: SkillDef = {
   id: 'ice_hail_loom', name: 'Hail Loom',
-  description: 'Channel six rapid frost threads through a line, dealing extra damage to chilled enemies.',
+  description: 'Channel six rapid frost threads through a line, dealing extra damage to chilled enemies. Moving or taking damage breaks the channel.',
   element: 'ice', job: 'frostbinder', kind: 'attack', maxLevel: 15,
   icon: icon('staff', 0xd3f6ff), mpCost: lerpR(28, 38, 15),
   cooldownMs: lerpR(6000, 4500, 15), castTimeMs: 950, sfx: 'cast_ice',
   attack: {
-    pattern: 'beam', damagePct: lerp(30, 45, 15), hits: () => 6, hitIntervalMs: 150,
+    pattern: 'beam', damagePct: lerp(65, 90, 15), hits: () => 6, hitIntervalMs: 150,
     maxTargets: () => 3, range: 480, area: { w: 480, h: 64 },
     bonusVs: { status: 'chill', mult: 1.4 },
     vfx: { area: 'ice_hail_loom_beam', hit: 'ice_hit' },
   },
+  onCast: castHailLoom,
 };
 
 const rimeRecall: SkillDef = {
@@ -656,7 +657,7 @@ const diamondReckoning: SkillDef = {
   icon: icon('crystal', 0xffffff, 0x6bbce8), requires: [{ skillId: 'ice_frost_armor', level: 1 }],
   mpCost: lerpR(45, 60, 15), cooldownMs: lerpR(22000, 16000, 15), castTimeMs: 600, sfx: 'shatter',
   attack: {
-    pattern: 'beam', damagePct: lerp(60, 85, 15), hits: () => 3, hitIntervalMs: 100,
+    pattern: 'beam', damagePct: lerp(110, 150, 15), hits: () => 3, hitIntervalMs: 100,
     maxTargets: () => 6, range: 600, area: { w: 600, h: 100 },
     bonusVs: { status: 'freeze', mult: 1.5, consume: true },
     vfx: { area: 'ice_diamond_reckoning_beam', hit: 'ice_shatter_hit' },

@@ -9,6 +9,7 @@ import { MAX_INVENTORY_STACKS } from '../systems/Progression';
 import type { UICtx, WindowName } from './context';
 import { clear, fmtNum, fmtSec, h, safe, setText, toggleClass } from './dom';
 import { iconEl } from './uiIcons';
+import { toggleHonorsWindow } from './honorsWindow';
 import { onPixelIconsReady, pixelIconUrl, type PixelIconName } from '../art/icons';
 
 /** Pixel-art icons for the quick-menu buttons (CSS-drawn fallbacks stay for help/menu or if the sheet fails). */
@@ -78,15 +79,15 @@ export class StatusBar {
     this.lvNum = h('div', { class: 'ax-lv-num' }, '1');
     this.nameEl = h('div', { class: 'ax-id-name' });
     this.jobEl = h('div', { class: 'ax-id-job' });
-    const btn = (label: string, action: ActionId, win: WindowName, title: string) => {
+    const btn = (label: string, action: ActionId, win: WindowName | 'honors', title: string) => {
       const ico = h('span', { class: `ax-quick-ico ax-qi-${win}` });
-      const px = QUICK_ICONS[win];
+      const px = win === 'honors' ? undefined : QUICK_ICONS[win];
       if (px) this.iconSubs.push(onPixelIconsReady(() => {
         const url = pixelIconUrl(px, 26);
         if (url) { ico.style.setProperty('--qi', `url("${url}")`); ico.classList.add('ax-qi-px'); }
       }));
       const keyEl = h('span', { class: 'ax-quick-key' });
-      const el = h('button', { class: 'ax-quick', onclick: () => { ctx.sfx('ui_click'); ctx.toggleWindow(win); } },
+      const el = h('button', { class: 'ax-quick', onclick: () => { ctx.sfx('ui_click'); if (win === 'honors') toggleHonorsWindow(); else ctx.toggleWindow(win); } },
         ico, h('span', { class: 'ax-quick-label' }, label), keyEl);
       if (win === 'inventory') el.appendChild(this.bagBadge);
       // Key hints follow the player's bindings (Controls window).
@@ -101,7 +102,7 @@ export class StatusBar {
       h('div', { class: 'ax-gauges' }, this.hp.el, this.mp.el),
       h('div', { class: 'ax-quickbar' },
         btn('Char', 'stats', 'stats', 'Character'), btn('Items', 'inventory', 'inventory', 'Inventory'), btn('Skills', 'skills', 'skills', 'Skills'),
-        btn('Tasks', 'quests', 'quests', 'Assignments'), btn('Help', 'help', 'help', 'Controls'), btn('Menu', 'menu', 'menu', 'Menu')));
+        btn('Tasks', 'quests', 'quests', 'Assignments'), btn('Honors', 'honors', 'honors', 'Academy Honors'), btn('Help', 'help', 'help', 'Controls'), btn('Menu', 'menu', 'menu', 'Menu')));
     this.offBindings = onBindingsChanged(() => { for (const f of this.keySyncs) f(); });
     this.expEl = h('div', { class: 'ax-expbar' }, this.exp.el);
     ctx.root.appendChild(this.el);

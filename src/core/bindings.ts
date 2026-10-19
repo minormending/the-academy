@@ -17,7 +17,7 @@ export type ActionId =
   | 'left' | 'right' | 'up' | 'down' | 'jump' | 'jump2'
   | 'pickup' | 'interact' | 'hotbarPage'
   | SlotAction
-  | 'skills' | 'inventory' | 'stats' | 'quests' | 'minimap' | 'help' | 'menu';
+  | 'skills' | 'inventory' | 'stats' | 'quests' | 'honors' | 'minimap' | 'help' | 'menu';
 
 export type ActionGroup = 'Movement' | 'Actions' | 'Hotbar' | 'Windows';
 
@@ -46,6 +46,7 @@ export const ACTIONS: readonly ActionInfo[] = [
   { id: 'inventory', label: 'Inventory', group: 'Windows' },
   { id: 'stats', label: 'Character', group: 'Windows' },
   { id: 'quests', label: 'Assignments', group: 'Windows' },
+  { id: 'honors', label: 'Academy Honors', group: 'Windows' },
   { id: 'minimap', label: 'Minimap', group: 'Windows' },
   { id: 'help', label: 'Help', group: 'Windows' },
   { id: 'menu', label: 'Menu / close', group: 'Windows' },
@@ -73,7 +74,7 @@ function buildDefaults(): Record<ActionId, number> {
     pickup: nameToCode(CONTROL_KEYS.pickup), interact: nameToCode(CONTROL_KEYS.interact),
     hotbarPage: nameToCode(CONTROL_KEYS.hotbarPage),
     skills: nameToCode(UI_KEYS.skills), inventory: nameToCode(UI_KEYS.inventory), stats: nameToCode(UI_KEYS.stats),
-    quests: nameToCode(UI_KEYS.quests), minimap: nameToCode(UI_KEYS.minimap), help: 72 /* H */, menu: nameToCode(UI_KEYS.menu),
+    quests: nameToCode(UI_KEYS.quests), honors: 79 /* O */, minimap: nameToCode(UI_KEYS.minimap), help: 72 /* H */, menu: nameToCode(UI_KEYS.menu),
   } as Record<ActionId, number>;
   SLOT_ACTIONS.forEach((a, i) => { m[a] = nameToCode(HOTBAR_KEYS[i] ?? ''); });
   return m;

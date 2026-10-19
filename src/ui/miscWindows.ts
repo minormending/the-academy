@@ -107,7 +107,8 @@ export class MenuWindow extends UIWindow {
       h('div', { class: 'ax-panel ax-settings' }, h('div', { class: 'ax-panel-head' }, 'Display'),
         seg('Shake', 'shake', [['on', 'On'], ['reduced', 'Less'], ['off', 'Off']], 'Camera shake and flashes from big spells and bosses'),
         seg('Damage #', 'damageSize', [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']], 'Size of floating damage numbers'),
-        seg('Familiar', 'familiar', [[true, 'Show'], [false, 'Hide']], 'Show Pip, your familiar')),
+        seg('Familiar', 'familiar', [[true, 'Show'], [false, 'Hide']], 'Show Pip, your familiar'),
+        seg('Touch', 'touch', [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']], 'On-screen touch controls (Auto: shown on phones and tablets, or after you touch the screen)')),
       this.btn('Back', () => { this.tab = 'game'; this.invalidate(); }, 'ax-btn-secondary'),
     ];
   }
@@ -163,6 +164,7 @@ export class HelpWindow extends UIWindow {
           row(k('inventory'), 'Inventory'),
           row(k('stats'), 'Character — spend AP'),
           row(k('quests'), 'Assignments'),
+          row(k('honors'), 'Academy Honors & titles'),
           row(k('minimap'), 'Minimap'),
           row(k('help'), 'This help'),
           row(['Esc'], 'Close window / menu'),

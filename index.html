@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>The Academy</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -10,6 +12,13 @@
     <div id="stage">
       <div id="game"></div>
       <div id="ui-root"></div>
+    </div>
+    <!-- Shown on phones held upright (style.css); tap to play anyway. -->
+    <div id="rotate-hint" role="dialog" aria-label="Rotate your phone" onclick="this.classList.add('dismissed')">
+      <div class="rh-phone"><i></i></div>
+      <div class="rh-title">Rotate your phone</div>
+      <div class="rh-sub">The Academy plays in landscape.</div>
+      <div class="rh-tap">Tap to play anyway</div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

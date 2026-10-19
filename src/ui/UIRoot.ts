@@ -29,6 +29,8 @@ import { BRANCH_COLORS, jobName } from './info';
 import { consumeNewCharacter } from './session';
 import { ArenaPanel } from './arenaPanel';
 import { CreditsRoll } from './creditsRoll';
+import { TouchControls } from './touchControls';
+import { HonorsWindow } from './honorsWindow';
 import { GRADUATION_QUEST_ID, STORY_FLOW, STORY_QUESTS } from '../data/storyQuests';
 import { keyText } from '../data/keyText';
 import type { UIWindow } from './window';
@@ -49,6 +51,8 @@ export class UIRoot implements IUI {
 
   private status: StatusBar;
   private hotbar: Hotbar;
+  private touch: TouchControls;
+  private honors: HonorsWindow;
   private buffs: BuffTray;
   private vignette: Vignette;
   private minimap: Minimap;
@@ -108,6 +112,7 @@ export class UIRoot implements IUI {
     this.hotbar = new Hotbar(this.ctx);
     this.banners = new Banners(this.ctx);
     this.arena = new ArenaPanel(this.ctx);
+    this.touch = new TouchControls(this.ctx);
 
     // Windows
     this.windows = {
@@ -121,7 +126,8 @@ export class UIRoot implements IUI {
     };
     this.dialog = new DialogWindow(this.ctx);
     this.shop = new ShopWindow(this.ctx);
-    this.allWindows = [...Object.values(this.windows), this.dialog, this.shop];
+    this.honors = new HonorsWindow(this.ctx);
+    this.allWindows = [...Object.values(this.windows), this.honors, this.dialog, this.shop];
     this.death = new DeathModal(this.ctx);
     this.credits = new CreditsRoll(this.ctx);
 
@@ -170,8 +176,8 @@ export class UIRoot implements IUI {
       if (m) this.chat.push(`Entered ${m.name}.`, '#b8c2ff');
     });
     this.on('quest:updated', ({ questId }) => this.onQuestUpdated(questId));
-    this.on('skill:cast', ({ skillId }) => this.hotbar.flash(skillId));
-    this.on('skill:fail', ({ skillId }) => this.hotbar.flash(skillId, true));
+    this.on('skill:cast', ({ skillId }) => { this.hotbar.flash(skillId); this.touch.flash(skillId); });
+    this.on('skill:fail', ({ skillId }) => { this.hotbar.flash(skillId, true); this.touch.flash(skillId, true); });
     this.on('ui:dialog', (spec) => { this.dialog.show(spec); this.tooltip.hide(); });
     this.on('ui:closeDialog', () => this.dialog.close());
     this.on('ui:shop', (spec) => { this.shop.show(spec); this.tooltip.hide(); });
@@ -257,7 +263,7 @@ export class UIRoot implements IUI {
     // Window toggles follow core/bindings (rebindable); Esc always works as menu / close.
     const code = eventKeyCode(e);
     const acts = actionsForKey(code);
-    const UI_ACTS = ['menu', 'skills', 'inventory', 'stats', 'quests', 'help', 'minimap'] as const;
+    const UI_ACTS = ['menu', 'skills', 'inventory', 'stats', 'quests', 'honors', 'help', 'minimap'] as const;
     // A key bound to a UI action never also does its browser default (e.g. Spellbook on F5 must not reload).
     if (UI_ACTS.some(a => acts.includes(a))) e.preventDefault();
     if (e.repeat) return;
@@ -271,6 +277,7 @@ export class UIRoot implements IUI {
     else if (acts.includes('inventory')) this.toggleWindow('inventory');
     else if (acts.includes('stats')) this.toggleWindow('stats');
     else if (acts.includes('quests')) this.toggleWindow('quests');
+    else if (acts.includes('honors')) this.honors.toggle();
     else if (acts.includes('help')) this.toggleWindow('help');
     else if (acts.includes('minimap')) this.minimap.toggle();
   }
@@ -362,6 +369,7 @@ export class UIRoot implements IUI {
       this.trackExp();
       this.status.frame(delta);
       this.hotbar.frame();
+      this.touch.frame();
       this.buffs.frame();
       this.vignette.frame();
       this.minimap.frame(time);
@@ -400,6 +408,7 @@ export class UIRoot implements IUI {
     this.arena.destroy();
     this.status.destroy();
     this.hotbar.destroy();
+    this.touch.destroy();
     this.buffs.destroy();
     this.vignette.destroy();
     this.minimap.destroy();

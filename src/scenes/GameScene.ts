@@ -23,12 +23,14 @@ import { getAudio } from '../systems/AudioSystem';
 import { UIRoot } from '../ui/UIRoot';
 import { PetSystem } from '../systems/PetSystem';
 import { ArenaSystem } from '../systems/ArenaSystem';
+import { HonorsSystem } from '../systems/HonorsSystem';
 import { loadMap } from '../world/MapLoader';
 
 export class GameScene extends Phaser.Scene implements IGameApi {
   private s!: GameServices;
   private pet: PetSystem | null = null;
   private arena: ArenaSystem | null = null;
+  private honors: HonorsSystem | null = null;
   private map: IMapInstance | null = null;
   private initialState!: PlayerState;
   private inputBlocked = false;
@@ -67,6 +69,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     s.game = this;
     s.audio = getAudio();
     s.progression = new Progression(s, state);
+    this.honors = new HonorsSystem(this, s);
     s.combat = new CombatSystem(this, s);
     s.skills = new SkillSystem(this, s);
     s.monsters = new MonsterManager(this, s);
@@ -223,7 +226,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     this.keyPage = add('hotbarPage');
     // Drop Phaser keys (and their browser capture) for codes no gameplay action uses any more.
     // Player keys are bound codes too, so this never touches them; UI-only keys are handled by DOM listeners.
-    const ui = new Set<ActionId>(['skills', 'inventory', 'stats', 'quests', 'minimap', 'help', 'menu']);
+    const ui = new Set<ActionId>(['skills', 'inventory', 'stats', 'quests', 'minimap', 'help', 'menu', 'honors']);
     const used = new Set(ACTIONS.filter(a => !ui.has(a.id)).map(a => getBinding(a.id)).filter(Boolean));
     for (const k of [...kb.keys]) {
       if (k && !used.has(k.keyCode)) { try { kb.removeKey(k, true); } catch { /* ignore */ } }
@@ -335,6 +338,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     s.drops.update(time, delta);
     this.pet?.update(time, delta);
     this.arena?.update(time, delta);
+    this.honors?.update(time, delta);
     s.npcs.update(time, delta);
     this.map.update(time, delta);
     this.handleInput(time);
@@ -345,7 +349,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     const s = this.s;
     try { s.progression.save(); } catch { /* ignore */ }
     for (const fn of [() => s.ui.destroy(), () => s.skills.clearWorld(), () => s.monsters.clear(), () => s.drops.clear(),
-      () => s.npcs.clear(), () => this.pet?.destroy(), () => this.arena?.destroy(), () => s.player.destroy(), () => this.map?.destroy()]) {
+      () => s.npcs.clear(), () => this.pet?.destroy(), () => this.arena?.destroy(), () => this.honors?.destroy(), () => s.player.destroy(), () => this.map?.destroy()]) {
       try { fn(); } catch (e) { console.warn('[game] teardown step failed', e); }
     }
     this.map = null;
@@ -377,6 +381,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
       maps: () => Registry.maps().map(m => m.id),
       pet: (on?: boolean) => { const p = this.pet; if (!p) return false; p.setEnabled(on ?? !p.isEnabled()); return p.isEnabled(); },
       depth: DEPTH,
+      honors: this.honors?.debugApi(),
     };
     (window as unknown as { arcana: typeof api }).arcana = api;
   }

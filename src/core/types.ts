@@ -452,6 +452,18 @@ export interface PlayerState {
   merits?: number;
   /** Best Trial Hall wave reached. */
   arenaBest?: number;
+  /** Academy Honors (achievements + chosen title); absent on saves from before honors existed. */
+  honors?: HonorsState;
+}
+
+/** Persisted Academy Honors state (see src/data/honors.ts, src/systems/HonorsSystem.ts). */
+export interface HonorsState {
+  /** honorId → epoch ms when it was earned. */
+  done: Record<string, number>;
+  /** Free-form progress tallies (kills, casts, visits…; keys in data/honors.ts COUNTER). */
+  counters: Record<string, number>;
+  /** Chosen title (must be the title of an earned honor). */
+  title?: string;
 }
 
 // ───────────────────────────── Service interfaces ─────────────────────────────

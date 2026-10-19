@@ -1,8 +1,39 @@
 html, body { margin: 0; padding: 0; height: 100%; background: #0b0d16; overflow: hidden; }
-body { font-family: "Trebuchet MS", "Segoe UI", sans-serif; color: #f2f2f2; user-select: none; }
-#stage { position: relative; width: 100vw; height: 100vh; }
-#game { position: absolute; inset: 0; }
+body { font-family: "Trebuchet MS", "Segoe UI", sans-serif; color: #f2f2f2; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
+/* The game never scrolls or zooms the page; scrollable lists inside windows opt back in with pan-y (ui.css). */
+html, body, #stage { touch-action: none; }
+#stage { position: relative; width: 100vw; height: 100vh; height: 100dvh; }
+/* Keep the canvas (and the UI scaled over it) clear of notches / home indicators. */
+#game {
+  position: absolute;
+  inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
 /* #ui-root is positioned/sized over the canvas by src/ui (A8). Pointer events only on children. */
 #ui-root { position: absolute; left: 0; top: 0; pointer-events: none; overflow: hidden; }
 #ui-root > * { pointer-events: auto; }
 #game canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+/* ─── "Rotate your phone" (portrait on touch devices) ─── */
+#rotate-hint {
+  display: none; position: fixed; inset: 0; z-index: 100000;
+  flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px;
+  padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: #0b0d16; background: repeating-linear-gradient(0deg, #11132a 0 4px, #0b0d16 4px 8px);
+  color: #deeed6; text-align: center; font-family: "Kenney Pixel", "Courier New", monospace; font-size: 16px;
+  -webkit-font-smoothing: none; image-rendering: pixelated; cursor: pointer;
+}
+@media (orientation: portrait) and (pointer: coarse) { html:not(.ax-touch-off) #rotate-hint:not(.dismissed) { display: flex; } }
+@media (orientation: portrait) { html.ax-touch #rotate-hint:not(.dismissed) { display: flex; } }
+.rh-phone {
+  position: relative; width: 48px; height: 80px; margin-bottom: 18px;
+  background: #2b2e66; box-shadow: 0 0 0 4px #140c1c, 0 0 0 8px #dad45e, 0 0 0 12px #140c1c, inset 4px 4px 0 #4b5294;
+  animation: rh-turn 2.4s steps(1) infinite;
+}
+.rh-phone i { position: absolute; left: 8px; top: 8px; right: 8px; bottom: 16px; background: #597dce; box-shadow: inset 4px 4px 0 #9fc8ff; }
+.rh-phone::after { content: ""; position: absolute; left: 20px; bottom: 4px; width: 8px; height: 8px; background: #dad45e; }
+@keyframes rh-turn { 0%, 45% { transform: rotate(0deg); } 50%, 55% { transform: rotate(-45deg); } 60%, 100% { transform: rotate(-90deg); } }
+.rh-title { font-family: "Kenney Mini", "Kenney Pixel", monospace; font-size: 24px; color: #f4eea0; letter-spacing: 1px; text-shadow: 2px 2px 0 #140c1c; }
+.rh-sub { font-size: 24px; color: #a3abd8; text-shadow: 2px 2px 0 #140c1c; }
+.rh-tap { margin-top: 18px; font-size: 16px; color: #7078b0; animation: rh-blink 1.2s steps(2) infinite; }
+@keyframes rh-blink { 50% { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) { .rh-phone { animation: none; transform: rotate(-90deg); } .rh-tap { animation: none; } }

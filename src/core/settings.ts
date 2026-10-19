@@ -3,22 +3,26 @@
  * - shake: camera shake/flash strength, applied once by GameScene (patches the main camera).
  * - damageSize: damage-number scale (DamageNumbers).
  * - familiar: show Pip (PetSystem.setEnabled).
+ * - touch: on-screen touch controls (ui/touchControls): auto = shown on touch devices / after the first touch.
  * Volumes stay with the audio system (`applySavedVolumes`); the Settings tab only hosts their sliders.
  */
 export type ShakeMode = 'on' | 'reduced' | 'off';
 export type DamageSize = 'small' | 'normal' | 'large';
+export type TouchMode = 'auto' | 'on' | 'off';
 
 export interface Settings {
   shake: ShakeMode;
   damageSize: DamageSize;
   familiar: boolean;
+  touch: TouchMode;
 }
 
-export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({ shake: 'on', damageSize: 'normal', familiar: true });
+export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({ shake: 'on', damageSize: 'normal', familiar: true, touch: 'auto' });
 
 const STORE_KEY = 'academy-settings-v1';
 const SHAKES: readonly ShakeMode[] = ['on', 'reduced', 'off'];
 const SIZES: readonly DamageSize[] = ['small', 'normal', 'large'];
+const TOUCH_MODES: readonly TouchMode[] = ['auto', 'on', 'off'];
 
 function load(): Settings {
   const s: Settings = { ...DEFAULT_SETTINGS };
@@ -30,6 +34,7 @@ function load(): Settings {
     if (SHAKES.includes(d.shake as ShakeMode)) s.shake = d.shake as ShakeMode;
     if (SIZES.includes(d.damageSize as DamageSize)) s.damageSize = d.damageSize as DamageSize;
     if (typeof d.familiar === 'boolean') s.familiar = d.familiar;
+    if (TOUCH_MODES.includes(d.touch as TouchMode)) s.touch = d.touch as TouchMode;
   } catch { /* storage unavailable / corrupt → defaults */ }
   return s;
 }

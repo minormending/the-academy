@@ -1,5 +1,5 @@
 // OWNER: A9 (progression); save slots by P7a. New character + localStorage persistence (versioned, defensive, 6 slots).
-import type { BaseStats, EquipSlot, ItemStack, JobId, PlayerState, QuestProgress } from '../core/types';
+import type { BaseStats, EquipSlot, HonorsState, ItemStack, JobId, PlayerState, QuestProgress } from '../core/types';
 import { HOTBAR_PAGE_SIZE, HOTBAR_SIZE } from '../core/types';
 import { MAX_LEVEL, SAVE_KEY, START_MAP, TOWN_MAP } from '../core/constants';
 import { Registry } from '../core/registry';
@@ -49,6 +49,7 @@ export function newPlayerState(name: string): PlayerState {
     mapId: START_MAP,
     quests: {},
     playTimeMs: 0,
+    honors: { done: {}, counters: {} },
   };
   fillVitals(state);
   return state;
@@ -366,6 +367,30 @@ function repairStack(v: unknown): ItemStack | null {
 }
 
 /**
+ * Academy Honors: keep only well-formed entries. Absent (pre-honors save) stays undefined so HonorsSystem can backfill
+ * from the rest of the save; unknown honor ids are kept (they may come from a newer build).
+ */
+function repairHonors(v: unknown): HonorsState | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const h = v as Partial<HonorsState>;
+  const done: Record<string, number> = {};
+  const counters: Record<string, number> = {};
+  if (h.done && typeof h.done === 'object') {
+    for (const [id, at] of Object.entries(h.done as Record<string, unknown>)) {
+      if (id && typeof at === 'number' && isFinite(at) && at > 0) done[id] = Math.floor(at);
+    }
+  }
+  if (h.counters && typeof h.counters === 'object') {
+    for (const [k, n] of Object.entries(h.counters as Record<string, unknown>)) {
+      if (k && typeof n === 'number' && isFinite(n) && n > 0) counters[k] = Math.min(1e12, n);
+    }
+  }
+  const out: HonorsState = { done, counters };
+  if (typeof h.title === 'string' && h.title.trim()) out.title = h.title.slice(0, 40);
+  return out;
+}
+
+/**
  * Coerce anything into a valid PlayerState. Missing/invalid fields fall back to new-character
  * values; unknown items are dropped; unknown skills refund their SP. Never throws.
  */
@@ -392,6 +417,8 @@ export function repairState(input: unknown): PlayerState {
     out.playTimeMs = num(s.playTimeMs, 0, 0);
     out.merits = Math.floor(num(s.merits, 0, 0));
     out.arenaBest = Math.floor(num(s.arenaBest, 0, 0));
+    const honors = repairHonors(s.honors);
+    if (honors) out.honors = honors; else delete out.honors;
     out.mapId = typeof s.mapId === 'string' && Registry.map(s.mapId) ? s.mapId : START_MAP;
     if (typeof s.mapId === 'string' && Registry.maps().length === 0) out.mapId = s.mapId; // maps not loaded yet: keep
 

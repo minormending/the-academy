@@ -5,7 +5,7 @@ import { getBinding, keyLabel } from '../core/bindings';
 import { isMobileLayout } from './mobile';
 import { FELLOWSHIP_YEAR } from '../data/jobs';
 
-interface BigSpec { kind: 'level' | 'job' | 'generic'; title: string; text: string; sub?: string; color?: string; durMs: number }
+interface BigSpec { kind: 'level' | 'job' | 'generic' | 'award'; title: string; text: string; sub?: string; color?: string; durMs: number; img?: string }
 
 export class Banners {
   private area: HTMLElement;
@@ -57,6 +57,11 @@ export class Banners {
     this.enqueue({ kind: 'job', title, text: jobName, sub: desc, color, durMs: 3400 });
   }
 
+  /** Class passed: the big badge image over "CLASS PASSED · <course>". */
+  badge(courseName: string, badgeName: string, imgUrl: string, color?: string) {
+    this.enqueue({ kind: 'award', title: 'CLASS PASSED', text: courseName, sub: `Badge earned: ${badgeName}`, color, durMs: 3400, img: imgUrl });
+  }
+
   private enqueue(b: BigSpec) {
     // Collapse multiple level-ups (e.g. several levels from one quest/debug levelTo) into the latest one:
     // update the banner that is showing in place, or the one waiting in the queue.
@@ -99,6 +104,7 @@ export class Banners {
     this.textEl = h('div', { class: 'ax-big-text' }, b.text);
     append(this.big, [
       h('div', { class: 'ax-big-rays' }),
+      b.img ? h('img', { class: 'ax-big-badge', src: b.img, alt: '', draggable: false }) : null,
       h('div', { class: 'ax-big-title' }, b.title),
       this.textEl,
       b.sub ? h('div', { class: 'ax-big-sub' }, b.sub) : null]);

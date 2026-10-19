@@ -1839,3 +1839,106 @@ html.ax-large-text.ax-mobile #ui-root .ax-big-sub { font-size: 24px; }
 html.ax-large-text.ax-mobile #ui-root .ax-minimap.ax-mm-overlay .ax-mm-sub { font-size: 22px; }
 html.ax-large-text .ax-cc-label { font-size: 19px; }
 html.ax-large-text .ax-cc-school { font-size: 17px; }
+
+/* ===== Classes & tracker ===== */
+
+/* Classes window (report card) */
+.ax-crs-head { padding: 6px 10px 8px; margin-bottom: 6px; border: 2px solid transparent; border-image: url("/assets/ui/golden/well.png") 3 fill / 6px / 0; }
+.ax-crs-year { font-family: var(--ax-head); font-size: 16px; color: #f4eea0; letter-spacing: 1px; text-shadow: var(--ax-ts2); }
+.ax-crs-prog { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 16px; color: var(--ax-ink-dim); text-shadow: var(--ax-ts); }
+.ax-crs-prog b { color: var(--ax-gold); }
+.ax-crs-pips { display: flex; gap: 3px; margin-left: 4px; }
+.ax-crs-pip { width: 10px; height: 10px; background: var(--ax-k); box-shadow: inset 0 0 0 2px var(--ax-line); }
+.ax-crs-pip.ax-on { background: var(--ax-gold); box-shadow: inset 0 0 0 2px var(--ax-k), inset -2px -2px 0 2px var(--ax-gold-2); }
+.ax-crs-missing { margin-top: 4px; font-size: 16px; color: var(--ax-ink-dim); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.ax-crs-ready { margin-top: 4px; font-size: 16px; color: var(--ax-good); text-shadow: var(--ax-ts); }
+.ax-crs-list { max-height: 400px; }
+.ax-crs-card { --badge: var(--ax-gold); }
+.ax-crs-card.ax-st-passed { box-shadow: inset 3px 0 0 var(--badge); }
+.ax-crs-card.ax-st-locked { opacity: 0.6; }
+.ax-crs-card-head { justify-content: flex-start; }
+.ax-crs-card-head > .ax-badge { margin-left: auto; }
+.ax-crs-badge { flex: none; width: 32px; height: 32px; image-rendering: pixelated; }
+.ax-st-passed .ax-crs-badge { filter: drop-shadow(0 0 3px var(--badge)); }
+.ax-crs-titles { min-width: 0; }
+.ax-crs-code { display: flex; align-items: center; gap: 6px; font-size: 16px; color: var(--ax-ink-dim); line-height: 1; }
+.ax-crs-code b { color: #fff; text-shadow: var(--ax-ts); }
+.ax-crs-kind { font-size: 16px; line-height: 1; padding: 1px 4px 2px; color: var(--ax-k); background: var(--ax-ink-dim); box-shadow: inset 0 0 0 1px var(--ax-k); }
+.ax-crs-kind.ax-k-core { background: var(--ax-gold); }
+.ax-crs-kind.ax-k-major { background: var(--ax-arcane); }
+.ax-crs-kind.ax-k-elective { background: #8fd3c8; }
+.ax-crs-blurb { color: var(--ax-ink-dim); }
+.ax-crs-steps { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 6px; }
+.ax-crs-step { display: flex; align-items: center; gap: 6px; font-size: 16px; color: var(--ax-ink-faint); }
+.ax-crs-step-n { flex: none; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; background: var(--ax-k); color: var(--ax-ink-faint); }
+.ax-crs-step.ax-s-done { color: var(--ax-good); }
+.ax-crs-step.ax-s-done .ax-crs-step-n { background: var(--ax-good); color: var(--ax-k); }
+.ax-crs-step.ax-s-cur { color: #fff; }
+.ax-crs-step.ax-s-cur .ax-crs-step-n { background: var(--ax-gold); color: var(--ax-k); }
+.ax-crs-mission { padding: 6px 8px; margin-bottom: 4px; background: rgba(10, 8, 28, 0.35); box-shadow: inset 0 0 0 2px var(--ax-line); }
+.ax-crs-mission-name { font-size: 16px; color: #f4eea0; text-shadow: var(--ax-ts); margin-bottom: 2px; }
+.ax-crs-hint { font-size: 16px; color: var(--ax-ink-dim); margin: 2px 0 4px; }
+.ax-crs-hint.ax-good { color: var(--ax-good); }
+.ax-crs-chips { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+
+/* Badge Case */
+.ax-crs-case { padding: 6px 8px 8px; border: 2px solid transparent; border-image: url("/assets/ui/golden/well.png") 3 fill / 6px / 0; }
+.ax-crs-case-head { display: flex; justify-content: space-between; font-family: var(--ax-head); font-size: 16px; color: #f4eea0; text-shadow: var(--ax-ts2); margin-bottom: 6px; }
+.ax-crs-case-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 6px; }
+.ax-crs-case-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 16px; color: var(--ax-ink-dim); text-shadow: var(--ax-ts); white-space: nowrap; }
+.ax-crs-case-item img { width: 40px; height: 40px; image-rendering: pixelated; }
+.ax-crs-case-empty { font-size: 16px; color: var(--ax-ink-faint); text-align: center; padding: 4px 0; }
+
+/* Badge award banner */
+.ax-big-badge { display: block; width: 128px; height: 128px; margin: 0 auto 6px; image-rendering: pixelated; filter: drop-shadow(0 0 10px var(--accent)) drop-shadow(4px 6px 0 rgba(8, 6, 22, 0.6)); }
+.ax-big-banner.ax-award.ax-show .ax-big-badge { animation: ax-bump 0.4s steps(4); }
+.ax-award .ax-big-title { font-size: 40px; }
+.ax-award.ax-big-banner { top: 72px; }
+
+/* HUD mission tracker (top-right, under the buff tray) */
+.ax-tracker {
+  position: absolute; right: 10px; top: 64px; z-index: 15; width: 250px; display: flex; flex-direction: column; gap: 6px;
+  padding: 6px 8px; cursor: pointer; pointer-events: auto; background: rgba(16, 14, 44, 0.62); box-shadow: 0 0 0 2px var(--ax-k), 0 0 0 4px var(--ax-gold-dim);
+}
+.ax-tracker[hidden] { display: none; }
+.ax-tracker:hover { background: rgba(24, 22, 64, 0.8); }
+#ui-root:has(.ax-buffs:empty) .ax-tracker { top: 12px; }
+#ui-root:has(.ax-arena) .ax-tracker { display: none; }
+.ax-trk-row { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ax-trk-head { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 16px; line-height: 1; }
+.ax-trk-code { flex: none; color: var(--ax-gold); text-shadow: var(--ax-ts); }
+.ax-trk-name { color: #f4eea0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: var(--ax-ts); }
+.ax-trk-obj { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; font-size: 16px; line-height: 1; color: #e3e6ff; text-shadow: var(--ax-ts); }
+.ax-trk-count { color: #fff; }
+.ax-trk-go { flex-basis: 100%; color: #9fdcff; }
+.ax-trk-row.ax-ready .ax-trk-text { color: var(--ax-good); }
+
+/* Phones: Classes sheet */
+html.ax-mobile #ui-root .ax-sheet .ax-crs-list { max-height: none; overflow: visible; }
+html.ax-mobile #ui-root .ax-sheet .ax-crs-year { font-size: 20px; }
+html.ax-mobile #ui-root .ax-sheet .ax-crs-pip { width: 16px; height: 16px; }
+html.ax-mobile #ui-root .ax-sheet .ax-crs-badge { width: 56px; height: 56px; }
+html.ax-mobile #ui-root .ax-sheet .ax-crs-kind { font-size: 22px; padding: 2px 6px 3px; }
+html.ax-mobile #ui-root .ax-sheet .ax-crs-step { min-height: 36px; gap: 10px; }
+html.ax-mobile #ui-root .ax-sheet .ax-crs-step-n { width: 28px; height: 28px; font-size: 24px; }
+html.ax-mobile #ui-root .ax-sheet .ax-crs-case-head span, html.ax-mobile #ui-root .ax-sheet .ax-crs-case-head b { font-size: 20px; }
+html.ax-mobile #ui-root .ax-sheet .ax-crs-case-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+html.ax-mobile #ui-root .ax-sheet .ax-crs-case-item img { width: 64px; height: 64px; }
+html.ax-mobile #ui-root .ax-sheet .ax-crs-case-item span { font-size: 24px; }
+html.ax-mobile #ui-root .ax-sheet .ax-crs-chips { gap: 6px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+html.ax-mobile #ui-root .ax-award .ax-big-title { font-size: 28px; }
+html.ax-mobile #ui-root .ax-big-badge { width: 96px; height: 96px; }
+html.ax-mobile #ui-root .ax-award.ax-big-banner { top: 40px; }
+
+/* Phones: tracker = two compact lines (one per mission) under the map / ☰ buttons */
+html.ax-mobile #ui-root .ax-tracker { right: 6px; top: 62px; width: 300px; gap: 2px; padding: 3px 6px 4px; }
+html.ax-mobile #ui-root:has(.ax-buffs:empty) .ax-tracker { top: 62px; }
+html.ax-mobile #ui-root .ax-trk-row { flex-direction: row; align-items: baseline; gap: 6px; white-space: nowrap; overflow: hidden; }
+html.ax-mobile #ui-root .ax-trk-head { flex: none; }
+html.ax-mobile #ui-root .ax-trk-name { display: none; }
+html.ax-mobile #ui-root .ax-trk-obj { flex: 1; min-width: 0; flex-wrap: nowrap; overflow: hidden; }
+html.ax-mobile #ui-root .ax-trk-text { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+html.ax-mobile #ui-root .ax-trk-go { flex: none; flex-basis: auto; }
+html.ax-mobile #ui-root .ax-trk-go::before { content: "→ "; }
+html.ax-mobile #ui-root :is(.ax-trk-head, .ax-trk-obj) { font-size: 20px; line-height: 20px; }
+html.ax-mobile #ui-root .ax-trk-go-lbl { display: none; }

@@ -45,7 +45,7 @@ export const ACTIONS: readonly ActionInfo[] = [
   { id: 'skills', label: 'Spellbook', group: 'Windows' },
   { id: 'inventory', label: 'Inventory', group: 'Windows' },
   { id: 'stats', label: 'Character', group: 'Windows' },
-  { id: 'quests', label: 'Assignments', group: 'Windows' },
+  { id: 'quests', label: 'Classes', group: 'Windows' },
   { id: 'honors', label: 'Academy Honors', group: 'Windows' },
   { id: 'minimap', label: 'Minimap', group: 'Windows' },
   { id: 'help', label: 'Help', group: 'Windows' },

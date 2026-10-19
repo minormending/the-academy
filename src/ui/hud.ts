@@ -164,7 +164,7 @@ const MOBILE_MENU: readonly { label: string; win: WindowName | 'honors'; icon?: 
   { label: 'Spellbook', win: 'skills', icon: 'W_Book06' },
   { label: 'Bag', win: 'inventory', icon: 'I_Chest01' },
   { label: 'Character', win: 'stats', icon: 'C_Hat01' },
-  { label: 'Assignments', win: 'quests', icon: 'I_Scroll' },
+  { label: 'Classes', win: 'courses', icon: 'I_Scroll' },
   { label: 'Honors', win: 'honors' },
   { label: 'Menu & Settings', win: 'menu' },
 ];

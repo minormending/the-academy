@@ -11,7 +11,7 @@ import { actionsForKey, eventKeyCode, getBinding, keyLabel } from '../core/bindi
 import { controlsClaimKey } from './controlsWindow';
 import { expToNext } from '../core/balance';
 import { Layout, type UICtx, type WindowName } from './context';
-import { fmtNum, isTextInput, safe } from './dom';
+import { cssColor, fmtNum, isTextInput, safe } from './dom';
 import { UIScaler, uiRootEl } from './scaler';
 import { Tooltip } from './tooltip';
 import { DragManager, type DragPayload } from './drag';
@@ -22,7 +22,9 @@ import { Banners } from './banners';
 import { SkillsWindow } from './skillsWindow';
 import { InventoryWindow } from './inventoryWindow';
 import { StatsWindow } from './statsWindow';
-import { QuestsWindow } from './questsWindow';
+import { CoursesWindow } from './coursesWindow';
+import { MissionTracker } from './missionTracker';
+import { badgeDataUrl } from '../art/badges';
 import { HelpWindow, JobsWindow, MenuWindow, applySavedVolumes } from './miscWindows';
 import { DeathModal, DialogWindow, ShopWindow } from './dialogs';
 import { BRANCH_COLORS, jobName } from './info';
@@ -63,6 +65,8 @@ export class UIRoot implements IUI {
   private death: DeathModal;
   private dialog: DialogWindow;
   private shop: ShopWindow;
+  private tracker: MissionTracker;
+  private courses: CoursesWindow;
   private windows: Record<WindowName, UIWindow>;
   private allWindows: UIWindow[];
 
@@ -113,15 +117,16 @@ export class UIRoot implements IUI {
     this.banners = new Banners(this.ctx);
     this.arena = new ArenaPanel(this.ctx);
     this.touch = new TouchControls(this.ctx);
+    this.tracker = new MissionTracker(this.ctx);
 
-    // Windows
+    // Windows. Classes (the report card) also hosts the Assignments tab, so 'quests' opens the same window.
+    this.courses = new CoursesWindow(this.ctx);
     this.windows = {
       skills: new SkillsWindow(this.ctx),
       inventory: new InventoryWindow(this.ctx),
       stats: new StatsWindow(this.ctx),
-      quests: new QuestsWindow(this.ctx),
-      // TEMP until the Classes window lands (src/ui/coursesWindow.ts): show assignments.
-      courses: new QuestsWindow(this.ctx),
+      quests: this.courses,
+      courses: this.courses,
       jobs: new JobsWindow(this.ctx),
       menu: new MenuWindow(this.ctx),
       help: new HelpWindow(this.ctx),
@@ -129,7 +134,7 @@ export class UIRoot implements IUI {
     this.dialog = new DialogWindow(this.ctx);
     this.shop = new ShopWindow(this.ctx);
     this.honors = new HonorsWindow(this.ctx);
-    this.allWindows = [...Object.values(this.windows), this.honors, this.dialog, this.shop];
+    this.allWindows = [...new Set(Object.values(this.windows)), this.honors, this.dialog, this.shop];
     this.death = new DeathModal(this.ctx);
     this.credits = new CreditsRoll(this.ctx);
 
@@ -174,10 +179,15 @@ export class UIRoot implements IUI {
     });
     this.on('map:changed', ({ mapId }) => {
       this.minimap.invalidate();
+      this.tracker.markDirty();
+      this.courses.markDirty();
       const m = Registry.map(mapId);
       if (m) this.chat.push(`Entered ${m.name}.`, '#b8c2ff');
     });
     this.on('quest:updated', ({ questId }) => this.onQuestUpdated(questId));
+    this.on('course:updated', () => { this.tracker.markDirty(); this.courses.markDirty(); });
+    this.on('course:passed', ({ courseId, badgeId }) => this.onCoursePassed(courseId, badgeId));
+    this.on('year:promoted', () => { this.tracker.markDirty(); this.courses.markDirty(); });
     this.on('skill:cast', ({ skillId }) => { this.hotbar.flash(skillId); this.touch.flash(skillId); });
     this.on('skill:fail', ({ skillId }) => { this.hotbar.flash(skillId, true); this.touch.flash(skillId, true); });
     this.on('ui:dialog', (spec) => { this.dialog.show(spec); this.tooltip.hide(); });
@@ -210,7 +220,18 @@ export class UIRoot implements IUI {
     }
     if (questId === GRADUATION_QUEST_ID && now === 'turned_in' && prev !== 'turned_in' && this.started) this.credits.arm();
     this.questStatus.set(questId, now);
-    this.windows.quests.markDirty();
+    this.courses.markDirty();
+    this.tracker.markDirty();
+  }
+
+  /** Badge award moment: the big badge over "CLASS PASSED · <course>". */
+  private onCoursePassed(courseId: string, badgeId: string) {
+    const c = Registry.course(courseId) ?? Registry.courses().find(x => x.badge.id === badgeId);
+    this.tracker.markDirty();
+    this.courses.markDirty();
+    if (!c) return;
+    this.banners.badge(c.name, c.badge.name, badgeDataUrl(c.badge, 128), cssColor(c.badge.color));
+    this.ctx.sfx('quest_complete');
   }
 
   private announceComplete(questId: string, name: string, giver: string) {
@@ -225,6 +246,7 @@ export class UIRoot implements IUI {
 
   private markAllDirty() {
     this.hotbar.markDirty();
+    this.tracker.markDirty();
     for (const w of this.allWindows) w.markDirty();
   }
 
@@ -278,7 +300,7 @@ export class UIRoot implements IUI {
     if (acts.includes('skills')) this.toggleWindow('skills');
     else if (acts.includes('inventory')) this.toggleWindow('inventory');
     else if (acts.includes('stats')) this.toggleWindow('stats');
-    else if (acts.includes('quests')) this.toggleWindow('quests');
+    else if (acts.includes('quests')) this.toggleWindow('courses'); // J: Classes (Assignments is its second tab)
     else if (acts.includes('honors')) this.honors.toggle();
     else if (acts.includes('help')) this.toggleWindow('help');
     else if (acts.includes('minimap')) this.minimap.toggle();
@@ -377,6 +399,7 @@ export class UIRoot implements IUI {
       this.minimap.frame(time);
       this.chat.frame(time);
       this.arena.frame();
+      this.tracker.frame();
       for (const w of this.allWindows) w.tick(time, delta);
       this.tooltip.check();
       this.credits.frame(delta, !this.dialog.isOpen && !this.shop.isOpen && !this.death.isOpen && !safe(() => this.services.progression.isDead(), false));
@@ -408,6 +431,7 @@ export class UIRoot implements IUI {
     this.credits.destroy();
     this.banners.destroy();
     this.arena.destroy();
+    this.tracker.destroy();
     this.status.destroy();
     this.hotbar.destroy();
     this.touch.destroy();

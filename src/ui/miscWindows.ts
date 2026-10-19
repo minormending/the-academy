@@ -167,7 +167,7 @@ export class HelpWindow extends UIWindow {
           row(k('skills'), 'Spellbook — spend SP'),
           row(k('inventory'), 'Inventory'),
           row(k('stats'), 'Character — spend AP'),
-          row(k('quests'), 'Assignments'),
+          row(k('quests'), 'Classes & assignments'),
           row(k('honors'), 'Academy Honors & titles'),
           row(k('minimap'), 'Minimap'),
           row(k('help'), 'This help'),
@@ -196,7 +196,7 @@ export class HelpWindow extends UIWindow {
         'The flip button switches to the other six slots and the second hotbar page.',
         'To fill a button: Spellbook → tap a spell → To hotbar → tap a slot. Potions work the same way from Items.'),
       ...sec('Windows',
-        'Buttons at the top open Spells, Items, Character, Tasks (Assignments), Honors and the Menu.',
+        'Buttons at the top open Spells, Items, Character, Tasks (your Classes), Honors and the Menu.',
         'In any window, tap something to see its details; the red X closes it.'),
       h('div', { class: 'ax-row ax-center ax-m-help-done' },
         h('button', { class: 'ax-btn ax-m-btn', onclick: () => this.close() }, 'Got it!')));

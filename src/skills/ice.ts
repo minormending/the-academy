@@ -6,6 +6,7 @@ import type { IconSpec, SkillContext, SkillDef, StatusSpec } from '../core/types
 import {
   castColdExchange, castDiamondReckoning, castFractureRoute, castHailLoom, castRimeBrand, castRimeRecall, castRimeSnare,
 } from './ice/spellbook';
+import { ICE_Y5 } from './ice/year5';
 
 // ───────────────────────────── helpers ─────────────────────────────
 
@@ -676,4 +677,6 @@ export const ICE_SKILLS: SkillDef[] = [
   rimeSnare, coldSnap, rimeBrand,
   fractureRoute, coldExchange, hailLoom,
   rimeRecall, diamondReckoning,
+  // Year 5 (Winter Archon) — see ice/year5.ts.
+  ...ICE_Y5,
 ];

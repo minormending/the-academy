@@ -18,6 +18,7 @@ import {
   crystalNeedleHit, crystalWallArea, diamondBarrierAura, diamondBarrierCast, frostStepIn,
   frostStepOut, hoarfrostHit, hoarfrostLink, restorativeThaw, rimeGuardSigil, rimeRayBeam,
 } from './ice/academyFx';
+import { registerIceY5Vfx } from './ice/vfx5';
 import {
   ADD, C, GROUND_DY, bindLife, breathe, burst, faceDeg, flash, followEmitter, img, ring, rnd, spin, T, tweenOut,
 } from './ice/fx';
@@ -679,4 +680,5 @@ export function registerIceVfx(): void {
   registerVfx('ice_rime_recall_depart', rimeRecallDepart);
   registerVfx('ice_rime_recall_arrive', rimeRecallArrive);
   registerVfx('ice_diamond_reckoning_beam', diamondReckoningBeam);
+  registerIceY5Vfx(registerVfx);
 }

@@ -2,6 +2,7 @@
 import { append, clear, h } from './dom';
 import type { UICtx } from './context';
 import { getBinding, keyLabel } from '../core/bindings';
+import { isMobileLayout } from './mobile';
 
 interface BigSpec { kind: 'level' | 'job' | 'generic'; title: string; text: string; sub?: string; color?: string; durMs: number }
 
@@ -41,7 +42,9 @@ export class Banners {
   }
 
   levelUp(level: number) {
-    this.enqueue({ kind: 'level', title: 'LEVEL UP!', text: `Level ${level}`, sub: `New AP & SP available — press ${keyLabel(getBinding('stats'))} / ${keyLabel(getBinding('skills'))}`, color: '#ffd76a', durMs: 2600 });
+    const sub = isMobileLayout() ? 'New AP & SP — open ☰ Character / Spellbook'
+      : `New AP & SP available — press ${keyLabel(getBinding('stats'))} / ${keyLabel(getBinding('skills'))}`;
+    this.enqueue({ kind: 'level', title: 'LEVEL UP!', text: `Level ${level}`, sub, color: '#ffd76a', durMs: 2600 });
   }
 
   jobAdvance(jobName: string, desc: string, color: string, year?: number) {

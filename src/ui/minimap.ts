@@ -4,8 +4,11 @@ import { Registry } from '../core/registry';
 import type { UICtx } from './context';
 import { getBinding, keyLabel, onBindingsChanged } from '../core/bindings';
 import { h, safe, setText } from './dom';
+import { isMobileLayout, onMobileLayoutChanged } from './mobile';
 
 const MAX_W = 216, MAX_H = 112, DPR = 2;
+/** Phones: the minimap hides behind a map button; tapping it shows this large overlay (logical 720×405 px). */
+const BIG_W = 600, BIG_H = 250;
 
 export class Minimap {
   readonly el: HTMLElement;
@@ -22,6 +25,13 @@ export class Minimap {
   private visible: boolean;
   private toggleBtn!: HTMLButtonElement;
   private offBindings: (() => void) | null = null;
+  private offMobile: (() => void) | null = null;
+  /** Phones: map button + large overlay state. */
+  readonly mapBtn: HTMLElement;
+  private overlay = false;
+  private built: 'small' | 'big' = 'small';
+  /** Marker / line size multiplier (bigger on the phone overlay). */
+  private mk = 1;
 
   constructor(private ctx: UICtx) {
     this.canvas = h('canvas', { class: 'ax-minimap-canvas' });
@@ -39,10 +49,30 @@ export class Minimap {
     this.visible = ctx.layout.getFlag('minimap', true);
     this.el.classList.toggle('ax-collapsed', !this.visible);
     toggle.textContent = this.visible ? '–' : '+';
+    // Tapping the big overlay anywhere closes it.
+    this.el.addEventListener('click', (e) => { if (this.overlay && e.target !== toggle) this.setOverlay(false); });
+    this.mapBtn = h('button', { class: 'ax-mm-mobbtn', title: 'Map', 'aria-label': 'Map', onclick: () => { this.ctx.sfx('ui_click'); this.setOverlay(!this.overlay); } },
+      h('span', { class: 'ax-mm-mobico' }));
     ctx.root.appendChild(this.el);
+    ctx.root.appendChild(this.mapBtn);
+    this.offMobile = onMobileLayoutChanged((on) => { if (!on) this.setOverlay(false); this.mapId = ''; this.nextDraw = 0; });
   }
 
+  /** Phones: show / hide the large map overlay. */
+  setOverlay(on: boolean) {
+    if (on === this.overlay) return;
+    this.overlay = on;
+    this.el.classList.toggle('ax-mm-overlay', on);
+    this.mapBtn.classList.toggle('ax-active', on);
+    this.mapId = '';
+    this.nextDraw = 0;
+    if (on) this.ctx.sfx('ui_open');
+  }
+
+  private drawing(): boolean { return isMobileLayout() ? this.overlay : this.visible; }
+
   toggle() {
+    if (isMobileLayout()) { this.setOverlay(!this.overlay); return; }
     this.visible = !this.visible;
     this.el.classList.toggle('ax-collapsed', !this.visible);
     this.toggleBtn.textContent = this.visible ? '–' : '+';
@@ -60,7 +90,10 @@ export class Minimap {
     const lr = def.levelRange;
     setText(this.subEl, def.safe ? `${def.region} · Safe zone` : `${def.region}${lr ? ` · Lv ${lr[0]}–${lr[1]}` : ''}`);
     const mw = Math.max(1, def.width), mh = Math.max(1, def.height);
-    this.scale = Math.min(MAX_W / mw, MAX_H / mh);
+    const big = isMobileLayout() && this.overlay;
+    this.built = big ? 'big' : 'small';
+    this.mk = big ? 1.8 : 1;
+    this.scale = Math.min((big ? BIG_W : MAX_W) / mw, (big ? BIG_H : MAX_H) / mh);
     this.w = Math.max(40, Math.round(mw * this.scale));
     this.hgt = Math.max(24, Math.round(mh * this.scale));
     this.canvas.width = this.w * DPR;
@@ -73,6 +106,7 @@ export class Minimap {
     const g = c.getContext('2d');
     if (g) {
       const s = this.scale * DPR;
+      const D = DPR * this.mk;
       const bg = g.createLinearGradient(0, 0, 0, c.height);
       bg.addColorStop(0, 'rgba(30,38,92,0.85)');
       bg.addColorStop(1, 'rgba(12,16,44,0.9)');
@@ -83,64 +117,69 @@ export class Minimap {
       for (const w of def.walls ?? []) g.fillRect(w.x * s, w.y * s, Math.max(1, w.w * s), Math.max(1, w.h * s));
       // ropes
       g.strokeStyle = 'rgba(222,190,120,0.85)';
-      g.lineWidth = DPR;
-      g.setLineDash([2 * DPR, 1.5 * DPR]);
+      g.lineWidth = D;
+      g.setLineDash([2 * D, 1.5 * D]);
       for (const r of def.ropes ?? []) { g.beginPath(); g.moveTo(r.x * s, r.top * s); g.lineTo(r.x * s, r.bottom * s); g.stroke(); }
       g.setLineDash([]);
       // platforms
       for (const p of def.platforms ?? []) {
         g.strokeStyle = p.oneWay ? 'rgba(190,220,255,0.85)' : 'rgba(150,230,170,0.95)';
-        g.lineWidth = (p.oneWay ? 1.2 : 2) * DPR;
+        g.lineWidth = (p.oneWay ? 1.2 : 2) * D;
         g.beginPath(); g.moveTo(p.x1 * s, p.y * s); g.lineTo(p.x2 * s, p.y * s); g.stroke();
       }
       // portals
       for (const p of def.portals ?? []) {
         if (p.hidden) continue;
         const x = p.x * s, y = (p.y - 30) * s;
-        const grd = g.createRadialGradient(x, y, 0, x, y, 5 * DPR);
+        const grd = g.createRadialGradient(x, y, 0, x, y, 5 * D);
         grd.addColorStop(0, 'rgba(220,200,255,1)'); grd.addColorStop(1, 'rgba(140,90,255,0)');
-        g.fillStyle = grd; g.beginPath(); g.arc(x, y, 5 * DPR, 0, Math.PI * 2); g.fill();
+        g.fillStyle = grd; g.beginPath(); g.arc(x, y, 5 * D, 0, Math.PI * 2); g.fill();
       }
       // NPCs (static placements)
       for (const n of def.npcs ?? []) {
         g.fillStyle = '#6dffa6';
         g.strokeStyle = 'rgba(0,40,10,0.9)';
-        g.lineWidth = DPR * 0.8;
-        g.beginPath(); g.arc(n.x * s, (n.y - 20) * s, 2.4 * DPR, 0, Math.PI * 2); g.fill(); g.stroke();
+        g.lineWidth = D * 0.8;
+        g.beginPath(); g.arc(n.x * s, (n.y - 20) * s, 2.4 * D, 0, Math.PI * 2); g.fill(); g.stroke();
       }
     }
     this.staticLayer = c;
   }
 
   frame(time: number) {
-    if (!this.visible) return;
+    if (!this.drawing()) return;
     if (time < this.nextDraw) return;
     this.nextDraw = time + 80;
     const map = safe(() => this.ctx.s.game.currentMap(), null);
     const def = map?.def ?? Registry.map(this.ctx.s.progression.state.mapId);
     if (!def || !this.g) return;
-    if (def.id !== this.mapId) this.buildStatic(def);
+    if (def.id !== this.mapId || this.built !== (isMobileLayout() && this.overlay ? 'big' : 'small')) this.buildStatic(def);
     const g = this.g;
     g.clearRect(0, 0, this.canvas.width, this.canvas.height);
     if (this.staticLayer) g.drawImage(this.staticLayer, 0, 0);
     const s = this.scale * DPR;
+    const D = DPR * this.mk;
     const mons = safe(() => this.ctx.s.monsters.all(), []);
     for (const m of mons) {
       if (!m.alive) continue;
       const boss = !!m.def.boss;
       g.fillStyle = boss ? '#ff4f9a' : '#ff6a5a';
-      g.beginPath(); g.arc(m.x * s, (m.y - m.def.size.h / 2) * s, (boss ? 3.6 : 1.9) * DPR, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.arc(m.x * s, (m.y - m.def.size.h / 2) * s, (boss ? 3.6 : 1.9) * D, 0, Math.PI * 2); g.fill();
     }
     const pl = this.ctx.s.player;
     const px = safe(() => pl.x, 0) * s, py = (safe(() => pl.y, 0) - 30) * s;
     const pulse = 1 + Math.sin(time / 180) * 0.25;
     g.fillStyle = 'rgba(255,230,90,0.35)';
-    g.beginPath(); g.arc(px, py, 5 * DPR * pulse, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(px, py, 5 * D * pulse, 0, Math.PI * 2); g.fill();
     g.fillStyle = '#ffe45a';
     g.strokeStyle = '#3a2a00';
-    g.lineWidth = DPR;
-    g.beginPath(); g.arc(px, py, 2.8 * DPR, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.lineWidth = D;
+    g.beginPath(); g.arc(px, py, 2.8 * D, 0, Math.PI * 2); g.fill(); g.stroke();
   }
 
-  destroy() { this.offBindings?.(); this.offBindings = null; this.el.remove(); }
+  destroy() {
+    this.offBindings?.(); this.offBindings = null;
+    this.offMobile?.(); this.offMobile = null;
+    this.el.remove(); this.mapBtn.remove();
+  }
 }

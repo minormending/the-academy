@@ -36,7 +36,7 @@ export class MenuWindow extends UIWindow {
 
   protected onOpen() { this.confirmQuit = false; this.invalidate(); }
   /** Only re-render on explicit changes (keeps sliders stable while dragging). */
-  protected signature() { return JSON.stringify([this.confirmQuit, this.tab, getSettings()]); }
+  protected signature() { return JSON.stringify([this.confirmQuit, this.tab, getSettings(), this.mobile]); }
 
   destroy() {
     try { this.offSettings(); } catch { /* ignore */ }
@@ -63,7 +63,9 @@ export class MenuWindow extends UIWindow {
       : btn('Quit to Title', () => { this.confirmQuit = true; this.invalidate(); }, 'ax-btn-secondary');
     return [
       btn('Resume', () => this.close()),
-      btn('Controls', () => { this.close(); openControls(this.ctx, 'keyboard'); }, 'ax-btn-secondary'),
+      this.mobile
+        ? btn('Gamepad', () => { this.close(); openControls(this.ctx, 'gamepad'); }, 'ax-btn-secondary')
+        : btn('Controls', () => { this.close(); openControls(this.ctx, 'keyboard'); }, 'ax-btn-secondary'),
       btn('Settings', () => { this.tab = 'settings'; this.invalidate(); }, 'ax-btn-secondary'),
       btn('How to Play', () => { this.close(); this.ctx.openWindow('help'); }, 'ax-btn-secondary'),
       btn('Save Game', () => {
@@ -127,7 +129,7 @@ export class HelpWindow extends UIWindow {
     super(ctx, 'help', 'How to Play', { width: 540, x: 370, y: 130, className: 'ax-help-win' });
     this.offBindings = onBindingsChanged(() => this.invalidate());
   }
-  protected signature() { return JSON.stringify(getBindings()); }
+  protected signature() { return JSON.stringify([getBindings(), this.mobile]); }
   destroy() {
     try { this.offBindings(); } catch { /* ignore */ }
     destroyControls(this.ctx);
@@ -142,6 +144,7 @@ export class HelpWindow extends UIWindow {
     const list = schools.length > 1 ? `${schools.slice(0, -1).join(', ')} or ${schools[schools.length - 1]}` : 'a School';
     const lv2 = jobs.find(j => j.tier === 2)?.requiredLevel ?? 10;
     const slots = (idx: number[]) => k(...idx.map(i => SLOT_ACTIONS[i]));
+    if (this.mobile) { this.renderTouch(list, lv2); return; }
     this.body.replaceChildren(
       h('div', { class: 'ax-help-intro' }, `Welcome to The Academy! Every student here is a mage. Study the core curriculum as a Year 1 Apprentice, then pass your Year-end Exam at level ${lv2} and declare your School: ${list}.`),
       h('div', { class: 'ax-help-cols' },
@@ -176,6 +179,26 @@ export class HelpWindow extends UIWindow {
       h('div', { class: 'ax-row ax-center' },
         h('button', { class: 'ax-btn ax-btn-secondary', onclick: () => { this.ctx.sfx('ui_click'); this.close(); openControls(this.ctx, 'keyboard'); } }, 'Controls & Gamepad'),
         h('button', { class: 'ax-btn', onclick: () => this.close() }, 'Got it!')));
+  }
+
+  /** Phone help: touch controls only (no key lists), one column. */
+  private renderTouch(list: string, lv2: number) {
+    const sec = (title: string, ...tips: string[]) => [h('div', { class: 'ax-help-head' }, title), ...tips.map(t => h('div', { class: 'ax-help-tip' }, t))];
+    this.body.replaceChildren(
+      h('div', { class: 'ax-help-intro' }, `Welcome to The Academy! Study as a Year 1 Apprentice, then pass your Year-end Exam at level ${lv2} and declare your School: ${list}.`),
+      ...sec('Moving',
+        'Pad (bottom left): left / right to walk.',
+        'Up: climb ladders, enter portals, talk to people. Down + Jump: drop through a platform.',
+        'Jump button (bottom right) jumps; hold Loot to pick up items.'),
+      ...sec('Casting',
+        'The six skill buttons cast the spells on your hotbar — hold one to keep casting.',
+        'The flip button switches to the other six slots and the second hotbar page.',
+        'To fill a button: Spellbook → tap a spell → To hotbar → tap a slot. Potions work the same way from Items.'),
+      ...sec('Windows',
+        'Buttons at the top open Spells, Items, Character, Tasks (Assignments), Honors and the Menu.',
+        'In any window, tap something to see its details; the red X closes it.'),
+      h('div', { class: 'ax-row ax-center ax-m-help-done' },
+        h('button', { class: 'ax-btn ax-m-btn', onclick: () => this.close() }, 'Got it!')));
   }
 }
 

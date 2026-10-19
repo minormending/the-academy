@@ -10,7 +10,7 @@ import type { UICtx } from './context';
 import { h, safe } from './dom';
 import { BRANCH_COLORS, BRANCH_NAMES, examinerName, schoolName, skillTooltip } from './info';
 import { iconEl } from './uiIcons';
-import { UIWindow } from './window';
+import { UIWindow, hotbarPicker } from './window';
 
 interface TabDef { id: string; year: string; label: string; jobs: JobDef[]; locked: boolean; color: string; note?: string }
 
@@ -45,6 +45,10 @@ export class SkillsWindow extends UIWindow {
   /** Keep the list's scroll position across re-renders (learning a spell re-renders the window). */
   private scrollTop = 0;
   private scrollKey = '';
+  /** Phone layout: spell shown in the detail pane, slot chooser state. */
+  private selected = '';
+  private picking = false;
+  private pickPage = 0;
 
   constructor(ctx: UICtx) {
     super(ctx, 'skills', 'Spellbook', { width: 548, x: 16, y: 80, className: 'ax-skills-win' });
@@ -54,7 +58,7 @@ export class SkillsWindow extends UIWindow {
 
   private allJobs(): JobDef[] { return safe(() => Registry.jobs(), [] as JobDef[]).filter(Boolean); }
 
-  protected onClose() { this.confirmRespec = ''; }
+  protected onClose() { this.confirmRespec = ''; this.picking = false; }
 
   private refundableSp(skills: SkillDef[]): number {
     // Match respecTier: the starting Arcane Bolt level was free and stays learned.
@@ -104,7 +108,7 @@ export class SkillsWindow extends UIWindow {
     const st = p.state;
     const learnable = Registry.skills().filter(s => safe(() => p.canLearn(s.id), false)).map(s => s.id).join(',');
     return JSON.stringify([this.tab, this.filter, this.sort, st.job, st.level, st.sp, st.skills, learnable, st.hotbar,
-      p.countItem('tome_of_unlearning'), this.confirmRespec]);
+      p.countItem('tome_of_unlearning'), this.confirmRespec, this.mobile, this.selected, this.picking, this.pickPage]);
   }
 
   protected render() {
@@ -117,6 +121,7 @@ export class SkillsWindow extends UIWindow {
       this.tab = (unlocked[unlocked.length - 1] ?? tabs[0]).id;
     }
     const tab = tabs.find(t => t.id === this.tab)!;
+    if (this.mobile) { this.renderMobile(tabs, tab); return; }
     this.titleExtra.replaceChildren(h('span', { class: `ax-pill${st.sp > 0 ? ' ax-glow' : ''}` }, `SP ${st.sp}`));
     const matk = safe(() => p.derived().matk, 0);
 
@@ -319,4 +324,143 @@ export class SkillsWindow extends UIWindow {
     }));
     return card;
   }
+
+  // ───────────────────────────── phone layout ─────────────────────────────
+
+  /** Phone Spellbook: Year scroller on top, big spell rows on the left, tap-to-detail pane on the right. */
+  private renderMobile(tabs: TabDef[], tab: TabDef) {
+    const p = this.ctx.s.progression;
+    const st = p.state;
+    const matk = safe(() => p.derived().matk, 0);
+    this.titleExtra.replaceChildren(h('span', { class: `ax-pill ax-m-sp${st.sp > 0 ? ' ax-glow' : ''}` }, `SP ${st.sp}`));
+    const oldList = this.body.querySelector('.ax-m-list') as HTMLElement | null;
+    const oldTabs = this.body.querySelector('.ax-m-yeartabs') as HTMLElement | null;
+    const key = `${this.tab}|${this.filter}`;
+    let top = oldList?.scrollTop ?? 0;
+    if (key !== this.scrollKey) { this.scrollKey = key; top = 0; }
+
+    const strip = h('div', { class: 'ax-m-yeartabs' }, tabs.map(t => h('button', {
+      class: `ax-m-yeartab${t.id === this.tab ? ' ax-active' : ''}${t.locked ? ' ax-locked' : ''}`,
+      style: `--accent:${t.color}`,
+      onclick: () => { if (t.id !== this.tab) { this.tab = t.id; this.confirmRespec = ''; this.selected = ''; this.picking = false; this.invalidate(); this.ctx.sfx('ui_click'); } },
+    }, h('span', { class: 'ax-m-yeartab-year' }, t.locked ? h('span', { class: 'ax-lock' }) : null, t.year), h('span', { class: 'ax-m-yeartab-name' }, t.label))));
+
+    const groups = tab.jobs.map(job => ({ job, skills: safe(() => Registry.skillsForJob(job.id), [] as SkillDef[]) }));
+    const all = groups.flatMap(g => g.skills);
+    const count = (f: Filter) => all.filter(d => matches(d, f)).length;
+    const chips = h('div', { class: 'ax-m-chips' }, FILTERS.filter(f => f.id === 'all' || count(f.id) > 0).map(f => h('button', {
+      class: `ax-chip ax-chip-${f.id}${this.filter === f.id ? ' ax-active' : ''}`,
+      onclick: () => { if (this.filter !== f.id) { this.filter = f.id; this.invalidate(); this.ctx.sfx('ui_click'); } },
+    }, f.label, h('span', { class: 'ax-chip-n' }, ` ${count(f.id)}`))));
+
+    const list = h('div', { class: 'ax-m-list ax-m-scroll' }, chips);
+    if (tab.locked && tab.note) list.appendChild(h('div', { class: 'ax-locked-note' }, h('span', { class: 'ax-lock' }), tab.note));
+    for (const g of groups) {
+      if (tab.jobs.length > 1) list.appendChild(h('div', { class: 'ax-m-group', style: `--accent:${BRANCH_COLORS[g.job.branch] ?? '#c9b8ff'}` }, `Year ${g.job.tier} · ${g.job.name} · Lv ${g.job.requiredLevel}`));
+      for (const def of g.skills.filter(d => matches(d, this.filter))) list.appendChild(this.mobileRow(def, tab.locked));
+    }
+    if (!all.length) list.appendChild(h('div', { class: 'ax-empty-note' }, 'No spells recorded for this Year yet.'));
+    if (!tab.locked) list.appendChild(this.mobileUnlearn(tab, all));
+
+    const detail = h('div', { class: 'ax-m-detail ax-m-scroll' });
+    const def = all.find(d => d.id === this.selected);
+    if (!def) {
+      detail.appendChild(h('div', { class: 'ax-m-hint' }, tab.locked ? 'Preview: tap a spell to read about it.' : 'Tap a spell to see what it does, learn it, or put it on your skill buttons.'));
+    } else {
+      const lv = tab.locked ? 0 : st.skills[def.id] ?? 0;
+      const canLearn = !tab.locked && lv < def.maxLevel && safe(() => p.canLearn(def.id), false);
+      const active = def.kind !== 'passive';
+      detail.appendChild(h('div', { class: 'ax-m-tip' }, skillTooltip(def, {
+        level: lv, matk, learned: tab.locked ? undefined : st.skills,
+        locked: tab.locked ? `Locked — Year ${Registry.job(def.job)?.tier ?? '?'} ${Registry.job(def.job)?.name ?? def.job} spell` : undefined,
+      })));
+      if (this.picking && !tab.locked && lv > 0 && active) {
+        detail.prepend(hotbarPicker(this.ctx, def.id, this.pickPage,
+          (pg) => { this.pickPage = pg; this.invalidate(); },
+          () => { this.picking = false; this.invalidate(); }));
+      } else if (!tab.locked) {
+        const onBar = (st.hotbar ?? []).includes(def.id);
+        detail.appendChild(h('div', { class: 'ax-m-actions' },
+          h('button', {
+            class: 'ax-btn ax-m-btn', disabled: !canLearn,
+            onclick: () => { if (safe(() => p.learnSkill(def.id), false)) this.ctx.sfx('ui_click'); else this.ctx.sfx('ui_error'); this.invalidate(); },
+          }, lv >= def.maxLevel ? 'Mastered' : lv === 0 ? '+ Learn' : '+ Level'),
+          active ? h('button', {
+            class: 'ax-btn ax-btn-secondary ax-m-btn', disabled: lv === 0,
+            onclick: () => { this.picking = true; this.pickPage = safe(() => this.ctx.s.game.hotbarPage(), 0) || 0; this.invalidate(); this.ctx.sfx('ui_click'); },
+          }, onBar ? 'Move slot' : 'To hotbar') : null));
+      }
+    }
+
+    this.body.replaceChildren(strip, h('div', { class: 'ax-m-split' }, list, detail));
+    if (top) list.scrollTop = top;
+    if (oldTabs) strip.scrollLeft = oldTabs.scrollLeft;
+    else requestAnimationFrame(() => {
+      const a = strip.querySelector('.ax-active') as HTMLElement | null;
+      if (a) strip.scrollLeft = a.offsetLeft - (strip.clientWidth - a.offsetWidth) / 2;
+    });
+  }
+
+  private mobileRow(def: SkillDef, locked: boolean): HTMLElement {
+    const p = this.ctx.s.progression;
+    const lv = locked ? 0 : p.state.skills[def.id] ?? 0;
+    const canLearn = !locked && lv < def.maxLevel && safe(() => p.canLearn(def.id), false);
+    const onHotbar = !locked && (p.state.hotbar ?? []).includes(def.id);
+    const pct = Math.round((lv / Math.max(1, def.maxLevel)) * 100);
+    const row = h('div', {
+      class: `ax-m-row ax-m-spell ax-k-${def.kind}${this.selected === def.id ? ' ax-sel' : ''}${locked ? ' ax-locked' : ''}${lv >= def.maxLevel ? ' ax-maxed' : ''}${lv === 0 ? ' ax-zero' : ''}`,
+      onclick: (e: Event) => {
+        if ((e.target as HTMLElement).closest('button')) return;
+        if (this.selected !== def.id) { this.selected = def.id; this.picking = false; this.invalidate(); this.ctx.sfx('ui_click'); }
+      },
+    },
+    h('div', { class: `ax-skill-icon${lv === 0 ? ' ax-unlearned' : ''}` }, iconEl(def.icon, 40, def.name)),
+    h('div', { class: 'ax-m-row-main' },
+      h('div', { class: 'ax-m-row-name' }, h('span', { class: 'ax-m-row-t' }, def.name), onHotbar ? h('span', { class: 'ax-on-bar' }) : null),
+      h('div', { class: 'ax-m-row-sub' },
+        h('span', { class: `ax-kind ax-kind-${def.kind}` }, KIND_TAG[def.kind] ?? def.kind),
+        h('div', { class: 'ax-mini-bar' }, h('div', { style: `width:${pct}%` })),
+        h('span', { class: 'ax-m-row-lv' }, `${lv}/${def.maxLevel}`))),
+    locked ? h('span', { class: 'ax-lock ax-lock-lg' }) : h('button', {
+      class: 'ax-plus ax-m-plus', disabled: !canLearn, 'aria-label': `Learn ${def.name}`,
+      onclick: () => {
+        if (safe(() => p.learnSkill(def.id), false)) { this.selected = def.id; this.ctx.sfx('ui_click'); } else this.ctx.sfx('ui_error');
+        this.invalidate();
+      },
+    }, '+'));
+    return row;
+  }
+
+  /** Phone version of the per-Year unlearn control (two taps; reason shown as text instead of a tooltip). */
+  private mobileUnlearn(tab: TabDef, all: SkillDef[]): HTMLElement {
+    const p = this.ctx.s.progression;
+    const job = tab.jobs[0];
+    const tomes = p.countItem('tome_of_unlearning');
+    const refund = this.refundableSp(all);
+    const reason = refund === 0 ? 'Nothing to unlearn in this Year.' : tomes === 0 ? 'Needs a Tome of Unlearning (Quartermaster Bram, 2,500 mesos).' : '';
+    const respecKey = JSON.stringify([p.state.job, tab.id, refund]);
+    if (reason || this.confirmRespec !== respecKey) this.confirmRespec = '';
+    const confirming = this.confirmRespec === respecKey;
+    return h('div', { class: 'ax-m-unlearn' },
+      h('div', { class: 'ax-m-note' }, reason || (confirming ? `Tap again to spend 1 Tome and refund ${refund} SP.` : `Unlearn this Year: refund ${refund} SP for 1 Tome (you have ${tomes}).`)),
+      h('div', { class: 'ax-m-actions' },
+        h('button', {
+          class: `ax-btn ${confirming ? 'ax-btn-danger' : 'ax-btn-secondary'} ax-m-btn`, disabled: !!reason,
+          onclick: () => {
+            const current = this.refundableSp(all);
+            if (!job || !current || !p.countItem('tome_of_unlearning')) { this.confirmRespec = ''; this.invalidate(); this.ctx.sfx('ui_error'); return; }
+            if (!confirming || current !== refund) { this.confirmRespec = JSON.stringify([p.state.job, tab.id, current]); this.invalidate(); this.ctx.sfx('ui_click'); return; }
+            this.confirmRespec = '';
+            let refunded = 0;
+            if (p.removeItem('tome_of_unlearning', 1)) {
+              refunded = p.respecTier(job.tier);
+              if (refunded === 0) p.addItem('tome_of_unlearning', 1);
+            }
+            this.ctx.sfx(refunded > 0 ? 'ui_click' : 'ui_error');
+            this.invalidate();
+          },
+        }, confirming ? `Unlearn ${refund} SP?` : 'Unlearn Year'),
+        confirming ? h('button', { class: 'ax-btn ax-btn-secondary ax-m-btn', onclick: () => { this.confirmRespec = ''; this.invalidate(); } }, 'Cancel') : null));
+  }
+
 }

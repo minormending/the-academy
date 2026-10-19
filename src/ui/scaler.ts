@@ -1,6 +1,9 @@
-/** Keeps #ui-root laid out at a logical 1280×720 and scaled to exactly cover the Phaser canvas. */
+/**
+ * Keeps #ui-root laid out at a logical 1280×720 (MOBILE_UI = 720×405 on phones, so every DOM element renders
+ * ~1.8× larger) and scaled to exactly cover the Phaser canvas.
+ */
 import Phaser from 'phaser';
-import { GAME_HEIGHT, GAME_WIDTH } from '../core/constants';
+import { onMobileLayoutChanged, uiLogicalSize } from './mobile';
 
 export function uiRootEl(): HTMLElement {
   let el = document.getElementById('ui-root');
@@ -18,12 +21,19 @@ export class UIScaler {
   private ro: ResizeObserver | null = null;
   private nextCheck = 0;
   private readonly onResize = () => this.apply();
+  private offMobile: () => void;
+  /** Logical size #ui-root is laid out at (1280×720, or 720×405 in the mobile layout). */
+  w = 1280;
+  h = 720;
 
   constructor(readonly root: HTMLElement, private game: Phaser.Game) {
     const st = root.style;
-    st.width = `${GAME_WIDTH}px`;
-    st.height = `${GAME_HEIGHT}px`;
+    const size = uiLogicalSize();
+    this.w = size.w; this.h = size.h;
+    st.width = `${size.w}px`;
+    st.height = `${size.h}px`;
     st.transformOrigin = '0 0';
+    this.offMobile = onMobileLayoutChanged(() => { this.last = ''; this.apply(); });
     window.addEventListener('resize', this.onResize);
     try { game.scale.on(Phaser.Scale.Events.RESIZE, this.onResize); } catch { /* ignore */ }
     try {
@@ -49,20 +59,25 @@ export class UIScaler {
     if (r.width < 1) return;
     const parent = (this.root.offsetParent as HTMLElement | null) ?? document.body;
     const p = parent.getBoundingClientRect();
-    const k = r.width / GAME_WIDTH;
+    const size = uiLogicalSize();
+    const k = r.width / size.w;
     const left = r.left - p.left + (parent.scrollLeft || 0);
     const top = r.top - p.top + (parent.scrollTop || 0);
-    const key = `${left.toFixed(1)},${top.toFixed(1)},${k.toFixed(4)}`;
+    const key = `${left.toFixed(1)},${top.toFixed(1)},${k.toFixed(4)},${size.w}`;
     if (key === this.last) return;
     this.last = key;
     this.k = k;
+    this.w = size.w;
+    this.h = size.h;
     const st = this.root.style;
+    st.width = `${size.w}px`;
+    st.height = `${size.h}px`;
     st.left = `${left}px`;
     st.top = `${top}px`;
     st.transform = `scale(${k})`;
   }
 
-  /** Client (viewport) coordinates → logical 1280×720 UI coordinates. */
+  /** Client (viewport) coordinates → logical UI coordinates (1280×720, or 720×405 on phones). */
   toLogical(clientX: number, clientY: number): { x: number; y: number } {
     const r = this.root.getBoundingClientRect();
     const k = this.k || 1;
@@ -70,6 +85,7 @@ export class UIScaler {
   }
 
   destroy() {
+    try { this.offMobile(); } catch { /* ignore */ }
     window.removeEventListener('resize', this.onResize);
     try { this.game.scale.off(Phaser.Scale.Events.RESIZE, this.onResize); } catch { /* ignore */ }
     try { this.ro?.disconnect(); } catch { /* ignore */ }

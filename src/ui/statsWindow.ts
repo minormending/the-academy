@@ -22,6 +22,8 @@ const DOLL: (EquipSlot | 'portrait' | null)[] = ['ring', 'hat', 'amulet', 'weapo
 export class StatsWindow extends UIWindow {
   private expSpan = h('span', { class: 'ax-dim' });
   private lastExp = '';
+  /** Phones: equipment slot whose item details are expanded (replaces the hover tooltip). */
+  private infoSlot = '';
   constructor(ctx: UICtx) {
     super(ctx, 'stats', 'Character', { width: 452, x: 420, y: 76, className: 'ax-stats-win' });
   }
@@ -29,7 +31,7 @@ export class StatsWindow extends UIWindow {
   protected signature(): string {
     const p = this.ctx.s.progression;
     const st = p.state;
-    return JSON.stringify([st.name, st.level, st.job, st.base, st.ap, st.equipment, safe(() => p.derived(), null)]);
+    return JSON.stringify([st.name, st.level, st.job, st.base, st.ap, st.equipment, safe(() => p.derived(), null), this.mobile, this.infoSlot]);
   }
 
   protected render() {
@@ -92,12 +94,42 @@ export class StatsWindow extends UIWindow {
       }
       return cell;
     }));
-    const equip = h('div', { class: 'ax-panel ax-equip' }, h('div', { class: 'ax-panel-head' }, 'Equipment'), doll);
+    const equip = h('div', { class: 'ax-panel ax-equip' }, h('div', { class: 'ax-panel-head' }, 'Equipment'), this.mobile ? this.equipList(branch) : doll);
 
     this.body.replaceChildren(
       h('div', { class: 'ax-stats-top' }, h('div', { class: 'ax-stats-left' }, ident, base), equip),
       derived,
-      h('div', { class: 'ax-win-footer' }, h('span', { class: 'ax-dim' }, 'Double-click equipment to remove it. INT is your primary stat.')));
+      h('div', { class: 'ax-win-footer' }, h('span', { class: 'ax-dim' }, this.mobile
+        ? 'INT is your primary stat. Tap gear to read about it.'
+        : 'Double-click equipment to remove it. INT is your primary stat.')));
+  }
+
+  /** Phone equipment: one big row per slot (tap = details, Remove button) instead of the double-click paper doll. */
+  private equipList(branch: Branch): HTMLElement {
+    const p = this.ctx.s.progression;
+    const st = p.state;
+    const slots = DOLL.filter((x): x is EquipSlot => !!x && x !== 'portrait');
+    return h('div', { class: 'ax-m-equip' }, slots.map(slot => {
+      const stack = st.equipment?.[slot];
+      const def = stack ? Registry.item(stack.itemId) : undefined;
+      const open = !!stack && this.infoSlot === slot;
+      const row = h('div', {
+        class: `ax-m-row ax-m-eq${stack ? '' : ' ax-empty'}${open ? ' ax-sel' : ''}`,
+        onclick: (e: Event) => {
+          if (!stack || (e.target as HTMLElement).closest('button')) return;
+          this.infoSlot = open ? '' : slot; this.ctx.sfx('ui_click'); this.invalidate();
+        },
+      },
+      h('div', { class: 'ax-cell ax-equip-slot' }, stack ? iconEl(def?.icon, 34, def?.name ?? stack.itemId) : null),
+      h('div', { class: 'ax-m-row-main' },
+        h('div', { class: 'ax-m-eq-slot' }, SLOT_LABELS[slot]),
+        h('div', { class: 'ax-m-row-t' }, stack ? def?.name ?? stack.itemId : 'Empty')),
+      stack ? h('button', {
+        class: 'ax-btn ax-btn-secondary ax-m-btn',
+        onclick: () => { const ok = safe(() => p.unequip(slot), false); this.ctx.sfx(ok ? 'ui_click' : 'ui_error'); this.infoSlot = ''; this.invalidate(); },
+      }, 'Remove') : null);
+      return open ? [row, h('div', { class: 'ax-m-tip ax-m-shop-tip' }, itemTooltip(def, { level: st.level, branch, equipped: true }, stack!.itemId))] : row;
+    }));
   }
 
   protected frame() {

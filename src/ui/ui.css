@@ -1144,3 +1144,463 @@ html.ax-touch .ax-drag-active .ax-hotbar { display: flex; right: 8px; bottom: 30
 .ax-hon-titleopt.ax-locked { cursor: default; opacity: 0.55; }
 .ax-hon-titlename { color: var(--ax-gold); text-shadow: var(--ax-ts); }
 .ax-hon-titlesub { color: var(--ax-ink-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ===== Mobile windows (M2) ===== */
+/* Phones (html.ax-mobile, #ui-root laid out at 720×405): every window is a full-screen sheet with a big header,
+   one open at a time, momentum-scrolled body; the dialog is a bottom sheet. Kenney Pixel is a 1x pixel font,
+   so body text goes up to 26px (≈ 14+ CSS px of glyph on a 667–812 px wide phone). */
+
+html.ax-mobile #ui-root .ax-window.ax-sheet {
+  left: 0 !important; top: 0 !important; right: 0; bottom: 0; width: auto !important;
+  display: flex; flex-direction: column; padding: 0 4px 4px;
+  border: 0; border-image: var(--ax-img) 7 9 7 10 fill / 14px 18px 14px 20px / 0;
+  filter: none; animation: ax-sheetin 0.14s steps(3);
+}
+@keyframes ax-sheetin { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+html.ax-mobile #ui-root .ax-sheet .ax-win-title { flex: none; height: 48px; margin: 4px 2px 0; padding: 0 0 2px 12px; cursor: default; gap: 10px; }
+html.ax-mobile #ui-root .ax-sheet .ax-win-gem { width: 12px; height: 12px; }
+html.ax-mobile #ui-root .ax-sheet .ax-win-title-text { font-size: 24px; letter-spacing: 1px; padding-top: 2px; }
+html.ax-mobile #ui-root .ax-sheet .ax-win-title-extra { font-size: 26px; }
+html.ax-mobile #ui-root .ax-sheet .ax-win-title-extra .ax-pill { font-size: 26px; padding: 4px 10px 5px; }
+html.ax-mobile #ui-root .ax-sheet .ax-win-close { width: 56px; height: 44px; margin-right: 2px; }
+html.ax-mobile #ui-root .ax-sheet .ax-win-close::before, html.ax-mobile #ui-root .ax-sheet .ax-win-close::after { left: 15px; top: 17px; width: 22px; height: 6px; }
+html.ax-mobile #ui-root .ax-sheet .ax-win-body {
+  flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 8px 12px 6px;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y;
+  font-size: 26px; line-height: 1.15;
+}
+html.ax-mobile #ui-root .ax-m-scroll { overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; }
+/* text: lift the desktop 16px everywhere inside a sheet; Kenney Mini headings stay a notch smaller (they are 2x wide). */
+html.ax-mobile #ui-root .ax-sheet .ax-win-body :where(div, span, b, p, li, label, button, a, small) { font-size: 26px; }
+html.ax-mobile #ui-root .ax-sheet :is(.ax-tt-name, .ax-panel-head, .ax-help-head, .ax-book-title b, .ax-char-name, .ax-job-name, .ax-dlg-name, .ax-m-group, .ax-sp b, .ax-book-sp b) { font-size: 18px; line-height: 1.2; }
+html.ax-mobile #ui-root .ax-sheet :is(.ax-qty, .ax-kind, .ax-slot-label) { font-size: 22px; line-height: 1; }
+html.ax-mobile #ui-root .ax-sheet .ax-win-footer { font-size: 24px; }
+html.ax-mobile #ui-root .ax-sheet :is(.ax-btn, .ax-btn-small) { min-height: 44px; padding: 8px 14px; font-size: 26px; }
+html.ax-mobile #ui-root .ax-sheet .ax-tabs { flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding-bottom: 8px; scrollbar-width: none; touch-action: pan-x; }
+html.ax-mobile #ui-root .ax-sheet .ax-tab { min-height: 44px; padding: 8px 16px; font-size: 26px; flex: 1 0 auto; justify-content: center; }
+html.ax-mobile #ui-root .ax-sheet .ax-chip { min-height: 40px; padding: 6px 12px; font-size: 24px; }
+html.ax-mobile #ui-root .ax-sheet ::-webkit-scrollbar { width: 6px; height: 0; }
+html.ax-mobile #ui-root .ax-sheet :is(.ax-skill-list, .ax-inv-scroll, .ax-quest-list, .ax-shop-list) { max-height: none; overflow: visible; }
+
+/* shared phone pieces: two-pane split, rows, detail pane, action buttons, hotbar slot chooser */
+html.ax-mobile #ui-root .ax-sheet.ax-skills-win .ax-win-body,
+html.ax-mobile #ui-root .ax-sheet.ax-inv-win .ax-win-body { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+.ax-m-split { flex: 1; min-height: 0; display: flex; gap: 10px; }
+.ax-m-split > .ax-m-list, .ax-m-split > .ax-m-inv-left { flex: 1 1 52%; min-width: 0; padding: 0 4px 10px 0; display: flex; flex-direction: column; gap: 6px; }
+.ax-m-split > .ax-m-detail { flex: 1 1 48%; min-width: 0; padding: 8px 10px 10px; border: 2px solid transparent; border-image: url("/assets/ui/golden/well.png") 3 fill / 6px / 0; }
+.ax-m-split > * > * { flex: none; }
+.ax-m-hint { color: var(--ax-ink-dim); padding: 16px 6px; text-align: center; line-height: 1.2; }
+.ax-m-note { color: var(--ax-ink-dim); line-height: 1.2; }
+.ax-m-tip .ax-tt-skill { min-width: 0; }
+.ax-m-tip .ax-tt-head .ax-icon { width: 48px !important; height: 48px !important; }
+.ax-m-tip .ax-tt-stat { gap: 8px; }
+.ax-m-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.ax-m-actions > .ax-m-btn { flex: 1 1 0; min-width: 0; white-space: nowrap; padding-left: 8px !important; padding-right: 8px !important; }
+.ax-m-unlearn .ax-m-actions > .ax-m-btn { flex: 1 1 auto; }
+.ax-m-detail > .ax-m-actions { position: sticky; bottom: -10px; margin: 8px -10px -10px; padding: 8px 10px 10px; background: var(--ax-well); box-shadow: 0 -2px 0 var(--ax-line); }
+.ax-m-detail > .ax-m-picker { margin: 0 0 10px; padding-bottom: 10px; border-bottom: 2px solid var(--ax-line); }
+html.ax-mobile #ui-root .ax-sheet .ax-m-btn { min-height: 48px; font-size: 26px; }
+.ax-m-row {
+  display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 6px 8px; cursor: pointer;
+  border: 2px solid transparent; border-image: url("/assets/ui/golden/well.png") 3 fill / 6px / 0;
+}
+.ax-m-row.ax-sel { border-image: url("/assets/ui/golden/slot_hover.png") 4 fill / 8px / 0; }
+.ax-m-row.ax-locked { opacity: 0.7; }
+.ax-m-row .ax-skill-icon { box-shadow: 0 0 0 2px var(--ax-k); }
+.ax-m-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ax-m-row-name { display: flex; align-items: center; gap: 6px; color: #fff; text-shadow: var(--ax-ts); min-width: 0; }
+.ax-m-row-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ax-m-spell.ax-zero .ax-m-row-t { color: var(--ax-ink-dim); }
+.ax-m-row-sub { display: flex; align-items: center; gap: 8px; color: var(--ax-ink-dim); }
+.ax-m-row-sub .ax-mini-bar { flex: 1; min-width: 30px; height: 8px; padding: 1px; }
+.ax-m-row-lv { flex: none; }
+.ax-m-spell.ax-maxed .ax-m-row-lv { color: var(--ax-gold); }
+html.ax-mobile #ui-root .ax-sheet .ax-win-body .ax-m-plus { flex: none; width: 52px; height: 48px; font-size: 40px; line-height: 1; padding: 0 0 6px; }
+.ax-m-group { color: var(--accent, #c9b8ff); font-family: var(--ax-head); padding: 8px 2px 2px; text-shadow: var(--ax-ts); }
+.ax-m-unlearn { margin-top: 10px; padding-top: 8px; border-top: 2px solid var(--ax-line); }
+.ax-m-unlearn .ax-m-actions { margin-top: 6px; }
+
+/* Spellbook: Year scroller */
+.ax-m-yeartabs { flex: none; position: relative; display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; padding: 0 0 8px; scrollbar-width: none; touch-action: pan-x; -webkit-overflow-scrolling: touch; }
+.ax-m-yeartabs::-webkit-scrollbar { display: none; }
+.ax-m-yeartab {
+  --accent: #c9b8ff; appearance: none; flex: none; min-width: 132px; min-height: 52px; padding: 4px 12px 6px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  color: var(--ax-ink-dim); background: var(--ax-indigo-lo); border: 2px solid var(--ax-k); box-shadow: inset 0 -3px 0 var(--accent);
+}
+.ax-m-yeartab.ax-active { background: var(--ax-gold); box-shadow: inset 0 0 0 2px #fff4c4; }
+.ax-m-yeartab.ax-locked { opacity: 0.75; }
+html.ax-mobile #ui-root .ax-sheet .ax-m-yeartab-year { display: flex; align-items: center; gap: 4px; font-size: 18px; text-transform: uppercase; letter-spacing: 1px; color: var(--ax-ink-faint); }
+html.ax-mobile #ui-root .ax-sheet .ax-m-yeartab-name { font-size: 26px; color: var(--accent); white-space: nowrap; text-shadow: var(--ax-ts); }
+.ax-m-yeartab.ax-active .ax-m-yeartab-year { color: #5e3d06; }
+.ax-m-yeartab.ax-active .ax-m-yeartab-name { color: var(--ax-k); text-shadow: none; }
+.ax-m-chips { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; padding-bottom: 2px; }
+.ax-m-chips::-webkit-scrollbar { display: none; }
+.ax-m-chips > .ax-chip { flex: none; white-space: nowrap; }
+.ax-m-sp { white-space: nowrap; }
+
+/* Inventory: big slots */
+.ax-m-inv-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 6px; border: 2px solid transparent; border-image: url("/assets/ui/golden/well.png") 3 fill / 6px / 0; }
+.ax-m-inv-grid .ax-cell { width: auto; height: auto; aspect-ratio: 1; min-height: 56px; }
+.ax-m-cell { appearance: none; background: none; padding: 0; color: inherit; }
+.ax-m-cell.ax-sel { border-image-source: url("/assets/ui/golden/slot_hover.png"); box-shadow: 0 0 0 2px var(--ax-gold); }
+.ax-m-cell .ax-icon { width: 40px !important; height: 40px !important; }
+html.ax-mobile #ui-root .ax-sheet .ax-m-inv-left .ax-mesos { justify-content: flex-end; }
+
+/* hotbar slot chooser (laid out like the touch skill pad) */
+.ax-m-picker { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.ax-m-pick-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ax-gold); }
+.ax-m-seg { display: flex; gap: 4px; }
+.ax-m-seg-btn { appearance: none; min-height: 40px; padding: 4px 10px; cursor: pointer; color: var(--ax-ink-dim); background: var(--ax-indigo-lo); border: 2px solid var(--ax-k); }
+.ax-m-seg-btn.ax-active { color: var(--ax-k); background: var(--ax-gold); }
+.ax-m-pick-row { display: grid; grid-template-columns: 16px repeat(6, minmax(0, 1fr)); gap: 3px; align-items: center; }
+html.ax-mobile #ui-root .ax-sheet .ax-m-pick-half { font-family: var(--ax-head); font-size: 16px; color: var(--ax-ink-faint); text-align: center; }
+.ax-m-pick-slot {
+  appearance: none; aspect-ratio: 1; min-width: 0; min-height: 40px; padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  border: 0; border-image: url("/assets/ui/golden/slot.png") 4 fill / 8px / 0; background: none; color: var(--ax-ink-faint);
+}
+.ax-m-pick-slot.ax-active { border-image-source: url("/assets/ui/golden/slot_hover.png"); box-shadow: 0 0 0 2px var(--ax-gold); }
+.ax-m-pick-slot .ax-icon { width: 30px !important; height: 30px !important; }
+html.ax-mobile #ui-root .ax-sheet .ax-m-pick-head b { font-size: 26px; }
+
+/* Dialog: bottom sheet */
+html.ax-mobile #ui-root .ax-window.ax-sheet.ax-dialog-win { top: auto !important; max-height: 100%; animation: ax-sheetup 0.16s steps(4); }
+@keyframes ax-sheetup { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+html.ax-mobile #ui-root .ax-sheet.ax-dialog-win .ax-win-title { height: 44px; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg { gap: 12px; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg-left { width: 92px; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg-name { display: none; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg-title { font-size: 18px; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg-right { gap: 8px; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg-text { min-height: 0; max-height: none; overflow: visible; padding: 8px 12px; line-height: 1.2; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg-text :is(span) { font-size: 28px; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg-opt { min-height: 48px; padding: 6px 12px; font-size: 26px; line-height: 1.1; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg-opt.ax-single { grid-column: 1 / -1; align-self: stretch; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg-opts > .ax-dlg-opt:last-child:nth-child(odd) { grid-column: 1 / -1; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg-opt:hover { transform: none; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg-num { display: none; }
+
+/* Shop */
+html.ax-mobile #ui-root .ax-sheet .ax-shop-list { gap: 6px; }
+html.ax-mobile #ui-root .ax-sheet .ax-shop-row { min-height: 60px; gap: 10px; }
+html.ax-mobile #ui-root .ax-sheet .ax-shop-row.ax-sel { border-image-source: url("/assets/ui/golden/slot_hover.png"); border-image-slice: 4 fill; }
+html.ax-mobile #ui-root .ax-sheet .ax-shop-row .ax-icon { width: 40px !important; height: 40px !important; }
+html.ax-mobile #ui-root .ax-sheet .ax-stepper { gap: 4px; min-width: 0; }
+html.ax-mobile #ui-root .ax-sheet .ax-step { width: 44px; height: 44px; font-size: 26px; }
+html.ax-mobile #ui-root .ax-sheet .ax-step-wide { width: 56px; font-size: 24px; }
+html.ax-mobile #ui-root .ax-sheet .ax-step-val { min-width: 36px; }
+html.ax-mobile #ui-root .ax-sheet .ax-shop-row > .ax-btn { min-width: 84px; }
+.ax-m-shop-tip { padding: 8px 12px; border: 2px solid transparent; border-image: url("/assets/ui/golden/tooltip.png") 4 fill / 8px / 0; }
+html.ax-mobile #ui-root .ax-sheet .ax-shop-junk .ax-btn { width: 100%; margin-bottom: 6px; }
+html.ax-mobile #ui-root .ax-sheet.ax-shop-win .ax-win-footer { position: sticky; bottom: -6px; padding: 6px 0; background: var(--ax-indigo); }
+
+/* Death prompt */
+html.ax-mobile #ui-root .ax-death-panel { width: 520px; max-width: 94%; padding: 24px 28px; }
+html.ax-mobile #ui-root .ax-death-title { font-size: 32px; }
+html.ax-mobile #ui-root .ax-death-text { font-size: 28px; line-height: 1.2; }
+html.ax-mobile #ui-root .ax-death .ax-btn { min-height: 56px; font-size: 28px; padding: 10px 28px; }
+
+/* M2 · Character */
+html.ax-mobile #ui-root .ax-sheet .ax-stats-top { flex-direction: row; gap: 10px; }
+html.ax-mobile #ui-root .ax-sheet .ax-stats-left { flex: 1 1 50%; }
+html.ax-mobile #ui-root .ax-sheet .ax-equip { flex: 1 1 50%; width: auto; }
+html.ax-mobile #ui-root .ax-sheet .ax-base-row { min-height: 52px; gap: 12px; }
+html.ax-mobile #ui-root .ax-sheet .ax-base-label { width: 56px; font-size: 18px; }
+html.ax-mobile #ui-root .ax-sheet .ax-base-row .ax-plus { width: 52px; height: 46px; font-size: 32px; padding: 0 0 4px; }
+html.ax-mobile #ui-root .ax-sheet .ax-panel-head { flex-wrap: wrap; }
+html.ax-mobile #ui-root .ax-sheet .ax-panel-head .ax-pill { font-size: 24px; padding: 3px 8px; }
+html.ax-mobile #ui-root .ax-sheet .ax-derived { margin-top: 10px; }
+html.ax-mobile #ui-root .ax-sheet .ax-derived-grid { column-gap: 24px; }
+html.ax-mobile #ui-root .ax-sheet .ax-derived-row { padding: 3px 0 4px; }
+.ax-m-equip { display: flex; flex-direction: column; gap: 6px; }
+.ax-m-eq { min-height: 56px; }
+.ax-m-eq .ax-equip-slot { width: 44px; height: 44px; flex: none; }
+.ax-m-eq.ax-empty { cursor: default; opacity: 0.7; }
+html.ax-mobile #ui-root .ax-sheet .ax-m-eq-slot { font-size: 18px; color: var(--ax-ink-faint); text-transform: uppercase; letter-spacing: 1px; }
+html.ax-mobile #ui-root .ax-sheet .ax-m-eq .ax-m-btn { flex: none; min-height: 44px; padding: 6px 12px; }
+
+/* M2 · Assignments / Honors */
+html.ax-mobile #ui-root .ax-sheet .ax-quest-head { min-height: 56px; padding: 8px 10px; }
+html.ax-mobile #ui-root .ax-sheet .ax-quest-giver, html.ax-mobile #ui-root .ax-sheet .ax-quest-desc { line-height: 1.2; }
+html.ax-mobile #ui-root .ax-sheet .ax-quest-body { padding: 0 10px 10px; }
+html.ax-mobile #ui-root .ax-sheet .ax-obj-line { margin-bottom: 4px; }
+html.ax-mobile #ui-root .ax-sheet .ax-badge { font-size: 22px; padding: 3px 8px; }
+html.ax-mobile #ui-root .ax-sheet .ax-quest-name { font-size: 26px; }
+html.ax-mobile #ui-root .ax-sheet .ax-hon-list { max-height: none; overflow: visible; }
+html.ax-mobile #ui-root .ax-sheet .ax-hon-head { flex-wrap: wrap; gap: 8px 14px; }
+html.ax-mobile #ui-root .ax-sheet .ax-hon-title-btn { min-height: 44px; }
+html.ax-mobile #ui-root .ax-sheet .ax-hon-desc { line-height: 1.2; }
+html.ax-mobile #ui-root .ax-sheet .ax-hon-titleopt { min-height: 48px; }
+
+/* M2 · Menu / Settings / Help / Exam / Controls */
+html.ax-mobile #ui-root .ax-sheet .ax-win-body > * { flex-shrink: 0; }
+html.ax-mobile #ui-root .ax-sheet.ax-menu-win .ax-win-body { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: max-content; align-content: start; gap: 8px 10px; }
+html.ax-mobile #ui-root .ax-sheet.ax-menu-win .ax-win-body > :is(.ax-tabs, .ax-confirm, .ax-panel) { grid-column: 1 / -1; }
+html.ax-mobile #ui-root .ax-sheet.ax-menu-win .ax-tabs { padding-bottom: 0; }
+html.ax-mobile #ui-root .ax-sheet .ax-confirm { display: flex; flex-direction: column; gap: 8px; }
+html.ax-mobile #ui-root .ax-sheet .ax-menu-btn { min-height: 52px; }
+html.ax-mobile #ui-root .ax-sheet .ax-slider-row { grid-template-columns: 100px 1fr 64px; min-height: 48px; }
+html.ax-mobile #ui-root .ax-sheet .ax-slider { height: 12px; }
+html.ax-mobile #ui-root .ax-sheet .ax-slider::-webkit-slider-thumb { width: 24px; height: 36px; }
+html.ax-mobile #ui-root .ax-sheet .ax-slider::-moz-range-thumb { width: 24px; height: 36px; }
+html.ax-mobile #ui-root .ax-sheet .ax-set-row { grid-template-columns: 120px 1fr; min-height: 52px; }
+html.ax-mobile #ui-root .ax-sheet .ax-seg-btn { flex: 1; min-height: 44px; font-size: 26px; }
+html.ax-mobile #ui-root .ax-sheet .ax-help-cols { grid-template-columns: 1fr; gap: 4px; }
+html.ax-mobile #ui-root .ax-sheet .ax-help-tip { line-height: 1.25; margin: 4px 0; }
+html.ax-mobile #ui-root .ax-sheet .ax-help-head { margin: 12px 0 4px; }
+html.ax-mobile #ui-root .ax-sheet .ax-help-intro { line-height: 1.25; }
+html.ax-mobile #ui-root .ax-sheet .ax-m-help-done { margin: 12px 0 4px; }
+html.ax-mobile #ui-root .ax-sheet .ax-m-help-done .ax-m-btn { min-width: 220px; }
+html.ax-mobile #ui-root .ax-sheet .ax-job-cards { flex-direction: column; gap: 8px; }
+html.ax-mobile #ui-root .ax-sheet .ax-job-card {
+  width: auto; max-width: none; flex: none; display: grid; grid-template-columns: 80px 1fr 200px; grid-template-rows: auto auto 1fr; column-gap: 12px; row-gap: 2px;
+  align-items: start; text-align: left; padding: 10px 12px;
+}
+html.ax-mobile #ui-root .ax-sheet .ax-job-card:hover { transform: none; }
+html.ax-mobile #ui-root .ax-sheet .ax-job-card > .ax-portrait { grid-column: 1; grid-row: 1 / span 3; align-self: center; }
+html.ax-mobile #ui-root .ax-sheet .ax-job-card > :is(.ax-job-name, .ax-job-branch, .ax-job-desc) { grid-column: 2; text-align: left; margin: 0; }
+html.ax-mobile #ui-root .ax-sheet .ax-job-card > .ax-btn { grid-column: 3; grid-row: 1 / span 3; align-self: center; min-height: 52px; white-space: normal; line-height: 1.1; }
+html.ax-mobile #ui-root .ax-sheet .ax-job-desc { line-height: 1.2; }
+html.ax-mobile #ui-root .ax-sheet .ax-pad-cols { grid-template-columns: 1fr; gap: 0; }
+html.ax-mobile #ui-root .ax-sheet .ax-ctl-msg { line-height: 1.2; }
+html.ax-mobile #ui-root .ax-sheet kbd { font-size: 18px; }
+
+/* M2 · Credits roll (laid out for 1280; shrink the type to the 720×405 phone stage) */
+html.ax-mobile #ui-root .ax-cr-card { padding: 0 24px; gap: 8px; text-align: center; }
+html.ax-mobile #ui-root .ax-cr-title { font-size: 48px; letter-spacing: 4px; }
+html.ax-mobile #ui-root .ax-cr-big, html.ax-mobile #ui-root .ax-cr-name { font-size: 40px; max-width: 660px; }
+html.ax-mobile #ui-root .ax-cr-job { font-size: 28px; }
+html.ax-mobile #ui-root .ax-cr-kicker, html.ax-mobile #ui-root .ax-cr-sign { font-size: 16px; }
+html.ax-mobile #ui-root :is(.ax-cr-line, .ax-cr-stats, .ax-cr-quote) { font-size: 28px; }
+html.ax-mobile #ui-root .ax-cr-stats { gap: 24px; flex-wrap: wrap; justify-content: center; }
+html.ax-mobile #ui-root .ax-cr-quote { max-width: 640px; }
+html.ax-mobile #ui-root .ax-cr-roll-inner { width: 660px; margin-left: -330px; }
+html.ax-mobile #ui-root .ax-cr-credit { font-size: 26px; }
+html.ax-mobile #ui-root .ax-cr-h { font-size: 24px; }
+html.ax-mobile #ui-root .ax-cr-thanks { padding: 120px 0 100px; }
+html.ax-mobile #ui-root .ax-cr-thanks-big { font-size: 32px; }
+html.ax-mobile #ui-root .ax-cr-fade { height: 48px; }
+html.ax-mobile #ui-root .ax-cr-end { bottom: 28px; }
+html.ax-mobile #ui-root .ax-cr-end .ax-btn { min-height: 56px; font-size: 28px; padding: 10px 32px; }
+html.ax-mobile #ui-root .ax-cr-hint { font-size: 24px; right: 16px; bottom: 10px; }
+
+/* M2 · Title screen + Character Select */
+html.ax-mobile #ui-root .ax-title-col { left: 0; right: 0; width: auto; top: 14px; bottom: 8px; gap: 12px; overflow-y: auto; touch-action: pan-y; pointer-events: auto !important; padding: 0 16px 8px; }
+html.ax-mobile #ui-root .ax-logo-orn { margin-bottom: 6px; }
+html.ax-mobile #ui-root .ax-logo-the { font-size: 28px; }
+html.ax-mobile #ui-root .ax-logo-text { font-size: 56px; }
+html.ax-mobile #ui-root .ax-logo-sub { margin-top: 10px; font-size: 16px; letter-spacing: 4px; }
+html.ax-mobile #ui-root .ax-title-panel { width: 380px; max-width: 100%; gap: 8px; }
+html.ax-mobile #ui-root .ax-title-btn { min-height: 64px; padding: 8px 16px 10px; gap: 4px; }
+html.ax-mobile #ui-root .ax-tb-label { font-size: 26px; }
+html.ax-mobile #ui-root .ax-tb-sub { font-size: 26px; }
+html.ax-mobile #ui-root .ax-title-h { font-size: 24px; }
+html.ax-mobile #ui-root :is(.ax-title-text, .ax-title-error, .ax-title-warn, .ax-cs-sub) { font-size: 26px; line-height: 1.2; }
+html.ax-mobile #ui-root .ax-input { font-size: 28px; min-height: 52px; }
+html.ax-mobile #ui-root .ax-counter { font-size: 24px; }
+html.ax-mobile #ui-root .ax-title-panel .ax-btn, html.ax-mobile #ui-root .ax-cs .ax-btn { min-height: 48px; font-size: 26px; padding: 8px 16px; }
+html.ax-mobile #ui-root .ax-title-foot { display: none; }
+html.ax-mobile #ui-root .ax-title.ax-cs-on .ax-cs { align-items: stretch; justify-content: stretch; padding: 0; }
+html.ax-mobile #ui-root .ax-cs-frame { flex: 1; min-width: 0; align-items: stretch; gap: 8px; padding: 10px 14px 0; overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch; border-image-outset: 0; }
+html.ax-mobile #ui-root .ax-cs-head { flex-direction: row; justify-content: space-between; align-items: baseline; gap: 12px; }
+html.ax-mobile #ui-root .ax-cs-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+html.ax-mobile #ui-root .ax-cs-card {
+  height: auto; min-height: 104px; display: grid; grid-template-columns: 84px 1fr; grid-template-rows: auto auto auto 1fr; column-gap: 10px; row-gap: 2px;
+  align-items: start; justify-items: start; padding: 10px 10px 8px; text-align: left;
+}
+html.ax-mobile #ui-root .ax-cs-card > .ax-cs-top { grid-column: 2; grid-row: 1; margin-top: 0; }
+html.ax-mobile #ui-root .ax-cs-card > .ax-cs-stage, html.ax-mobile #ui-root .ax-cs-card > .ax-cs-broken,
+html.ax-mobile #ui-root .ax-cs-card > .ax-cs-plus { grid-column: 1; grid-row: 1 / span 4; width: 84px; height: 84px; margin: 0; align-self: center; }
+html.ax-mobile #ui-root .ax-cs-card > .ax-cs-plus { display: flex; align-items: center; justify-content: center; font-size: 48px; }
+html.ax-mobile #ui-root .ax-cs-sprite { width: 96px; height: 96px; margin-left: -48px; bottom: -6px; }
+html.ax-mobile #ui-root .ax-cs-card > :is(.ax-cs-name, .ax-cs-line, .ax-cs-meta, .ax-cs-enrol) { grid-column: 2; margin: 0; text-align: left; align-items: flex-start; }
+html.ax-mobile #ui-root .ax-cs-name { font-size: 18px; }
+html.ax-mobile #ui-root :is(.ax-cs-line, .ax-cs-school, .ax-cs-meta, .ax-cs-enrol, .ax-cs-last) { font-size: 24px; line-height: 1.15; }
+html.ax-mobile #ui-root .ax-cs-meta { gap: 0; }
+html.ax-mobile #ui-root .ax-cs-bar { position: sticky; bottom: 0; flex-wrap: wrap; gap: 8px; padding: 8px 0 10px; background: var(--ax-indigo); box-shadow: 0 -2px 0 var(--ax-line); }
+html.ax-mobile #ui-root .ax-cs-bar .ax-btn { flex: 1 1 0; min-width: 0; }
+html.ax-mobile #ui-root .ax-cs-dialog { max-width: 92%; }
+html.ax-mobile #ui-root .ax-cs-dialog :is(div, span) { font-size: 26px; line-height: 1.2; }
+
+/* ===== Mobile HUD (M1) =====
+   html.ax-mobile (ui/mobile.ts): #ui-root is laid out at 720×405 logical px (ui/scaler.ts), so 16px text is ≥14 CSS px
+   on a landscape phone. Top-left: Lv + big HP/MP + thin EXP; under it a 2-line log. Top-right: buffs, map, ☰.
+   Bottom: d-pad left; 2×3 spells + flip, Loot and Jump right. Rules use #ui-root so they beat html.ax-touch ones. */
+.ax-mob-menubtn, .ax-mm-mobbtn, .ax-mob-menu { display: none; }
+
+/* Status: Lv badge + stacked HP / MP */
+html.ax-mobile #ui-root .ax-statusbar {
+  left: 6px; top: 6px; right: auto; bottom: auto; height: auto; padding: 4px 8px 4px 4px; gap: 6px; align-items: center;
+  background: rgba(16, 14, 44, 0.72); box-shadow: 0 0 0 2px var(--ax-k), 0 0 0 4px var(--ax-gold-dim);
+}
+html.ax-mobile #ui-root .ax-statusbar .ax-id, html.ax-mobile #ui-root .ax-statusbar .ax-quickbar { display: none; }
+html.ax-mobile #ui-root .ax-lv { width: 46px; height: 46px; }
+html.ax-mobile #ui-root .ax-lv-num { font-size: 20px; }
+html.ax-mobile #ui-root .ax-gauges { flex-direction: column; gap: 4px; }
+html.ax-mobile #ui-root .ax-statusbar .ax-gauge-track { width: 150px; height: 20px; }
+html.ax-mobile #ui-root .ax-statusbar .ax-gauge-text { width: 150px; left: 28px; }
+
+/* EXP: thin bar + percentage right under the status block */
+html.ax-mobile #ui-root .ax-expbar {
+  left: 6px; right: auto; top: 68px; bottom: auto; width: 246px; height: 20px; background: none; border: none;
+}
+html.ax-mobile #ui-root .ax-expbar .ax-gauge { display: flex; align-items: center; gap: 6px; height: 20px; }
+html.ax-mobile #ui-root .ax-expbar .ax-gauge-label { position: static; line-height: 16px; }
+html.ax-mobile #ui-root .ax-expbar .ax-gauge-track { flex: 1; width: auto; height: 6px; box-shadow: 0 0 0 2px var(--ax-k); }
+html.ax-mobile #ui-root .ax-expbar .ax-gauge-text { position: static; width: auto; flex: none; line-height: 16px; transform: none; color: #f4eea0; }
+
+/* Log: at most two short lines under the HUD, fading (chatlog.ts fades after 5 s on phones) */
+html.ax-mobile #ui-root .ax-chat { left: 6px; top: 88px; bottom: auto; width: 320px; height: 44px; pointer-events: none; background: none; box-shadow: none; }
+html.ax-mobile #ui-root .ax-chat-list { inset: 0; overflow: hidden; }
+html.ax-mobile #ui-root .ax-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 18px; padding: 0 6px; }
+html.ax-mobile #ui-root .ax-line:not(:nth-last-child(-n+2)) { display: none; }
+
+/* Keyboard hotbar: the touch cluster replaces it (still a drop target while dragging) */
+html.ax-mobile #ui-root .ax-hotbar { display: none; }
+html.ax-mobile #ui-root.ax-drag-active .ax-hotbar { display: flex; right: 8px; top: 140px; bottom: auto; z-index: 26; transform: none; }
+
+/* Buffs: compact row left of the map / menu buttons */
+html.ax-mobile #ui-root .ax-buffs { right: 114px; top: 6px; max-width: 150px; gap: 4px; }
+html.ax-mobile #ui-root .ax-buff { width: 26px; height: 44px; }
+html.ax-mobile #ui-root .ax-buff .ax-icon { width: 24px !important; height: 24px !important; }
+html.ax-mobile #ui-root .ax-buff-ring { width: 24px; height: 24px; }
+html.ax-mobile #ui-root .ax-buff-time { margin-top: 3px; line-height: 16px; }
+
+/* Map button + ☰ menu button (top-right) */
+html.ax-mobile #ui-root .ax-mob-menubtn, html.ax-mobile #ui-root .ax-mm-mobbtn {
+  display: flex; align-items: center; justify-content: center; position: absolute; top: 6px; width: 50px; height: 50px; z-index: 40;
+  appearance: none; cursor: pointer; padding: 0; color: #f4eea0; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  background: none; border: 2px solid transparent; border-image: url("/assets/ui/golden/tab.png") 4 fill / 8px / 0;
+}
+html.ax-mobile #ui-root .ax-mob-menubtn { right: 6px; }
+html.ax-mobile #ui-root .ax-mm-mobbtn { right: 60px; }
+html.ax-mobile #ui-root .ax-mob-menubtn.ax-active, html.ax-mobile #ui-root .ax-mm-mobbtn.ax-active { border-image-source: url("/assets/ui/golden/slot_hover.png"); }
+.ax-mob-burger { width: 24px; height: 4px; background: #f4eea0; box-shadow: 0 -8px 0 #f4eea0, 0 8px 0 #f4eea0, 2px 2px 0 var(--ax-k); }
+.ax-mm-mobico { width: 26px; height: 22px; background:
+  linear-gradient(90deg, #9fd3a0 0 33%, #deeed6 33% 66%, #9fd3a0 66%); box-shadow: 0 0 0 2px var(--ax-k), inset 0 -4px 0 rgba(0, 0, 0, 0.18);
+  clip-path: polygon(0 10%, 33% 0, 66% 10%, 100% 0, 100% 90%, 66% 100%, 33% 90%, 0 100%); }
+
+/* ☰ menu: dim backdrop + a sheet of big buttons */
+html.ax-mobile #ui-root .ax-mob-menu:not([hidden]) { display: block; position: absolute; inset: 0; z-index: 900; background: rgba(6, 4, 20, 0.55); }
+.ax-mob-menu-sheet {
+  position: absolute; right: 6px; top: 62px; width: 340px; padding: 10px 12px 12px;
+  border: 1px solid transparent; border-image: var(--ax-img) 7 9 7 10 fill / 14px 18px 14px 20px / 4px 6px 4px 6px;
+}
+.ax-mob-menu-title { font-family: var(--ax-head); font-size: 20px; color: #f4eea0; text-shadow: var(--ax-ts2); margin: 0 0 8px 4px; }
+.ax-mob-menu-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ax-mob-menu-item {
+  appearance: none; cursor: pointer; display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 10px;
+  font-family: var(--ax-font); color: var(--ax-ink); -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  background: none; border: 2px solid transparent; border-image: url("/assets/ui/golden/tab.png") 4 fill / 8px / 0;
+}
+.ax-mob-menu-item:active { border-image-source: url("/assets/ui/golden/slot_hover.png"); transform: translateY(2px); }
+.ax-mob-menu-item .ax-quick-ico { flex: none; transform: scale(1.3); }
+.ax-mob-menu-label { font-size: 18px; color: #f4eea0; text-shadow: var(--ax-ts); white-space: nowrap; }
+
+/* Minimap: hidden behind the map button; opens as a big centred overlay (tap anywhere to close) */
+html.ax-mobile #ui-root .ax-minimap { display: none; }
+html.ax-mobile #ui-root .ax-minimap.ax-mm-overlay {
+  display: block; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 850; padding: 0 0 12px; min-width: 300px;
+}
+html.ax-mobile #ui-root .ax-minimap.ax-mm-overlay::before { content: ""; position: absolute; inset: -600px; z-index: -1; background: rgba(6, 4, 20, 0.55); }
+html.ax-mobile #ui-root .ax-minimap.ax-mm-overlay .ax-mm-body { display: block; padding: 0 12px; }
+html.ax-mobile #ui-root .ax-minimap.ax-mm-overlay .ax-mm-toggle { display: none; }
+html.ax-mobile #ui-root .ax-minimap.ax-mm-overlay .ax-mm-name { font-size: 20px; }
+html.ax-mobile #ui-root .ax-minimap.ax-mm-overlay .ax-mm-head { padding: 10px 12px 8px 14px; }
+
+/* Banners sized for the small screen */
+html.ax-mobile #ui-root .ax-area-banner { top: 112px; }
+html.ax-mobile #ui-root .ax-area-orn { width: 220px; margin-bottom: 6px; }
+html.ax-mobile #ui-root .ax-area-text { font-size: 26px; letter-spacing: 1px; }
+html.ax-mobile #ui-root .ax-area-sub { letter-spacing: 2px; }
+html.ax-mobile #ui-root .ax-area-banner::before { width: 420px; height: 74px; margin: -37px 0 0 -210px; }
+html.ax-mobile #ui-root .ax-big-banner { top: 96px; }
+html.ax-mobile #ui-root .ax-big-banner::before { width: 480px; height: 130px; margin: -65px 0 0 -240px; }
+html.ax-mobile #ui-root .ax-big-rays { width: 300px; height: 300px; margin: -150px 0 0 -150px; }
+html.ax-mobile #ui-root .ax-big-title { font-size: 40px; letter-spacing: 2px; }
+html.ax-mobile #ui-root .ax-job .ax-big-title { font-size: 20px; letter-spacing: 3px; }
+html.ax-mobile #ui-root .ax-big-text { font-size: 26px; margin-top: 4px; }
+html.ax-mobile #ui-root .ax-job .ax-big-text { font-size: 32px; }
+html.ax-mobile #ui-root .ax-big-sub { max-width: 440px; margin-top: 6px; }
+
+/* Touch controls re-laid for 720×405: d-pad bottom-left, spells + Loot + Jump bottom-right, no top bar (☰ instead) */
+html.ax-mobile #ui-root .ax-tc-top { display: none; }
+html.ax-mobile #ui-root .ax-tc-pad { left: 10px; bottom: 10px; transform: scale(0.75); transform-origin: 0 100%; }
+html.ax-mobile #ui-root .ax-tc-jump { right: 10px; bottom: 10px; width: 98px; height: 98px; }
+html.ax-mobile #ui-root .ax-tc-jump-arrow { width: 36px; height: 30px; }
+html.ax-mobile #ui-root .ax-tc-pickup { right: 10px; bottom: 116px; width: 98px; height: 52px; flex-direction: row; gap: 6px; }
+html.ax-mobile #ui-root .ax-tc-ico { width: 24px; height: 24px; background-size: 24px 24px; }
+html.ax-mobile #ui-root .ax-tc-slots { right: 116px; bottom: 10px; grid-template-columns: repeat(3, 56px); grid-auto-rows: 56px; gap: 6px; }
+html.ax-mobile #ui-root .ax-tc-slot-icon { inset: 6px; }
+html.ax-mobile #ui-root .ax-tc-slot-icon .ax-icon { width: 40px !important; height: 40px !important; }
+html.ax-mobile #ui-root .ax-tc-slot-cdtext { font-size: 20px; }
+html.ax-mobile #ui-root .ax-tc-slot-badge { right: 3px; bottom: 2px; }
+html.ax-mobile #ui-root .ax-tc-flip { right: 116px; bottom: 136px; width: 104px; height: 48px; }
+html.ax-mobile #ui-root .ax-tc-flip-num { font-size: 20px; }
+/* Bigger pixel text on phones (Kenney Pixel reads small for its px size) */
+html.ax-mobile #ui-root .ax-statusbar .ax-gauge-text { font-size: 20px; }
+html.ax-mobile #ui-root .ax-statusbar .ax-gauge-label { font-size: 18px; }
+html.ax-mobile #ui-root .ax-statusbar .ax-gauge-track { height: 22px; }
+html.ax-mobile #ui-root .ax-lv-tag { font-size: 18px; }
+html.ax-mobile #ui-root .ax-expbar .ax-gauge-label, html.ax-mobile #ui-root .ax-expbar .ax-gauge-text { font-size: 20px; }
+html.ax-mobile #ui-root .ax-line { font-size: 20px; line-height: 20px; }
+html.ax-mobile #ui-root .ax-chat { height: 48px; top: 94px; }
+html.ax-mobile #ui-root .ax-buff-time { font-size: 18px; }
+html.ax-mobile #ui-root .ax-tc-label { font-size: 20px; }
+html.ax-mobile #ui-root .ax-tc-slot-badge { font-size: 18px; line-height: 14px; }
+html.ax-mobile #ui-root .ax-area-sub, html.ax-mobile #ui-root .ax-big-sub { font-size: 20px; }
+html.ax-mobile #ui-root .ax-minimap.ax-mm-overlay .ax-mm-sub { font-size: 18px; }
+/* Controls sit over the world on a small screen: keep them see-through until touched */
+html.ax-mobile #ui-root .ax-tc-pad:not(.ax-down) { opacity: 0.72; }
+html.ax-mobile #ui-root .ax-tc-slot.ax-empty { opacity: 0.55; }
+
+/* ===== Character creator ===== */
+.ax-cc { max-width: 1000px; }
+.ax-cc-body { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.ax-cc-main { display: flex; align-items: flex-start; gap: 22px; }
+.ax-cc-stage {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 8px 10px;
+  background: var(--ax-indigo-lo); box-shadow: inset 0 0 0 2px var(--ax-k), inset 0 0 0 4px var(--ax-line);
+}
+.ax-cc-sprite { width: 240px; height: 240px; image-rendering: pixelated; image-rendering: crisp-edges; display: block; position: relative; }
+.ax-cc-pedestal {
+  position: absolute; left: 50%; top: 214px; width: 120px; height: 14px; margin-left: -60px; border-radius: 50%;
+  background: var(--ax-well); box-shadow: 0 0 0 2px var(--ax-k);
+}
+.ax-cc-modes { display: flex; gap: 6px; }
+.ax-cc-mode { min-width: 64px; min-height: 44px; }
+.ax-cc-mode.ax-on { outline: 2px solid var(--ax-gold); outline-offset: 1px; }
+.ax-cc-rows { display: flex; flex-direction: column; gap: 10px; }
+.ax-cc-row { display: flex; flex-direction: column; gap: 4px; }
+.ax-cc-label { font-family: var(--ax-head); font-size: 16px; color: var(--ax-ink-dim); text-shadow: var(--ax-ts); }
+.ax-cc-row.ax-kbd-row .ax-cc-label { color: var(--ax-gold); }
+.ax-cc-row.ax-kbd-row .ax-cc-label::before { content: "▶ "; }
+.ax-cc-swatches { display: flex; gap: 6px; }
+.ax-cc-sw {
+  width: 44px; height: 44px; padding: 0; border: 0; cursor: pointer; background: var(--ax-sw);
+  box-shadow: inset 0 0 0 2px var(--ax-k), inset 2px 2px 0 2px rgba(255, 255, 255, 0.25), inset -2px -2px 0 2px rgba(0, 0, 0, 0.25);
+}
+.ax-cc-sw:hover { transform: translateY(-2px); }
+.ax-cc-sw.ax-on { outline: 3px solid var(--ax-gold); outline-offset: 1px; box-shadow: inset 0 0 0 2px var(--ax-k), 0 0 0 5px var(--ax-k); }
+.ax-cc-sw:focus-visible { outline: 3px solid #f4eea0; outline-offset: 1px; }
+.ax-cc-schools { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.ax-cc-school-row { display: flex; gap: 6px; }
+.ax-cc-school {
+  display: flex; flex-direction: column; align-items: center; width: 80px; padding-bottom: 4px; font-size: 14px; color: var(--ax-ink-dim);
+  background: var(--ax-well); box-shadow: inset 0 0 0 2px var(--ax-k);
+}
+.ax-cc-mini { width: 80px; height: 80px; image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+.ax-cc-bar .ax-btn { min-height: 44px; }
+
+/* Phones (720×405 logical): one scrolling column, buttons kept in reach at the bottom. */
+html.ax-mobile #ui-root .ax-title.ax-cs-on .ax-cs:has(.ax-cc) { padding-top: 6px; }
+html.ax-mobile #ui-root .ax-cc { width: 700px; max-height: 393px; overflow-y: auto; padding: 8px 12px 0; gap: 8px; }
+html.ax-mobile #ui-root .ax-cc .ax-cs-sub { display: none; }
+html.ax-mobile #ui-root .ax-cc-main { flex-direction: column; align-items: center; gap: 10px; }
+html.ax-mobile #ui-root .ax-cc-sprite { width: 160px; height: 160px; }
+html.ax-mobile #ui-root .ax-cc-pedestal { top: 144px; width: 90px; margin-left: -45px; }
+html.ax-mobile #ui-root .ax-cc-bar {
+  position: sticky; bottom: 0; padding: 6px 0 8px; width: 100%; justify-content: center; background: var(--ax-indigo);
+  box-shadow: 0 -2px 0 var(--ax-k);
+}

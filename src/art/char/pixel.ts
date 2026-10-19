@@ -328,7 +328,7 @@ function rampMap(srcCols: number[], srcBase: number, target: number, out: Map<nu
 }
 
 export interface PixelOpts {
-  /** 1 = plain, 2 = hat band, 3 = + circlet gem, 4 = + crown. */
+  /** 1 = plain, 2 = hat band, 3 = + circlet gem, 4 = + crown, 5 = grand crown (taller, five spikes, gem-tipped) + glow. */
   deco: number;
   aura: boolean;
 }
@@ -356,14 +356,15 @@ function paletteFor(base: BaseId, L: CharacterLook): Palette {
     rampMap(G.red, B.red!, L.robe, m(C.Robe));
     rampMap(G.red, B.red!, cloth, m(C.Brim));
     rampMap(G.blue, B.blue!, cloth, m(C.Tip), { lift: 0.06 });
-    rampMap(G.hair, B.hair!, L.hair, m(C.Hair));
-    rampMap(G.skin, B.skin!, mix(B.skin!, L.skin, 0.5), m(C.Skin));
+    rampMap(G.hair, B.hair!, hairTarget(L.hair), m(C.Hair), { darkOutline: false });
+    rampMap(G.skin, B.skin!, skinTarget(L.skin), m(C.Skin), { darkOutline: false });
     rampMap(G.trim, B.trim!, L.robeTrim, m(C.Trim));
+    accentTrim(G.trim, by[C.Trim], L.staffGem);
     rampMap(G.gem, B.gem!, L.staffGem, m(C.Gem));
   } else {
     rampMap(G.red, B.red!, L.robe, m(C.Robe), { darkOutline: false });
-    rampMap(G.white, B.white!, L.hair, m(C.Hair));
-    rampMap(G.skin, B.skin!, mix(B.skin!, L.skin, 0.6), m(C.Skin));
+    rampMap(G.white, B.white!, hairTarget(L.hair), m(C.Hair));
+    rampMap(G.skin, B.skin!, skinTarget(L.skin), m(C.Skin), { darkOutline: false });
     rampMap(G.gem, B.gem!, L.staffGem, m(C.Gem));
   }
   const pal: Palette = {
@@ -375,6 +376,33 @@ function paletteFor(base: BaseId, L: CharacterLook): Palette {
   };
   paletteCache.set(ck, pal);
   return pal;
+}
+
+/**
+ * Skin: the swatch is the face's mid tone. The ramp keeps the source's warm shadow/highlight steps, so only a
+ * light pull toward the source hue (keeps pale/cool picks from looking grey); deep tones keep their depth.
+ */
+function skinTarget(skin: number): number {
+  const [h, s, l] = toHsl(skin);
+  const [sh] = toHsl(0xdba463);
+  let dh = sh - h; if (dh > 0.5) dh -= 1; if (dh < -0.5) dh += 1;
+  return fromHsl(h + dh * 0.25, Math.max(0.3, s), Math.min(0.86, l));
+}
+
+/** Hair: the swatch is the mid tone; very pale (white/silver) hair is pulled down a touch so its highlight survives. */
+function hairTarget(hair: number): number {
+  const [h, s, l] = toHsl(hair);
+  return fromHsl(h, s, Math.min(0.8, Math.max(0.12, l)));
+}
+
+/** The accent (staff gem colour) also glints on the brightest robe-trim tone. */
+function accentTrim(trimCols: number[], map: Map<number, number>, accent: number) {
+  if (!trimCols.length) return;
+  let hi = trimCols[0];
+  for (const c of trimCols) if (toHsl(c)[2] > toHsl(hi)[2]) hi = c;
+  const cur = map.get(hi) ?? hi;
+  const [ah, as, al] = toHsl(accent);
+  map.set(hi, mix(cur, fromHsl(ah, as, Math.max(0.6, al)), 0.6));
 }
 
 function luma(n: number): number {
@@ -413,6 +441,7 @@ export function renderPixelFrame(base: BaseId, ref: FrameRef, look: CharacterLoo
   // so feet stay exactly on the ground line.
   addOutline(out, pal.outline, 255, false, FOOT_ROW);
   if (opts.aura) addOutline(out, pal.aura, 150, true);
+  if (opts.deco >= 5) addOutline(out, pal.gem, 70, true);   // soft second ring in the accent colour
   return out;
 }
 
@@ -439,7 +468,19 @@ function decorateHat(d: Uint8ClampedArray, cls: Uint8Array, pal: Palette, deco: 
   };
   const cx = Math.round((lx + rx) / 2);
   const gy = yAt(cx);
-  if (deco >= 4) {
+  if (deco >= 5) {
+    // Grand crown: thick 2-row band, five gem-tipped spikes (tall center), metal fill between the spike bases.
+    for (const [x, y] of band) { put(d, x, y - 1, pal.metal); put(d, x, y - 2, pal.metalHi); }
+    const spikes: [number, number][] = [[lx, 3], [Math.round((lx + cx) / 2), 5], [cx, 8], [Math.round((cx + rx) / 2), 5], [rx, 3]];
+    for (const [sx, h] of spikes) {
+      const by = yAt(sx) - 2;
+      for (let k = 1; k <= h; k++) {
+        put(d, sx, by - k, k === h ? pal.metalHi : pal.metal);
+        if (k <= Math.floor(h / 2)) { put(d, sx - 1, by - k, pal.metalHi); put(d, sx + 1, by - k, pal.metalLo); }   // tapered, lit from the left
+      }
+      put(d, sx, by - h - 1, h >= 5 ? pal.gem : pal.gemHi);
+    }
+  } else if (deco >= 4) {
     // Crown: side spikes at the band ends + a tall center spike above the gem.
     for (const sx of [lx, rx]) {
       const by = yAt(sx);
@@ -452,7 +493,7 @@ function decorateHat(d: Uint8ClampedArray, cls: Uint8Array, pal: Palette, deco: 
   if (deco >= 3) {
     // Diamond gem set into the band, with a dark rim so it reads on any hat.
     const rim: [number, number][] = [[0, -3], [-1, -2], [1, -2], [-2, -1], [2, -1], [-1, 0], [1, 0], [0, 1]];
-    if (deco < 4) for (const [ox, oy] of rim) put(d, cx + ox, gy + oy, pal.outline);
+    if (deco === 3) for (const [ox, oy] of rim) put(d, cx + ox, gy + oy, pal.outline);
     else for (const [ox, oy] of rim) if (oy > -3) put(d, cx + ox, gy + oy, pal.outline);
     put(d, cx, gy - 2, pal.gemHi);
     put(d, cx - 1, gy - 1, pal.gem); put(d, cx, gy - 1, pal.gemHi); put(d, cx + 1, gy - 1, pal.gem);

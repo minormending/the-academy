@@ -2,7 +2,7 @@
 import Phaser from 'phaser';
 import { DEPTH, PLAYER_HITBOX } from '../core/constants';
 import { actionsForKey, getBinding, onBindingsChanged, type ActionId } from '../core/bindings';
-import type { GameServices, IMapInstance, IPlayer, JobId, RopeDef } from '../core/types';
+import type { Appearance, GameServices, IMapInstance, IPlayer, JobId, RopeDef } from '../core/types';
 import { playerAnimKey, playerTextureKey, type PlayerAnim } from '../art/characters';
 import { ensureFallbackTexture } from './player/fallbackTexture';
 import { NameTag } from './player/NameTag';
@@ -818,7 +818,7 @@ export class Player implements IPlayer {
     const chain: PlayerAnim[] = [this.state, ...ANIM_FALLBACK[this.state]];
     let key = '';
     for (const a of chain) {
-      const k = playerAnimKey(this.job, a);
+      const k = playerAnimKey(this.job, a, this.appearance());
       if (anims.exists(k)) { key = k; break; }
     }
     if (!key) {
@@ -836,16 +836,22 @@ export class Player implements IPlayer {
 
   // ─────────────────────────── Texture / body ───────────────────────────
 
+  /** The student's own skin/hair/accent (character creation); null on saves from before it existed. */
+  private appearance(): Appearance | null {
+    try { return this.services.progression?.state?.appearance ?? null; } catch { return null; }
+  }
+
   private resolveTextureKey(): string {
-    const real = playerTextureKey(this.job);
+    const look = this.appearance();
+    const real = playerTextureKey(this.job, look);
     if (this.scene.textures.exists(real)) { this.usingFallback = false; return real; }
     this.usingFallback = true;
-    return ensureFallbackTexture(this.scene, this.job);
+    return ensureFallbackTexture(this.scene, this.job, look);
   }
 
   private maybeUpgradeTexture() {
     if (!this.usingFallback) return;
-    if (!this.scene.textures.exists(playerTextureKey(this.job))) return;
+    if (!this.scene.textures.exists(playerTextureKey(this.job, this.appearance()))) return;
     const feetX = this.x, feetY = this.y;
     const key = this.resolveTextureKey();
     this.sprite.setTexture(key);

@@ -8,7 +8,8 @@
 //   0-3 idle · 4-7 walk · 8 jump · 9 fall · 10-11 climb (back view) · 12 prone · 13-15 cast · 16 hit · 17 dead (ghost)
 // Frame names are numeric indices. Anim keys: `${playerTextureKey(job)}_${anim}`.
 import Phaser from 'phaser';
-import type { CharacterLook, JobId } from '../core/types';
+import type { Appearance, CharacterLook, JobId } from '../core/types';
+import { appearanceKey, applyAppearance } from '../data/appearance';
 import { PLAYER_FRAME } from '../core/constants';
 import { Registry } from '../core/registry';
 import { timed } from './perf';
@@ -79,9 +80,9 @@ function tierOfJob(job: JobId): number {
 
 // ───────────────────────────── pixel-art helpers ─────────────────────────────
 
-/** Player decorations by job tier: band (1–2), circlet gem (3), crown + aura (4). */
+/** Player decorations by job tier: band (1–2), circlet gem (3), crown + aura (4), grand crown + glow (5). */
 function playerOpts(tier: number): PixelOpts {
-  return { deco: Math.max(2, Math.min(4, tier)), aura: tier >= 4 };
+  return { deco: Math.max(2, Math.min(5, tier)), aura: tier >= 4 };
 }
 
 /** Look-only decorations (NPCs, portraits): from the hat style. */
@@ -106,7 +107,8 @@ const pixelSheets = new Set<string>();
 
 // ───────────────────────────── player ─────────────────────────────
 
-const texKey = (job: JobId): string => `player_${job}`;
+/** `player_<job>` (job look as authored) or `player_<job>__<appearanceKey>` (student-designed skin/hair/accent). */
+const texKey = (job: JobId, a?: Appearance | null): string => (a ? `player_${job}__${appearanceKey(a)}` : `player_${job}`);
 /** Scene whose texture manager owns the sheets (set at boot); lets playerTextureKey build a missing sheet on first use. */
 let sheetScene: Phaser.Scene | null = null;
 
@@ -114,15 +116,16 @@ let sheetScene: Phaser.Scene | null = null;
  * Texture key of a job's sheet. Sheets other than the Apprentice's are built lazily, so the first call for a job
  * (Player constructor / setJob / title cards) builds it here — callers never see a missing texture.
  */
-export function playerTextureKey(job: JobId): string {
-  const key = texKey(job);
-  if (sheetScene && !sheetScene.textures.exists(key)) ensurePlayerTexture(sheetScene, job);
+export function playerTextureKey(job: JobId, appearance?: Appearance | null): string {
+  const key = texKey(job, appearance);
+  if (sheetScene && !sheetScene.textures.exists(key)) ensurePlayerTexture(sheetScene, job, appearance);
   return key;
 }
-export function playerAnimKey(job: JobId, anim: PlayerAnim): string { return `${texKey(job)}_${anim}`; }
+export function playerAnimKey(job: JobId, anim: PlayerAnim, appearance?: Appearance | null): string {
+  return `${texKey(job, appearance)}_${anim}`;
+}
 
-function createPlayerAnims(scene: Phaser.Scene, job: JobId) {
-  const key = texKey(job);
+function createPlayerAnims(scene: Phaser.Scene, key: string) {
   for (const a of PLAYER_ANIMS) {
     const ak = `${key}_${a.anim}`;
     if (scene.anims.exists(ak)) continue;
@@ -140,24 +143,25 @@ function createPlayerAnims(scene: Phaser.Scene, job: JobId) {
  * Generates (if missing) the sheet + all animations for one job, from `Registry.job(job).look`
  * (falls back to a default look). Safe to call any time; returns the texture key.
  */
-export function ensurePlayerTexture(scene: Phaser.Scene, job: JobId): string {
-  const key = texKey(job);
+export function ensurePlayerTexture(scene: Phaser.Scene, job: JobId, appearance?: Appearance | null): string {
+  const key = texKey(job, appearance);
   try {
     if (!pixelReady()) registerPixelSources(scene);
+    const look = applyAppearance(lookOfJob(job), appearance);
     if (!scene.textures.exists(key) && pixelReady()) {
-      const look = lookOfJob(job), opts = playerOpts(tierOfJob(job));
+      const opts = playerOpts(tierOfJob(job));
       const frames = PIXEL_PLAYER_ANIMS.flatMap(a => a.frames).map(ref => renderPixelFrame('witch', ref, look, opts));
       const canvas = frames.every(Boolean) ? bakePixelSheet(frames) : null;
       if (canvas && addSheet(scene, key, canvas, frames.length, PX_FW, PX_FH)) pixelSheets.add(key);
     }
     if (!scene.textures.exists(key)) {
       const frames = PLAYER_ANIMS.flatMap(a => a.frames);
-      const canvas = bakeCanvas(lookOfJob(job), DEFAULT_EXTRAS, frames);
+      const canvas = bakeCanvas(look, DEFAULT_EXTRAS, frames);
       if (canvas) addSheet(scene, key, canvas, frames.length);
     }
     if (scene.textures.exists(key)) {
-      if (pixelSheets.has(key)) createPixelPlayerAnims(scene, job);
-      else createPlayerAnims(scene, job);
+      if (pixelSheets.has(key)) createPixelPlayerAnims(scene, key);
+      else createPlayerAnims(scene, key);
     }
   } catch (e) { console.warn(`[characters] player texture for ${job} failed`, e); }
   // Whoever selects / advances to a job is about to cast that School's spells: build its VFX textures next in the background.
@@ -165,8 +169,7 @@ export function ensurePlayerTexture(scene: Phaser.Scene, job: JobId): string {
   return key;
 }
 
-function createPixelPlayerAnims(scene: Phaser.Scene, job: JobId) {
-  const key = texKey(job);
+function createPixelPlayerAnims(scene: Phaser.Scene, key: string) {
   for (const a of PIXEL_PLAYER_ANIMS) {
     const ak = `${key}_${a.anim}`;
     if (scene.anims.exists(ak)) continue;
@@ -338,9 +341,15 @@ function previewUrl(L: CharacterLook, anim: PlayerAnim, frame: number, scale: nu
   return url;
 }
 
-/** Convenience: preview of a job's look. */
-export function jobPreviewDataUrl(job: JobId, scale = 1): string {
-  return previewUrl(lookOfJob(job), 'idle', 0, scale, undefined, playerOpts(tierOfJob(job)));
+/** Convenience: preview of a job's look (optionally with the student's own appearance and any anim frame). */
+export function jobPreviewDataUrl(job: JobId, scale = 1, appearance?: Appearance | null, anim: PlayerAnim = 'idle', frame = 0): string {
+  return previewUrl(applyAppearance(lookOfJob(job), appearance), anim, frame, scale, undefined, playerOpts(tierOfJob(job)));
+}
+
+/** Frame count of a player anim on the current art path (for UI previews stepping `characterDataUrl` frames). */
+export function playerAnimFrameCount(anim: PlayerAnim): number {
+  if (pixelReady()) return (PIXEL_PLAYER_ANIMS.find(a => a.anim === anim) ?? PIXEL_PLAYER_ANIMS[0]).frames.length;
+  return (PLAYER_ANIMS.find(a => a.anim === anim) ?? PLAYER_ANIMS[0]).frames.length;
 }
 
 /** Screen pixels per source pixel of the pixel-art characters (1 = native). */

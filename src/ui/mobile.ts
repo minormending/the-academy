@@ -49,3 +49,24 @@ if (typeof window !== 'undefined') {
   try { onSettingsChanged(check); } catch { /* ignore */ }
   check();
 }
+
+/** Current logical size of #ui-root: MOBILE_UI on phones, 1280×720 otherwise. */
+export function uiLogicalSize(): { w: number; h: number } {
+  return isMobileLayout() ? { w: MOBILE_UI.w, h: MOBILE_UI.h } : { w: 1280, h: 720 };
+}
+
+/** Camera zoom for the current layout (1 on desktop). */
+export function cameraZoom(): number {
+  return isMobileLayout() ? MOBILE_CAMERA_ZOOM : 1;
+}
+
+/**
+ * Place a `setScrollFactor(0)` object at screen position (sx, sy) with on-screen scale `s`, undoing the camera
+ * zoom (Phaser zooms scroll-factor-0 objects around the camera centre too).
+ */
+export function pinToScreen(obj: { setPosition(x: number, y: number): unknown; setScale(s: number): unknown },
+  cam: { width: number; height: number; zoom: number }, sx: number, sy: number, s = 1) {
+  const z = cam.zoom || 1, cx = cam.width / 2, cy = cam.height / 2;
+  obj.setPosition(cx + (sx - cx) / z, cy + (sy - cy) / z);
+  obj.setScale(s / z);
+}

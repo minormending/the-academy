@@ -33,7 +33,7 @@ export class ControlsWindow extends UIWindow {
   }
 
   protected signature() {
-    return JSON.stringify([this.tab, this.capturing, this.msg, this.msgBad, getBindings(), this.padSig]);
+    return JSON.stringify([this.tab, this.capturing, this.msg, this.msgBad, getBindings(), this.padSig, this.mobile]);
   }
 
   protected onOpen() {
@@ -157,6 +157,8 @@ export class ControlsWindow extends UIWindow {
   // ─────────────────────────── render ───────────────────────────
 
   protected render() {
+    // Phones: key rebinding is meaningless without a keyboard; show the gamepad map only.
+    if (this.mobile) { this.body.replaceChildren(this.renderGamepad()); return; }
     const tabs = tabStrip<Tab>([{ id: 'keyboard', label: 'Keyboard' }, { id: 'gamepad', label: 'Gamepad' }], this.tab, (t) => {
       this.ctx.sfx('ui_click'); this.setTab(t);
     });

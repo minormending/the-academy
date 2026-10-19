@@ -5,6 +5,7 @@ import { HOTBAR_SIZE } from '../src/core/types';
 import { MAX_LEVEL, SAVE_KEY, START_MAP, TOWN_MAP } from '../src/core/constants';
 import { Registry } from '../src/core/registry';
 import { ITEMS } from '../src/data/items';
+import { APPEARANCE_OPTIONS, DEFAULT_APPEARANCE } from '../src/data/appearance';
 import { newPlayerState, repairState, SAVE_SLOTS } from '../src/systems/SaveSystem';
 import { computeDerived } from '../src/systems/progression/stats';
 import { problems } from './support/problems';
@@ -47,6 +48,16 @@ describe('newPlayerState', () => {
     expect(newPlayerState('x'.repeat(40)).name).toHaveLength(16);
     expect(newPlayerState('').name).toBe('Apprentice');
   });
+
+  it('stores a designed appearance that round-trips through JSON and repair', () => {
+    const look = { skin: APPEARANCE_OPTIONS.skin[3], hair: APPEARANCE_OPTIONS.hair[6], accent: APPEARANCE_OPTIONS.accent[2] };
+    const s = newPlayerState('Painter', look);
+    expect(s.appearance).toEqual(look);
+    expect(s.appearance).not.toBe(look);
+    const back = repairState(clone(s));
+    expect(back.appearance).toEqual(look);
+    expect(newPlayerState('Plain').appearance).toBeUndefined();
+  });
 });
 
 describe('repairState', () => {
@@ -67,6 +78,17 @@ describe('repairState', () => {
     expect(s.hotbar).toEqual(new Array(HOTBAR_SIZE).fill(null));
     expect(s.hp).toBeGreaterThan(0);
     expect(s.mapId).toBe(START_MAP);
+  });
+
+  it('repairs a junk appearance', () => {
+    for (const junk of [null, 'blue', 42, true]) expect(repairState({ appearance: junk }).appearance, String(junk)).toBeUndefined();
+    const fixed = repairState({ appearance: { skin: -1, hair: 'red', accent: Infinity } }).appearance;
+    expect(fixed).toEqual(DEFAULT_APPEARANCE);
+    const partial = repairState({ appearance: { skin: 0x123456, hair: 0x1000000, accent: 12.7 } }).appearance!;
+    expect(partial.skin).toBe(0x123456);
+    expect(partial.hair).toBe(DEFAULT_APPEARANCE.hair);
+    expect(partial.accent).toBe(12);
+    expect(() => repairState({ appearance: { get skin(): number { throw new Error('boom'); } } })).not.toThrow();
   });
 
   it('never throws, even on hostile input', () => {

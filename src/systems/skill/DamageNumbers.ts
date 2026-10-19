@@ -3,6 +3,10 @@ import Phaser from 'phaser';
 import { DEPTH } from '../../core/constants';
 import type { DamageNumberKind } from '../../core/types';
 import { damageNumberScale } from '../../core/settings';
+import { isMobileLayout } from '../../ui/mobile';
+
+/** Phones zoom the camera ~1.8×; trim the digits a little so a combo doesn't cover the whole view. */
+const MOBILE_DMG_SCALE = 0.8;
 
 interface Style {
   scale: number;               // integer pixel scale of the bitmap digits
@@ -239,7 +243,7 @@ export class DamageNumbers {
 
     const o = this.acquire();
     o.style = style; o.kind = kind; o.t = 0; o.active = true; o.seq = ++this.seq;
-    o.mul = damageNumberScale();
+    o.mul = damageNumberScale() * (isMobileLayout() ? MOBILE_DMG_SCALE : 1);
     o.x = x; o.y = y - (stackIndex % 12) * STACK_PX * o.mul;
 
     // Layout glyphs.

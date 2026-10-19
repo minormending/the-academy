@@ -1,7 +1,7 @@
 /** A single floating tooltip shared by the whole UI. Content is built lazily on hover. */
-import { GAME_HEIGHT, GAME_WIDTH } from '../core/constants';
 import { append, clear, h, type Child } from './dom';
 import type { UIScaler } from './scaler';
+import { isMobileLayout, uiLogicalSize } from './mobile';
 
 export type TipBuilder = () => Child;
 
@@ -26,6 +26,8 @@ export class Tooltip {
 
   show(anchor: HTMLElement, build: TipBuilder, clientX: number, clientY: number) {
     if (document.body.classList.contains('ax-dragging')) return;
+    // Phones: no hover — every window shows the same details on tap instead.
+    if (isMobileLayout()) { this.hide(); return; }
     let content: Child = null;
     try { content = build(); } catch (e) { console.warn('[ui] tooltip failed', e); }
     if (content === null || content === undefined || content === false) { this.hide(); return; }
@@ -46,9 +48,10 @@ export class Tooltip {
   place(clientX: number, clientY: number) {
     const p = this.scaler.toLogical(clientX, clientY);
     const w = this.el.offsetWidth, ht = this.el.offsetHeight;
+    const { w: viewW, h: viewH } = uiLogicalSize();
     let x = p.x + 16, y = p.y + 18;
-    if (x + w > GAME_WIDTH - 4) x = p.x - w - 12;
-    if (y + ht > GAME_HEIGHT - 4) y = p.y - ht - 12;
+    if (x + w > viewW - 4) x = p.x - w - 12;
+    if (y + ht > viewH - 4) y = p.y - ht - 12;
     x = Math.max(4, x); y = Math.max(4, y);
     this.el.style.left = `${x}px`;
     this.el.style.top = `${y}px`;

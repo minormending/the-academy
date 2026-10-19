@@ -1,20 +1,24 @@
 // OWNER: A1 (player). Simple placeholder sheet used until A10's character art exists.
 import Phaser from 'phaser';
 import { PLAYER_FRAME } from '../../core/constants';
-import type { JobId } from '../../core/types';
+import type { Appearance, JobId } from '../../core/types';
+import { appearanceKey } from '../../data/appearance';
 import { Registry } from '../../core/registry';
 
-export function fallbackTextureKey(job: JobId): string { return `player_fallback_${job}`; }
+export function fallbackTextureKey(job: JobId, a?: Appearance | null): string {
+  return a ? `player_fallback_${job}__${appearanceKey(a)}` : `player_fallback_${job}`;
+}
 
 /** Generates (once) a 64x80 placeholder mage with feet at y=78, facing right. Returns its key. */
-export function ensureFallbackTexture(scene: Phaser.Scene, job: JobId): string {
-  const key = fallbackTextureKey(job);
+export function ensureFallbackTexture(scene: Phaser.Scene, job: JobId, a?: Appearance | null): string {
+  const key = fallbackTextureKey(job, a);
   if (scene.textures.exists(key)) return key;
   let robe = 0x6a4fc9, trim = 0xd9c25a, hat = 0x4b3696, skin = 0xf2d0b0, hair = 0x5a3a22, gem = 0x9fe8ff;
   try {
     const look = Registry.job(job)?.look;
     if (look) { robe = look.robe; trim = look.robeTrim; hat = look.hat; skin = look.skin; hair = look.hair; gem = look.staffGem; }
   } catch { /* registry not ready: keep defaults */ }
+  if (a) { skin = a.skin; hair = a.hair; gem = a.accent; }
 
   const { w, h } = PLAYER_FRAME;
   const cx = w / 2;

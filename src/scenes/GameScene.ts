@@ -25,6 +25,7 @@ import { PetSystem } from '../systems/PetSystem';
 import { ArenaSystem } from '../systems/ArenaSystem';
 import { HonorsSystem } from '../systems/HonorsSystem';
 import { loadMap } from '../world/MapLoader';
+import { cameraZoom, onMobileLayoutChanged } from '../ui/mobile';
 
 export class GameScene extends Phaser.Scene implements IGameApi {
   private s!: GameServices;
@@ -91,6 +92,9 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     this.cameras.main.fadeIn(400, 0, 0, 0);
 
     this.exposeDebug();
+    // Phones: zoomed-in world (re-applied on rotation / Touch setting changes).
+    const offZoom = onMobileLayoutChanged(() => this.applyCameraZoom());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, offZoom);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
   }
 
@@ -156,6 +160,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     this.physics.world.setBounds(0, 0, map.widthPx, map.heightPx);
     const cam = this.cameras.main;
     cam.setBounds(0, 0, map.widthPx, map.heightPx);
+    this.applyCameraZoom();
 
     s.player.bindMap(map);
     const portal = portalId ? map.getPortalById(portalId) : null;
@@ -173,6 +178,14 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     bus.emit('map:changed', { mapId });
     bus.emit('ui:banner', { text: map.def.name, sub: map.def.region });
     s.progression.save();
+  }
+
+  /** Mobile layout: zoom the world camera in (MOBILE_CAMERA_ZOOM); desktop stays at 1. Bounds/follow are zoom-aware. */
+  private applyCameraZoom() {
+    const cam = this.cameras?.main;
+    if (!cam) return;
+    const z = cameraZoom();
+    if (cam.zoom !== z) cam.setZoom(z);
   }
 
   private wireEvents() {

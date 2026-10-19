@@ -9,6 +9,7 @@
  */
 import { clearLayoutFlags, type UICtx } from './context';
 import { eventKeyCode, getBinding, keyLabel } from '../core/bindings';
+import { MOBILE_UI, isMobileLayout } from './mobile';
 import { Registry } from '../core/registry';
 import { GRADUATION_QUEST_ID } from '../data/storyQuests';
 import type { MusicKey } from '../core/types';
@@ -124,6 +125,8 @@ const SCROLL_PX_PER_S = 52;
 const KEY_GRACE_MS = 1500;
 const VIEW_W = 1280;
 const VIEW_H = 720;
+/** Visible height of the roll: the phone UI is laid out at MOBILE_UI.h instead of 720. */
+const viewH = () => (isMobileLayout() ? MOBILE_UI.h : VIEW_H);
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 /** Opacity in coarse steps: matches the game's stepped, pixel-art transitions. */
@@ -191,6 +194,11 @@ export class CreditsRoll {
       this.endEl, this.hintEl);
     this.starsA.style.boxShadow = starShadow(7, 70, ['#deeed6', '#a3abd8', '#dad45e']);
     this.starsB.style.boxShadow = starShadow(91, 60, ['#deeed6', '#b58cff', '#a3abd8']);
+    // Phones: a tap anywhere skips / continues (there is no Esc or Enter).
+    this.el.addEventListener('click', (e) => {
+      if (!this.isOpen || !isMobileLayout() || (e.target as HTMLElement).closest('button') || this.t < KEY_GRACE_MS) return;
+      this.advance();
+    });
     ctx.root.appendChild(this.el);
   }
 
@@ -249,7 +257,7 @@ export class CreditsRoll {
     this.phase = 'in';
     this.t = 0;
     this.cardT = 0;
-    this.y = VIEW_H;
+    this.y = viewH();
     this.lastY = Number.NaN;
     this.el.style.display = '';
     this.el.style.opacity = '0';
@@ -431,8 +439,8 @@ export class CreditsRoll {
     }
     if (!any && this.cardT > at) {
       this.phase = 'roll';
-      this.y = VIEW_H;
-      this.applyY(VIEW_H);
+      this.y = viewH();
+      this.applyY(this.y);
       this.rollEl.style.visibility = '';
       this.setHint(true);
     }
@@ -440,7 +448,7 @@ export class CreditsRoll {
 
   /** Where the roll stops: the "Thanks for playing" block centred on screen. */
   private stopY(): number {
-    return Math.round(VIEW_H / 2 - this.thanksEl.offsetTop - this.thanksEl.offsetHeight / 2 - 40);
+    return Math.round(viewH() / 2 - this.thanksEl.offsetTop - this.thanksEl.offsetHeight / 2 - 40);
   }
 
   private frameRoll(dt: number) {
@@ -480,6 +488,7 @@ export class CreditsRoll {
     if (this.hintMode === skippable) return;
     this.hintMode = skippable;
     const jump = keyLabel(getBinding('jump'));
-    this.hintEl.textContent = skippable ? `Esc / Enter / ${jump}: skip` : `Esc / Enter / ${jump}: continue`;
+    this.hintEl.textContent = isMobileLayout() ? (skippable ? 'Tap to skip' : 'Tap Continue')
+      : skippable ? `Esc / Enter / ${jump}: skip` : `Esc / Enter / ${jump}: continue`;
   }
 }

@@ -17,6 +17,7 @@ Final Thesis.
 - **Seven zones** from the Academy grounds to the Forbidden Wing, plus three optional branch zones (the Moonlit
   Marsh, the Glacier Grotto and the Restricted Stacks), with five rare field bosses, Field Bounties,
   and the Lich Archon.
+- **Design your own mage** — pick skin, hair and accent colours (or Randomize) when you enrol; your look carries through every School robe.
 - **Main questline**, orientation for new students, side assignments and Year-end Exams.
 - **Trial Hall** wave arena with Academy Merits and a Merit Exchange.
 - **Academy Honors** — 60 achievements in six categories that pay Merits and unlock titles for your name tag.

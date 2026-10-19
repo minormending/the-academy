@@ -35,7 +35,7 @@ export class DialogWindow extends UIWindow {
     if (!this.isOpen) this.open(); else this.bringToFront();
   }
 
-  protected signature() { return String(this.gen); }
+  protected signature() { return `${this.gen}|${this.mobile}`; }
 
   get typing() { return this.shown < this.full.length; }
   skip() { this.shown = this.full.length; this.textEl.textContent = this.full; }
@@ -56,7 +56,7 @@ export class DialogWindow extends UIWindow {
     }, h('span', { class: 'ax-dlg-num' }, String(i + 1)), keyText(o.label)));
     this.body.replaceChildren(
       h('div', { class: 'ax-dlg' },
-        h('div', { class: 'ax-dlg-left' }, portraitEl(npc?.look, 110, spec.npcName),
+        h('div', { class: 'ax-dlg-left' }, portraitEl(npc?.look, this.mobile ? 76 : 110, spec.npcName),
           h('div', { class: 'ax-dlg-name' }, spec.npcName || npc?.name || ''),
           npc?.title ? h('div', { class: 'ax-dlg-title' }, npc.title) : null),
         h('div', { class: 'ax-dlg-right' }, box, h('div', { class: 'ax-dlg-opts' }, buttons))));
@@ -114,6 +114,8 @@ export class ShopWindow extends UIWindow {
   private qty = new Map<string, number>();
   /** Sell row awaiting a confirming second click (equipment / valuable stacks). */
   private confirmSell: string | null = null;
+  /** Phones (no hover tooltips): row whose item details are expanded inline. */
+  private expanded = '';
 
   constructor(ctx: UICtx) {
     super(ctx, 'shop', 'Shop', { width: 420, x: 430, y: 90, className: 'ax-shop-win' });
@@ -124,6 +126,7 @@ export class ShopWindow extends UIWindow {
     this.tab = 'buy';
     this.qty.clear();
     this.confirmSell = null;
+    this.expanded = '';
     this.setTitle(`${spec.npcName}'s Shop`);
     this.invalidate();
     if (!this.isOpen) this.open(); else this.bringToFront();
@@ -131,7 +134,7 @@ export class ShopWindow extends UIWindow {
 
   protected signature(): string {
     const st = this.ctx.s.progression.state;
-    return JSON.stringify([this.tab, st.mesos, st.inventory, st.level, st.equipment, st.quests, [...this.qty], this.confirmSell]);
+    return JSON.stringify([this.tab, st.mesos, st.inventory, st.level, st.equipment, st.quests, [...this.qty], this.confirmSell, this.mobile, this.expanded]);
   }
 
   private stepper(key: string, max: number, onChange: () => void): HTMLElement {
@@ -169,11 +172,17 @@ export class ShopWindow extends UIWindow {
           h('button', { class: 'ax-btn ax-btn-small', disabled: !afford, onclick: () => this.buy(entry.itemId, entry.price, q, def) }, 'Buy'));
         this.ctx.tooltip.attach(row.firstChild as HTMLElement, () => itemTooltip(def, { level: st.level, branch, price: entry.price }, entry.itemId));
         list.appendChild(row);
+        if (this.mobile) this.tapToExpand(row, key, list, () => itemTooltip(def, { level: st.level, branch, price: entry.price }, entry.itemId));
       }
       if (!spec.items?.length) list.appendChild(h('div', { class: 'ax-empty-note' }, 'Sold out!'));
     } else {
       const stacks = (st.inventory ?? []).filter(s => (Registry.item(s.itemId)?.sellPrice ?? 0) > 0);
-      for (const s of stacks) list.appendChild(this.sellRow(s, Registry.item(s.itemId)!, st.level, branch, rerender));
+      for (const s of stacks) {
+        const def = Registry.item(s.itemId)!;
+        const row = this.sellRow(s, def, st.level, branch, rerender);
+        list.appendChild(row);
+        if (this.mobile) this.tapToExpand(row, `s:${s.uid}`, list, () => itemTooltip(def, { qty: s.qty, level: st.level, branch }, s.itemId));
+      }
       if (!stacks.length) list.appendChild(h('div', { class: 'ax-empty-note' }, 'You have nothing to sell.'));
     }
     this.body.replaceChildren(
@@ -183,6 +192,18 @@ export class ShopWindow extends UIWindow {
       h('div', { class: 'ax-win-footer' },
         h('div', { class: 'ax-mesos' }, h('span', { class: 'ax-coin' }), h('b', null, fmtNum(st.mesos)), h('span', { class: 'ax-dim' }, ' mesos')),
         h('button', { class: 'ax-btn ax-btn-secondary ax-btn-small', onclick: () => this.close() }, 'Leave')));
+  }
+
+  /** Phones: tapping a row's icon / name toggles the item's details right under it (replaces the hover tooltip). */
+  private tapToExpand(row: HTMLElement, key: string, list: HTMLElement, build: () => HTMLElement) {
+    row.classList.add('ax-m-tappable');
+    if (this.expanded === key) { row.classList.add('ax-sel'); list.appendChild(h('div', { class: 'ax-m-tip ax-m-shop-tip' }, build())); }
+    row.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('button')) return;
+      this.expanded = this.expanded === key ? '' : key;
+      this.ctx.sfx('ui_click');
+      this.invalidate();
+    });
   }
 
   private junkStacks(): ItemStack[] {

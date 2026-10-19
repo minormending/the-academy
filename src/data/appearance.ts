@@ -37,7 +37,7 @@ export function appearanceKey(a?: Appearance | null): string {
 
 /** Repair untrusted save data into a valid appearance (null if absent). */
 export function repairAppearance(v: unknown): Appearance | null {
-  if (!v || typeof v !== 'object') return null;
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const o = v as Record<string, unknown>;
   const col = (x: unknown, d: number) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 0xffffff ? Math.floor(x) : d);
   return { skin: col(o.skin, DEFAULT_APPEARANCE.skin), hair: col(o.hair, DEFAULT_APPEARANCE.hair), accent: col(o.accent, DEFAULT_APPEARANCE.accent) };

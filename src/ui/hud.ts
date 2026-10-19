@@ -11,6 +11,7 @@ import { clear, fmtNum, fmtSec, h, safe, setText, toggleClass } from './dom';
 import { iconEl } from './uiIcons';
 import { toggleHonorsWindow } from './honorsWindow';
 import { onPixelIconsReady, pixelIconUrl, type PixelIconName } from '../art/icons';
+import { isMobileLayout, onMobileLayoutChanged } from './mobile';
 
 /** Pixel-art icons for the quick-menu buttons (CSS-drawn fallbacks stay for help/menu or if the sheet fails). */
 const QUICK_ICONS: Partial<Record<WindowName, PixelIconName>> = { stats: 'C_Hat01', inventory: 'I_Chest01', skills: 'W_Book06', quests: 'I_Scroll' };
@@ -74,8 +75,14 @@ export class StatusBar {
   private iconSubs: (() => void)[] = [];
   private keySyncs: (() => void)[] = [];
   private offBindings: () => void = () => {};
+  /** Phone layout (html.ax-mobile): short EXP text; the ☰ menu replaces the quick buttons. */
+  private mobile = isMobileLayout();
+  private offMobile: () => void;
+  private menu: MobileMenu;
 
   constructor(private ctx: UICtx) {
+    this.offMobile = onMobileLayoutChanged((on) => { this.mobile = on; });
+    this.menu = new MobileMenu(ctx);
     this.lvNum = h('div', { class: 'ax-lv-num' }, '1');
     this.nameEl = h('div', { class: 'ax-id-name' });
     this.jobEl = h('div', { class: 'ax-id-job' });
@@ -130,8 +137,9 @@ export class StatusBar {
     const need = st.level >= MAX_LEVEL ? 0 : expToNext(st.level);
     if (need > 0) {
       const r = st.exp / need;
-      this.exp.update(r, `${fmtNum(st.exp)} / ${fmtNum(need)}  [${(Math.max(0, Math.min(1, r)) * 100).toFixed(2)}%]`, dt);
-    } else this.exp.update(1, 'MAX LEVEL', dt);
+      const pct = `${(Math.max(0, Math.min(1, r)) * 100).toFixed(2)}%`;
+      this.exp.update(r, this.mobile ? pct : `${fmtNum(st.exp)} / ${fmtNum(need)}  [${pct}]`, dt);
+    } else this.exp.update(1, this.mobile ? 'MAX' : 'MAX LEVEL', dt);
     const sig = `${st.level}|${st.name}|${st.job}`;
     if (sig !== this.sig) {
       this.sig = sig;
@@ -144,7 +152,71 @@ export class StatusBar {
   destroy() {
     for (const off of this.iconSubs.splice(0)) { try { off(); } catch { /* ignore */ } }
     try { this.offBindings(); } catch { /* ignore */ }
+    try { this.offMobile(); } catch { /* ignore */ }
+    this.menu.destroy();
     this.el.remove(); this.expEl.remove();
+  }
+}
+
+// ───────────────────────────── Mobile menu (☰) ─────────────────────────────
+
+const MOBILE_MENU: readonly { label: string; win: WindowName | 'honors'; icon?: PixelIconName }[] = [
+  { label: 'Spellbook', win: 'skills', icon: 'W_Book06' },
+  { label: 'Bag', win: 'inventory', icon: 'I_Chest01' },
+  { label: 'Character', win: 'stats', icon: 'C_Hat01' },
+  { label: 'Assignments', win: 'quests', icon: 'I_Scroll' },
+  { label: 'Honors', win: 'honors' },
+  { label: 'Settings', win: 'menu' },
+];
+
+/** Phones: one top-right ☰ button opening a simple list of the game's windows (hidden by CSS on desktop). */
+export class MobileMenu {
+  readonly btn: HTMLElement;
+  readonly panel: HTMLElement;
+  private open = false;
+  private subs: (() => void)[] = [];
+
+  constructor(private ctx: UICtx) {
+    this.btn = h('button', { class: 'ax-mob-menubtn', title: 'Menu', 'aria-label': 'Menu', onclick: () => { ctx.sfx('ui_click'); this.setOpen(!this.open); } },
+      h('span', { class: 'ax-mob-burger' }));
+    const list = h('div', { class: 'ax-mob-menu-list' });
+    for (const it of MOBILE_MENU) {
+      const ico = h('span', { class: `ax-quick-ico ax-qi-${it.win}` });
+      if (it.icon) {
+        const name = it.icon;
+        this.subs.push(onPixelIconsReady(() => {
+          const url = pixelIconUrl(name, 26);
+          if (url) { ico.style.setProperty('--qi', `url("${url}")`); ico.classList.add('ax-qi-px'); }
+        }));
+      }
+      list.appendChild(h('button', {
+        class: 'ax-mob-menu-item',
+        onclick: () => {
+          ctx.sfx('ui_click');
+          this.setOpen(false);
+          if (it.win === 'honors') toggleHonorsWindow(); else ctx.openWindow(it.win);
+        },
+      }, ico, h('span', { class: 'ax-mob-menu-label' }, it.label)));
+    }
+    this.panel = h('div', { class: 'ax-mob-menu', hidden: true, onclick: (e: Event) => { if (e.target === this.panel) this.setOpen(false); } },
+      h('div', { class: 'ax-mob-menu-sheet' }, h('div', { class: 'ax-mob-menu-title' }, 'Menu'), list));
+    ctx.root.appendChild(this.btn);
+    ctx.root.appendChild(this.panel);
+    this.subs.push(onMobileLayoutChanged((on) => { if (!on) this.setOpen(false); }));
+  }
+
+  isOpen() { return this.open; }
+
+  setOpen(v: boolean) {
+    if (v === this.open) return;
+    this.open = v;
+    this.panel.hidden = !v;
+    toggleClass(this.btn, 'ax-active', v);
+  }
+
+  destroy() {
+    for (const off of this.subs.splice(0)) { try { off(); } catch { /* ignore */ } }
+    this.btn.remove(); this.panel.remove();
   }
 }
 

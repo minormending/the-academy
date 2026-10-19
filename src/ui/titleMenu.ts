@@ -15,10 +15,14 @@ import { ensurePlayerTexture, jobPreviewDataUrl, playerAnimKey, playerTextureKey
 import { getAudio } from '../systems/AudioSystem';
 import { append, h, isTextInput, safe } from './dom';
 import { UIScaler, uiRootEl } from './scaler';
+import { isMobileLayout } from './mobile';
 import { forgetCreditsSeen } from './creditsRoll';
 import { consumeReturnToSelect, markNewCharacter, markReturnToSelect } from './session';
+import { CharacterCreator } from './characterCreator';
+import type { Appearance } from '../core/types';
+import { appearanceKey } from '../data/appearance';
 
-type View = 'main' | 'select' | 'new' | 'confirm';
+type View = 'main' | 'select' | 'new' | 'design' | 'confirm';
 /** What the confirm modal is asking. */
 type Confirm = { kind: 'delete' | 'replace'; slot: number };
 
@@ -92,7 +96,11 @@ export class TitleMenu {
   private newReplace = false;
   private newFrom: 'main' | 'select' = 'main';
   /** Idle-anim frames (data URLs) per job, cut from the in-game player sheets. */
-  private frames = new Map<JobId, string[]>();
+  private frames = new Map<string, string[]>();
+  /** Saved appearance per slot (Character Select cards), and the look being designed for New Game. */
+  private looks = new Map<number, Appearance | undefined>();
+  private look: Appearance | null = null;
+  private creator: CharacterCreator | null = null;
   private animAt = 0;
   private animFrame = 0;
   private csEnter = false;
@@ -142,6 +150,7 @@ export class TitleMenu {
       this.slots.push({ index: i, status: 'empty', last: false, name: '', level: 0, job: 'apprentice', jobName: '', year: 1,
         school: null, schoolName: '', mapId: '', mapName: '', playTimeMs: 0, savedAt: 0 });
     }
+    this.looks = new Map(this.slots.filter(s => s.status === 'ok').map(s => [s.index, safe(() => loadSlot(s.index)?.appearance, undefined)]));
   }
 
   private anySaves() { return this.slots.some(s => s.status !== 'empty'); }
@@ -158,20 +167,21 @@ export class TitleMenu {
 
   private emptySlot(): number | null { return safe(() => firstEmptySlot(), null); }
 
-  private framesFor(job: JobId): string[] {
-    const hit = this.frames.get(job);
+  private framesFor(job: JobId, look?: Appearance): string[] {
+    const ck = `${job}|${appearanceKey(look)}`;
+    const hit = this.frames.get(ck);
     if (hit) return hit;
     let out: string[] = [];
     try {
-      const key = playerTextureKey(job);
-      if (!this.scene.textures.exists(key)) ensurePlayerTexture(this.scene, job);
-      const anim = this.scene.anims.get(playerAnimKey(job, 'idle'));
+      const key = playerTextureKey(job, look);
+      if (!this.scene.textures.exists(key)) ensurePlayerTexture(this.scene, job, look);
+      const anim = this.scene.anims.get(playerAnimKey(job, 'idle', look));
       if (anim && this.scene.textures.exists(key)) {
         out = anim.frames.map(f => safe(() => this.scene.textures.getBase64(key, f.frame.name) as string, '')).filter(Boolean);
       }
     } catch (e) { console.warn('[title] portrait frames failed', e); }
-    if (!out.length) { const still = safe(() => jobPreviewDataUrl(job, 1), ''); if (still) out = [still]; }
-    this.frames.set(job, out);
+    if (!out.length) { const still = safe(() => jobPreviewDataUrl(job, 1, look), ''); if (still) out = [still]; }
+    this.frames.set(ck, out);
     return out;
   }
 
@@ -181,6 +191,7 @@ export class TitleMenu {
     this.view = v;
     this.error = '';
     if (v !== 'confirm') this.confirm = null;
+    if (v !== 'design') this.creator = null;
     if (v === 'main') { this.selectMode = 'browse'; this.mainIdx = 0; }
     this.render();
   }
@@ -188,12 +199,15 @@ export class TitleMenu {
   // ─────────────────────────── render ───────────────────────────
 
   private render() {
-    const csOn = this.view === 'select' || this.view === 'confirm';
+    const csOn = this.view === 'select' || this.view === 'confirm' || this.view === 'design';
     // Only play the panel's entrance animation when the select screen opens, not on every re-render.
     this.csEnter = csOn && !this.el.classList.contains('ax-cs-on');
     this.el.classList.toggle('ax-cs-on', csOn);
-    if (csOn) { this.panel.replaceChildren(); this.renderSelect(); } else { this.cs.replaceChildren(); this.renderPanel(); }
-    this.foot.textContent = csOn
+    if (csOn) { this.panel.replaceChildren(); if (this.view === 'design') this.renderDesign(); else this.renderSelect(); } else { this.cs.replaceChildren(); this.renderPanel(); }
+    this.foot.textContent = this.view === 'design' ? (isMobileLayout() ? '' : '↑ ↓ row · ← → colour · R randomize · Tab animation · Enter begin · Esc back')
+      : isMobileLayout()
+      ? (csOn ? 'Tap a student, then Play' : '')
+      : csOn
       ? (this.view === 'confirm' ? '← → choose · Enter confirm · Esc cancel' : 'Arrows choose · Enter play · N new · Del delete · Esc back')
       : this.playHint();
   }
@@ -260,9 +274,21 @@ export class TitleMenu {
         ? h('div', { class: 'ax-title-warn' }, old.status === 'ok' ? `This will replace ${old.name} (Lv ${old.level}).` : 'This will replace the damaged save.')
         : null,
       h('div', { class: 'ax-row' },
-        h('button', { class: 'ax-btn ax-btn-large ax-begin-btn', onclick: () => this.begin() }, 'Begin'),
+        h('button', { class: 'ax-btn ax-btn-large ax-begin-btn', onclick: () => this.begin() }, 'Next'),
         h('button', { class: 'ax-btn ax-btn-secondary ax-btn-large', onclick: () => { this.sfx('ui_click'); this.backFromNew(); } }, 'Back'))]);
     setTimeout(() => { if (this.view === 'new' && input.isConnected) input.focus(); }, 30);
+  }
+
+  /** "Design your mage": the step between the name and Begin. */
+  private renderDesign() {
+    if (!this.creator) {
+      this.creator = new CharacterCreator({
+        name: this.nameDraft.trim().replace(/\s+/g, ' '), initial: this.look, sfx: (k) => this.sfx(k),
+        onBegin: (a) => { this.look = a; this.begin(); },
+        onBack: (a) => { this.look = a; this.setView('new'); },
+      });
+    }
+    this.cs.replaceChildren(this.creator.el);
   }
 
   private renderSelect() {
@@ -313,7 +339,7 @@ export class TitleMenu {
           h('div', null, s.previous ? `Was ${s.previous.name} · Lv ${s.previous.level}` : 'Delete it to free the slot')));
     }
     const color = SCHOOL_COLOR[s.school ?? 'none'];
-    const frames = this.framesFor(s.job);
+    const frames = this.framesFor(s.job, this.looks.get(s.index));
     const sprite = h('img', { class: 'ax-cs-sprite', alt: '', draggable: false, src: frames[0] ?? '' });
     const ago = fmtAgo(s.savedAt);
     return h('div', { class: cls, role: 'button', 'aria-label': `Slot ${s.index + 1}: ${s.name}, ${jobLine(s)}`, style: `--ax-school: ${color}`, onclick, ondblclick },
@@ -428,6 +454,7 @@ export class TitleMenu {
     this.newSlot = slot;
     this.newReplace = replace;
     this.newFrom = from;
+    this.look = null;
     this.setView('new');
   }
 
@@ -459,6 +486,7 @@ export class TitleMenu {
       if (e) { e.textContent = err; e.classList.remove('ax-shake'); void (e as HTMLElement).offsetWidth; e.classList.add('ax-shake'); }
       return;
     }
+    if (this.view === 'new') { this.sfx('ui_click'); this.setView('design'); return; }
     // The target was empty when chosen; if something has since been written there, never overwrite silently.
     let slot = this.newSlot;
     this.refresh();
@@ -469,7 +497,7 @@ export class TitleMenu {
     }
     const name = this.nameDraft.trim().replace(/\s+/g, ' ');
     let state: PlayerState;
-    try { state = newPlayerState(name); } catch (e) { console.error('[title] newPlayerState failed', e); this.sfx('ui_error'); return; }
+    try { state = newPlayerState(name, this.look ?? undefined); } catch (e) { console.error('[title] newPlayerState failed', e); this.sfx('ui_error'); return; }
     if (this.newReplace) { try { deleteSlot(slot); } catch { /* ignore */ } }
     forgetCreditsSeen(slot); // a fresh character must not inherit a stale 'seen the credits' flag
     setActiveSlot(slot);
@@ -509,6 +537,7 @@ export class TitleMenu {
       }
       return;
     }
+    if (this.view === 'design') { this.creator?.key(e); return; }
     if (this.view === 'new') { if (k === 'Escape') { e.preventDefault(); this.backFromNew(); } return; }
     if (this.view === 'confirm') {
       e.preventDefault();
@@ -543,13 +572,14 @@ export class TitleMenu {
 
   update(time: number) {
     this.scaler.check(time);
+    if (this.view === 'design') { this.creator?.update(time); return; }
     // Animate the selected student's idle loop (stepped, 8 fps).
     if (this.view !== 'select' && this.view !== 'confirm') return;
     if (time - this.animAt < ANIM_MS) return;
     this.animAt = time;
     const s = this.slots[this.sel];
     if (!s || s.status !== 'ok') return;
-    const frames = this.framesFor(s.job);
+    const frames = this.framesFor(s.job, this.looks.get(s.index));
     if (frames.length < 2) return;
     this.animFrame = (this.animFrame + 1) % frames.length;
     const img = this.cs.querySelector<HTMLImageElement>('.ax-cs-card.ax-sel .ax-cs-sprite');

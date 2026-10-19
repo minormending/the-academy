@@ -1,11 +1,14 @@
-/** Bottom-left system log with fading lines and spam coalescing. */
+/** Bottom-left system log with fading lines and spam coalescing (phones: two short lines under the HUD). */
 import { h } from './dom';
 import type { UICtx } from './context';
+import { isMobileLayout } from './mobile';
 
 interface Line { el: HTMLElement; text: string; key: string | null; total: number; repeat: number; born: number; fmt?: (n: number) => string; }
 
 const MAX_LINES = 60;
 const FADE_MS = 9000;
+/** Phones show at most two short lines (CSS), so they clear sooner. */
+const FADE_MS_MOBILE = 5000;
 const COALESCE_MS = 2600;
 
 export class ChatLog {
@@ -71,8 +74,9 @@ export class ChatLog {
     if (time < this.nextSweep) return;
     this.nextSweep = time + 400;
     const t = this.stamp();
+    const fade = isMobileLayout() ? FADE_MS_MOBILE : FADE_MS;
     for (const l of this.lines) {
-      const faded = t - l.born > FADE_MS;
+      const faded = t - l.born > fade;
       if (faded !== l.el.classList.contains('ax-faded')) l.el.classList.toggle('ax-faded', faded);
     }
   }

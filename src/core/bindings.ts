@@ -163,7 +163,8 @@ export function setBinding(action: ActionId, keyCode: number): BindResult {
   map[action] = keyCode;
   const res: BindResult = { ok: true };
   for (const b of displaced) {
-    if (prev && !conflicts(b, prev)) { map[b] = prev; res.swapped = b; } else { map[b] = 0; res.unbound = b; }
+    // Only hand over the old key if it is itself bindable (Esc is reserved for the menu and never moves).
+    if (prev && isBindableKey(prev) && !conflicts(b, prev)) { map[b] = prev; res.swapped = b; } else { map[b] = 0; res.unbound = b; }
   }
   persist();
   emit();

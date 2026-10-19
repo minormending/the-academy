@@ -1,12 +1,18 @@
 // Shadow VFX: local CC0 sheet recolours + hard-edged 1× fallback art, rendered at 2× nearest.
 import Phaser from 'phaser';
 import { defineSchool, lazyRegister, scheduleIdle } from '../art/lazy';
-import { generateShadowTextures as generate } from './shadow/textures';
+import { generateShadowTextures as generateBase } from './shadow/textures';
 import * as academy from './shadow/academyFx';
+import * as spellbook from './shadow/spellbookFx';
 import {
   arc, aura, beam, bolt, buffCast, cast, heal, hex, hit, plague, summon,
   tideCast, tideImpact, tideProjectile,
 } from './shadow/fx';
+
+function generate(scene: Phaser.Scene): void {
+  generateBase(scene);
+  spellbook.generateSpellbookTextures(scene);
+}
 
 /** Boot hook: textures are built on first shadow VFX (or in the background while on the Title screen). */
 export function generateShadowTextures(scene: Phaser.Scene): void { scheduleIdle(scene, 'shadow', generate); }
@@ -61,4 +67,16 @@ export function registerShadowVfx(): void {
   registerVfx('shd_dragon_breath', academy.dragonBreath);
   registerVfx('shd_dragon_hit', academy.dragonHit);
   registerVfx('shd_reservoir', academy.reservoir);
+  registerVfx('shd_grave_mine', spellbook.graveMine);
+  registerVfx('shd_mine_burst', spellbook.mineBurst);
+  registerVfx('shd_bitter_harvest', spellbook.bitterHarvest);
+  registerVfx('shd_blood_tithe', spellbook.bloodTithe);
+  registerVfx('shd_umbra_passage', spellbook.umbraPassage);
+  registerVfx('shd_dirge_wraith', spellbook.dirgeWraith);
+  registerVfx('shd_dirge_beam', spellbook.dirgeBeam);
+  registerVfx('shd_doom_seal', spellbook.doomSeal);
+  registerVfx('shd_doom_collapse', spellbook.doomCollapse);
+  registerVfx('shd_hex_relay', spellbook.hexRelay);
+  registerVfx('shd_soul_ward', spellbook.soulWard);
+  registerVfx('shd_soul_ward_pulse', spellbook.soulWardPulse);
 }

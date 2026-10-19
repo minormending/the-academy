@@ -1,6 +1,7 @@
 // Shadow: Occultist → Necromancer → Umbral Sage. Attrition, curses, minions and life drain.
 import type { AttackSpec, IconSpec, SkillContext, SkillDef, StatusSpec } from '../core/types';
 import { playVfx } from '../core/vfx';
+import { SHADOW_SPELLBOOK_ADDITIONS } from './shadow/spellbook';
 
 /** Clamped interpolation across learned levels; percentages are per hit line. */
 const L = (a: number, b: number, max: number) => (lv: number) =>
@@ -312,4 +313,5 @@ export const SHADOW_SKILLS: SkillDef[] = [
       playVfx(ctx.scene, 'shd_reservoir', { x: player.x, y: player.y, facing: player.facing, lv });
     },
   },
+  ...SHADOW_SPELLBOOK_ADDITIONS,
 ];

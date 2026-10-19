@@ -1,5 +1,7 @@
 import { defineConfig } from 'vite';
 export default defineConfig({
+  // Relative base so the static build runs from any path (file host, artifact, sub-folder).
+  base: './',
   server: { port: 5199 },
   build: {
     chunkSizeWarningLimit: 4000,

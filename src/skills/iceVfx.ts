@@ -9,6 +9,11 @@ import { pxFx } from '../art/particles';
 import type { VfxFn, VfxOptions } from '../core/types';
 import { generateIceTextures as genTextures } from './ice/textures';
 import {
+  coldExchangeCast, coldExchangeDrain, coldSnapArea, diamondReckoningBeam, fractureRouteTrail,
+  hailLoomBeam, rimeBrandBloom, rimeBrandCast, rimeBrandMark, rimeRecallAnchor, rimeRecallArrive,
+  rimeRecallDepart, rimeSnareBody, rimeSnareBurst,
+} from './ice/spellbookFx';
+import {
   absoluteZeroArea, absoluteZeroCast, absoluteZeroHit, crystalMemorySigil, crystalNeedleBeam,
   crystalNeedleHit, crystalWallArea, diamondBarrierAura, diamondBarrierCast, frostStepIn,
   frostStepOut, hoarfrostHit, hoarfrostLink, restorativeThaw, rimeGuardSigil, rimeRayBeam,
@@ -660,4 +665,18 @@ export function registerIceVfx(): void {
   registerVfx('ice_absolute_zero_hit', absoluteZeroHit);
   registerVfx('ice_diamond_barrier_cast', diamondBarrierCast);
   registerVfx('ice_diamond_barrier_aura', diamondBarrierAura);
+  registerVfx('ice_rime_snare_body', rimeSnareBody);
+  registerVfx('ice_rime_snare_burst', rimeSnareBurst);
+  registerVfx('ice_cold_snap_area', coldSnapArea);
+  registerVfx('ice_rime_brand_cast', rimeBrandCast);
+  registerVfx('ice_rime_brand_mark', rimeBrandMark);
+  registerVfx('ice_rime_brand_bloom', rimeBrandBloom);
+  registerVfx('ice_fracture_route_trail', fractureRouteTrail);
+  registerVfx('ice_cold_exchange_cast', coldExchangeCast);
+  registerVfx('ice_cold_exchange_drain', coldExchangeDrain);
+  registerVfx('ice_hail_loom_beam', hailLoomBeam);
+  registerVfx('ice_rime_recall_anchor', rimeRecallAnchor);
+  registerVfx('ice_rime_recall_depart', rimeRecallDepart);
+  registerVfx('ice_rime_recall_arrive', rimeRecallArrive);
+  registerVfx('ice_diamond_reckoning_beam', diamondReckoningBeam);
 }

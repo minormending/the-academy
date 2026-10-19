@@ -3,6 +3,9 @@
 // Frost Armor / Winter's Embrace keep the mage alive. Raw damage sits slightly under fire.
 import { playVfx } from '../core/vfx';
 import type { IconSpec, SkillContext, SkillDef, StatusSpec } from '../core/types';
+import {
+  castColdExchange, castDiamondReckoning, castFractureRoute, castRimeBrand, castRimeRecall, castRimeSnare,
+} from './ice/spellbook';
 
 // ───────────────────────────── helpers ─────────────────────────────
 
@@ -554,7 +557,114 @@ const diamondBarrier: SkillDef = {
   },
 };
 
-// 3 entry paths / Year; 115 / 120 / 110 SP to max each Year (345 total).
+// ───────────────────────────── Phase 9: new spellbook paths ─────────────────────────────
+
+const rimeSnare: SkillDef = {
+  id: 'ice_rime_snare', name: 'Rime Snare',
+  description: 'Plant one mine that arms after 0.3 seconds and freezes the first group to enter its zone.',
+  element: 'ice', job: 'cryomancer', kind: 'summon', maxLevel: 10,
+  icon: icon('snowflake', 0x74cbe7), mpCost: lerpR(18, 26, 10),
+  cooldownMs: lerpR(10000, 7000, 10), castTimeMs: 340, sfx: 'freeze',
+  summon: {
+    durationMs: () => 8000, attackIntervalMs: 80, offset: { x: 120, y: -34 }, follow: false,
+    vfx: 'ice_rime_snare_body',
+    attack: {
+      pattern: 'aoe_self', damagePct: lerp(90, 140, 10), hits: () => 1, maxTargets: () => 5,
+      range: 0, area: { w: 180, h: 120 }, status: freeze([1, 1], [1400, 2400], 10),
+      vfx: { area: 'ice_rime_snare_burst', hit: 'ice_hit' },
+    },
+  },
+  onCast: castRimeSnare,
+};
+
+const coldSnap: SkillDef = {
+  id: 'ice_cold_snap', name: 'Cold Snap',
+  description: 'Cash in chill on a tight cluster for double damage, consuming the slow.',
+  element: 'ice', job: 'cryomancer', kind: 'attack', maxLevel: 15,
+  icon: icon('claw', 0xc2efff), requires: [{ skillId: 'ice_frost_bolt', level: 1 }],
+  mpCost: lerpR(16, 24, 15), cooldownMs: lerpR(4500, 3000, 15), castTimeMs: 380, sfx: 'shatter',
+  attack: {
+    pattern: 'aoe_target', damagePct: lerp(75, 110, 15), hits: () => 1, maxTargets: () => 4,
+    range: 420, area: { w: 160, h: 150 }, bonusVs: { status: 'chill', mult: 2, consume: true },
+    delayMs: 100, vfx: { area: 'ice_cold_snap_area', hit: 'ice_hit' },
+  },
+};
+
+const rimeBrand: SkillDef = {
+  id: 'ice_rime_brand', name: 'Rime Brand',
+  description: 'Mark one foe for eight seconds; landing three ice hits freezes it.',
+  element: 'ice', job: 'cryomancer', kind: 'buff', maxLevel: 10,
+  icon: icon('eye', 0x9de6ef), mpCost: lerpR(14, 18, 10),
+  cooldownMs: () => 10000, castTimeMs: 240, sfx: 'cast_ice', onCast: castRimeBrand,
+};
+
+const fractureRoute: SkillDef = {
+  id: 'ice_fracture_route', name: 'Fracture Route',
+  description: 'Blink backward, cutting a chilling escape trail through enemies along the actual path.',
+  element: 'ice', job: 'frostbinder', kind: 'movement', maxLevel: 15,
+  icon: icon('shoes', 0xa2dcea), requires: [{ skillId: 'ice_frost_step', level: 1 }],
+  mpCost: lerpR(26, 36, 15), cooldownMs: lerpR(9000, 6500, 15), castTimeMs: 180, sfx: 'blink',
+  movement: { kind: 'blink', distance: lerpR(160, 240, 15) },
+  attack: {
+    pattern: 'aoe_self', damagePct: lerp(150, 210, 15), hits: () => 1, maxTargets: () => 6,
+    range: 0, area: { w: 268, h: 80 }, status: chill([1, 1], [2500, 4000], [0.4, 0.6], 15),
+    vfx: { area: 'ice_fracture_route_trail', hit: 'ice_hit' },
+  },
+  onCast: castFractureRoute,
+};
+
+const coldExchange: SkillDef = {
+  id: 'ice_cold_exchange', name: 'Cold Exchange',
+  description: 'Thaw up to three nearby frozen enemies to recover MP, trading away their restraint.',
+  element: 'ice', job: 'frostbinder', kind: 'buff', maxLevel: 10,
+  icon: icon('mana', 0xc6f5ff), mpCost: lerpR(26, 30, 10),
+  cooldownMs: lerpR(26000, 20000, 10), castTimeMs: 440, sfx: 'shatter', onCast: castColdExchange,
+};
+
+const hailLoom: SkillDef = {
+  id: 'ice_hail_loom', name: 'Hail Loom',
+  description: 'Channel six rapid frost threads through a line, dealing extra damage to chilled enemies.',
+  element: 'ice', job: 'frostbinder', kind: 'attack', maxLevel: 15,
+  icon: icon('staff', 0xd3f6ff), mpCost: lerpR(28, 38, 15),
+  cooldownMs: lerpR(6000, 4500, 15), castTimeMs: 950, sfx: 'cast_ice',
+  attack: {
+    pattern: 'beam', damagePct: lerp(30, 45, 15), hits: () => 6, hitIntervalMs: 150,
+    maxTargets: () => 3, range: 480, area: { w: 480, h: 64 },
+    bonusVs: { status: 'chill', mult: 1.4 },
+    vfx: { area: 'ice_hail_loom_beam', hit: 'ice_hit' },
+  },
+};
+
+const rimeRecall: SkillDef = {
+  id: 'ice_rime_recall', name: 'Rime Recall',
+  description: 'Place a recall crystal; recast before it fades to retreat to it and freeze foes at your departure.',
+  element: 'ice', job: 'glacial_sage', kind: 'movement', maxLevel: 10,
+  icon: icon('teleport', 0xebfbff), mpCost: () => 45,
+  cooldownMs: () => 1500, castTimeMs: 180, sfx: 'blink',
+  attack: {
+    pattern: 'aoe_self', damagePct: lerp(150, 230, 10), hits: () => 1, maxTargets: () => 6,
+    range: 0, area: { w: 280, h: 180 }, status: freeze([1, 1], [1600, 2400], 10),
+    vfx: { area: 'ice_rime_recall_depart', hit: 'ice_hit' },
+  },
+  onCast: castRimeRecall,
+};
+
+const diamondReckoning: SkillDef = {
+  id: 'ice_diamond_reckoning', name: 'Diamond Reckoning',
+  description: 'Consume Diamond Barrier or Frost Armor to double a piercing burst that shatters frozen enemies.',
+  element: 'ice', job: 'glacial_sage', kind: 'attack', maxLevel: 15,
+  icon: icon('crystal', 0xffffff, 0x6bbce8), requires: [{ skillId: 'ice_frost_armor', level: 1 }],
+  mpCost: lerpR(45, 60, 15), cooldownMs: lerpR(22000, 16000, 15), castTimeMs: 600, sfx: 'shatter',
+  attack: {
+    pattern: 'beam', damagePct: lerp(60, 85, 15), hits: () => 3, hitIntervalMs: 100,
+    maxTargets: () => 6, range: 600, area: { w: 600, h: 100 },
+    bonusVs: { status: 'freeze', mult: 1.5, consume: true },
+    vfx: { area: 'ice_diamond_reckoning_beam', hit: 'ice_shatter_hit' },
+  },
+  onCast: castDiamondReckoning,
+};
+
+// Existing entries retain their definitions and order; Phase 9 adds independent paths.
 export const ICE_SKILLS: SkillDef[] = [
   // Year 2 — four attacks, armor + blink, two passives.
   frostBolt, frostNova, frostArmor, coldMastery, rimeRay, crystalWall, frostStep, rimeGuard,
@@ -562,4 +672,7 @@ export const ICE_SKILLS: SkillDef[] = [
   iceLance, glacialSpike, shatter, frostElemental, glacialMastery, crystalNeedle, restorativeThaw, crystalMemory,
   // Year 4 — four attacks (two ultimates), persistent orb, two buffs, one passive.
   glacialLance, blizzard, frozenOrb, wintersEmbrace, permafrost, hoarfrostRelay, absoluteZero, diamondBarrier,
+  rimeSnare, coldSnap, rimeBrand,
+  fractureRoute, coldExchange, hailLoom,
+  rimeRecall, diamondReckoning,
 ];

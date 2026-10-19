@@ -3,7 +3,7 @@
  * (an Apprentice previews all five Schools). Each Year holds 8–10 spells, so spells are compact two-column cards
  * with a kind filter (Attacks / Buffs / Passives / Summons), a sort toggle, and an SP / points-invested header.
  */
-import type { JobDef, JobId, SkillDef } from '../core/types';
+import { HOTBAR_PAGE_SIZE, HOTBAR_SIZE, type JobDef, type JobId, type SkillDef } from '../core/types';
 import { Registry } from '../core/registry';
 import type { UICtx } from './context';
 import { h, safe } from './dom';
@@ -204,10 +204,19 @@ export class SkillsWindow extends UIWindow {
   private autoPlace(def: SkillDef) {
     const p = this.ctx.s.progression;
     const hb = p.state.hotbar ?? [];
-    if (hb.includes(def.id)) { this.ctx.log(`${def.name} is already on your hotbar.`, '#b8c2ff'); return; }
-    const slot = hb.findIndex(e => !e);
-    if (slot < 0) { this.ctx.sfx('ui_error'); this.ctx.log('Your hotbar is full — drag the spell onto a slot to replace it.', '#ff9b9b'); return; }
+    const pageOf = (i: number) => Math.floor(i / HOTBAR_PAGE_SIZE) + 1;
+    const at = hb.indexOf(def.id);
+    if (at >= 0) { this.ctx.log(`${def.name} is already on hotbar page ${pageOf(at)}.`, '#b8c2ff'); return; }
+    // Current page first, then the other page(s); skip each page's 1/2 keys (potion slots) unless nothing else is free.
+    const pages = Math.max(1, Math.floor(HOTBAR_SIZE / HOTBAR_PAGE_SIZE));
+    const cur = safe(() => this.ctx.s.game.hotbarPage(), 0) || 0;
+    const order: number[] = [];
+    for (let k = 0; k < pages; k++) { const pg = (cur + k) % pages; for (let i = 0; i < HOTBAR_PAGE_SIZE; i++) order.push(pg * HOTBAR_PAGE_SIZE + i); }
+    const isPotionKey = (abs: number) => abs % HOTBAR_PAGE_SIZE >= HOTBAR_PAGE_SIZE - 2;
+    const slot = order.find(i => !hb[i] && !isPotionKey(i)) ?? order.find(i => !hb[i]);
+    if (slot === undefined) { this.ctx.sfx('ui_error'); this.ctx.log('Both hotbar pages are full — drag the spell onto a slot to replace it.', '#ff9b9b'); return; }
     safe(() => p.setHotbar(slot, def.id), undefined);
+    if (pageOf(slot) - 1 !== cur) this.ctx.log(`${def.name} added to hotbar page ${pageOf(slot)} (Tab to flip).`, '#b8c2ff');
     this.ctx.sfx('ui_click');
   }
 
@@ -232,6 +241,7 @@ export class SkillsWindow extends UIWindow {
     }, '+');
     const pct = Math.round((lv / Math.max(1, def.maxLevel)) * 100);
     const onHotbar = !locked && (p.state.hotbar ?? []).includes(def.id);
+    const barPage = onHotbar ? Math.floor((p.state.hotbar ?? []).indexOf(def.id) / HOTBAR_PAGE_SIZE) + 1 : 0;
     const status = !locked && lv === 0 && reqMissing.length
       ? h('div', { class: 'ax-skill-req' }, `Needs ${reqMissing.map(r => `${Registry.skill(r.skillId)?.name ?? r.skillId} ${r.level}`).join(', ')}`)
       : null;
@@ -240,7 +250,7 @@ export class SkillsWindow extends UIWindow {
     },
     icon,
     h('div', { class: 'ax-skill-main' },
-      h('div', { class: 'ax-skill-name' }, h('span', { class: 'ax-skill-name-t' }, def.name), onHotbar ? h('span', { class: 'ax-on-bar', title: 'On your hotbar' }) : null),
+      h('div', { class: 'ax-skill-name' }, h('span', { class: 'ax-skill-name-t' }, def.name), onHotbar ? h('span', { class: 'ax-on-bar', title: `On hotbar page ${barPage}` }) : null),
       h('div', { class: 'ax-skill-lv' },
         h('span', { class: `ax-kind ax-kind-${def.kind}` }, KIND_TAG[def.kind] ?? def.kind),
         h('div', { class: 'ax-mini-bar' }, h('div', { style: `width:${pct}%` })),

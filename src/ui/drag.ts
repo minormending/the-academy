@@ -66,6 +66,8 @@ export class DragManager {
 
   private lastHover: Element | null = null;
   private highlight(el: Element | null) {
+    // Hotbar page buttons flip the page while a drag hovers them (so spells can be dropped on page 2).
+    el?.closest('.ax-page-btn')?.dispatchEvent(new Event('ax-drag-over'));
     const slot = el?.closest('[data-hotbar-slot]') ?? null;
     if (slot === this.lastHover) return;
     this.lastHover?.classList.remove('ax-drop-hover');

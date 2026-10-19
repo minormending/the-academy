@@ -96,7 +96,8 @@ export class HelpWindow extends UIWindow {
           h('div', { class: 'ax-help-head' }, 'Combat'),
           row(['Q', 'W', 'E', 'R', 'T'], 'Hotbar slots'),
           row(['A', 'S', 'D', 'F', 'G'], 'Hotbar slots'),
-          row(['1', '2'], 'Potions (by default)')),
+          row(['1', '2'], 'Potions (by default)'),
+          row(['Tab'], 'Flip hotbar page (1 / 2)')),
         h('div', null,
           h('div', { class: 'ax-help-head' }, 'Windows'),
           row(['K'], 'Spellbook — spend SP'),
@@ -107,7 +108,7 @@ export class HelpWindow extends UIWindow {
           row(['H'], 'This help'),
           row(['Esc'], 'Close window / menu'),
           h('div', { class: 'ax-help-head' }, 'Tips'),
-          h('div', { class: 'ax-help-tip' }, 'Drag spells from your Spellbook (or potions from your Inventory) onto the hotbar. Right-click a slot to clear it.'),
+          h('div', { class: 'ax-help-tip' }, 'Drag spells from your Spellbook (or potions from your Inventory) onto the hotbar. Two pages of 12 slots — Tab flips. Right-click a slot to clear it.'),
           h('div', { class: 'ax-help-tip' }, 'Hold a skill key to keep casting.'))),
       h('div', { class: 'ax-row ax-center' }, h('button', { class: 'ax-btn', onclick: () => this.close() }, 'Got it!')));
   }

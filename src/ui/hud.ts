@@ -1,6 +1,7 @@
 /** HUD: status bar (Lv/name/job, HP/MP, EXP), hotbar, buff tray, low-HP vignette. */
 import { HOTBAR_LABELS, MAX_LEVEL } from '../core/constants';
-import { HOTBAR_SIZE, type ActiveBuff } from '../core/types';
+import { HOTBAR_PAGE_SIZE, HOTBAR_SIZE, type ActiveBuff } from '../core/types';
+import { bus } from '../core/events';
 import { Registry } from '../core/registry';
 import { expToNext } from '../core/balance';
 import type { UICtx, WindowName } from './context';
@@ -125,20 +126,29 @@ export class StatusBar {
 
 // ───────────────────────────── Hotbar ─────────────────────────────
 
-/** Visual order: two rows mirroring the keyboard (Q W E R T 1 / A S D F G 2). */
+/** Visual order: two rows mirroring the keyboard (Q W E R T 1 / A S D F G 2). Indices are page-local. */
 const HOTBAR_ORDER = [0, 1, 2, 3, 4, 10, 5, 6, 7, 8, 9, 11];
+const PAGES = Math.max(1, Math.floor(HOTBAR_SIZE / HOTBAR_PAGE_SIZE));
 
 interface SlotEls { root: HTMLElement; icon: HTMLElement; cd: HTMLElement; cdText: HTMLElement; badge: HTMLElement; lastCd: string; lastBadge: string; mpCost: number; }
 
+/**
+ * Two pages of 12 slots (HOTBAR_SIZE = 24). Only the current page's 12 slot elements exist; each carries its
+ * absolute index in `data-hotbar-slot` (page·12 + i), so drag/drop, right-click and swaps (UIRoot.onDrop) work
+ * across pages. Tab (GameScene) or the page buttons flip pages; hovering a page button while dragging flips too.
+ */
 export class Hotbar {
   readonly el: HTMLElement;
   private slots: SlotEls[] = [];
+  private pageBtns: HTMLElement[] = [];
   private sig = '';
   private dirty = true;
+  private page = 0;
+  private offPage: () => void;
 
   constructor(private ctx: UICtx) {
     const grid = h('div', { class: 'ax-hotbar-grid' });
-    for (let i = 0; i < HOTBAR_SIZE; i++) {
+    for (let i = 0; i < HOTBAR_PAGE_SIZE; i++) {
       const icon = h('div', { class: 'ax-slot-icon' });
       const cd = h('div', { class: 'ax-slot-cd' });
       const cdText = h('div', { class: 'ax-slot-cdtext' });
@@ -147,25 +157,74 @@ export class Hotbar {
         icon, cd, cdText, badge, h('div', { class: 'ax-slot-key' }, HOTBAR_LABELS[i] ?? ''));
       root.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        if (this.entry(i)) { ctx.s.progression.setHotbar(i, null); ctx.sfx('ui_click'); this.dirty = true; }
+        const abs = this.abs(i);
+        if (this.entry(abs)) { ctx.s.progression.setHotbar(abs, null); ctx.sfx('ui_click'); this.dirty = true; }
       });
       ctx.drag.bind(root, () => {
-        const entry = this.entry(i);
+        const abs = this.abs(i);
+        const entry = this.entry(abs);
         if (!entry) return null;
         const v = this.visual(entry);
-        return { entry, icon: v.icon, label: v.label, fromSlot: i };
+        return { entry, icon: v.icon, label: v.label, fromSlot: abs };
       });
-      ctx.tooltip.attach(root, () => this.tip(i));
+      ctx.tooltip.attach(root, () => this.tip(this.abs(i)));
       this.slots[i] = { root, icon, cd, cdText, badge, lastCd: '', lastBadge: '', mpCost: 0 };
     }
     for (const i of HOTBAR_ORDER) grid.appendChild(this.slots[i].root);
-    this.el = h('div', { class: 'ax-hotbar' }, grid);
+    const pager = h('div', { class: 'ax-hotbar-pager', title: 'Hotbar page (Tab)' });
+    for (let pg = 0; pg < PAGES; pg++) {
+      const btn = h('button', {
+        class: 'ax-page-btn', title: `Hotbar page ${pg + 1} (Tab flips)`,
+        onclick: () => { this.setPage(pg); ctx.sfx('ui_click'); },
+      }, String(pg + 1));
+      // Dragging a spell onto the other page: hover its button to flip.
+      btn.addEventListener('ax-drag-over', () => this.setPage(pg));
+      this.pageBtns.push(btn);
+      pager.appendChild(btn);
+    }
+    pager.appendChild(h('div', { class: 'ax-page-key' }, 'Tab'));
+    this.el = h('div', { class: 'ax-hotbar' }, pager, grid);
     ctx.root.appendChild(this.el);
+    this.page = this.currentPage();
+    this.offPage = bus.on('hotbar:page', ({ page }) => this.onPage(page));
+    this.syncPage();
   }
 
   markDirty() { this.dirty = true; }
 
-  private entry(i: number): string | null { return this.ctx.s.progression.state.hotbar?.[i] ?? null; }
+  private currentPage(): number {
+    const p = safe(() => this.ctx.s.game.hotbarPage(), 0);
+    return Number.isInteger(p) && p >= 0 && p < PAGES ? p : 0;
+  }
+
+  private setPage(p: number) {
+    if (p === this.page) return;
+    try { this.ctx.s.game.setHotbarPage(p); } catch { /* ignore */ }
+    // GameScene emits 'hotbar:page'; follow it (or apply locally if the game API is unavailable).
+    if (this.currentPage() !== this.page) this.onPage(this.currentPage());
+    else this.onPage(p);
+  }
+
+  private onPage(page: number) {
+    const p = Number.isInteger(page) && page >= 0 && page < PAGES ? page : 0;
+    if (p === this.page && this.slots[0].root.getAttribute('data-hotbar-slot') === String(p * HOTBAR_PAGE_SIZE)) return;
+    this.page = p;
+    this.syncPage();
+    this.sig = '';
+    this.dirty = true;
+    this.ctx.tooltip.hide();
+    this.el.classList.remove('ax-page-flip'); void this.el.offsetWidth; this.el.classList.add('ax-page-flip');
+  }
+
+  private syncPage() {
+    for (let i = 0; i < HOTBAR_PAGE_SIZE; i++) this.slots[i].root.setAttribute('data-hotbar-slot', String(this.abs(i)));
+    this.pageBtns.forEach((b, i) => toggleClass(b, 'ax-active', i === this.page));
+    this.el.setAttribute('data-page', String(this.page));
+  }
+
+  private abs(i: number): number { return this.page * HOTBAR_PAGE_SIZE + i; }
+
+  private entry(abs: number): string | null { return this.ctx.s.progression.state.hotbar?.[abs] ?? null; }
 
   private visual(entry: string) {
     if (entry.startsWith('item:')) {
@@ -176,8 +235,8 @@ export class Hotbar {
     return { icon: def?.icon, label: def?.name ?? entry };
   }
 
-  private tip(i: number) {
-    const entry = this.entry(i);
+  private tip(abs: number) {
+    const entry = this.entry(abs);
     if (!entry) return null;
     const p = this.ctx.s.progression;
     if (entry.startsWith('item:')) {
@@ -190,21 +249,22 @@ export class Hotbar {
   }
 
   flash(skillId: string, fail = false) {
-    const hb = this.ctx.s.progression.state.hotbar;
-    hb.forEach((e, i) => {
-      if (e !== skillId) return;
+    const hb = this.ctx.s.progression.state.hotbar ?? [];
+    const base = this.page * HOTBAR_PAGE_SIZE;
+    for (let i = 0; i < HOTBAR_PAGE_SIZE; i++) {
+      if (hb[base + i] !== skillId) continue;
       const el = this.slots[i].root;
       const cls = fail ? 'ax-shake' : 'ax-flash';
       el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
-    });
+    }
   }
 
   private rebuild() {
     const p = this.ctx.s.progression;
     const hb = p.state.hotbar ?? [];
-    for (let i = 0; i < HOTBAR_SIZE; i++) {
+    for (let i = 0; i < HOTBAR_PAGE_SIZE; i++) {
       const s = this.slots[i];
-      const entry = hb[i] ?? null;
+      const entry = hb[this.abs(i)] ?? null;
       clear(s.icon);
       s.lastCd = ''; s.lastBadge = '';
       s.cd.style.background = ''; s.cdText.textContent = ''; s.badge.textContent = '';
@@ -223,20 +283,25 @@ export class Hotbar {
         else s.badge.className = 'ax-slot-badge';
       } else s.badge.className = 'ax-slot-badge ax-qty';
     }
+    // a dot on the other page's button when it holds anything
+    this.pageBtns.forEach((b, pg) => toggleClass(b, 'ax-has', hb.slice(pg * HOTBAR_PAGE_SIZE, (pg + 1) * HOTBAR_PAGE_SIZE).some(Boolean)));
   }
 
   frame() {
     const s = this.ctx.s;
     const p = s.progression;
     const hb = p.state.hotbar ?? [];
+    // keep in sync even if a page flip happened without the event (e.g. map reload)
+    const cur = this.currentPage();
+    if (cur !== this.page) this.onPage(cur);
     if (this.dirty) {
       this.dirty = false;
-      const sig = hb.map(e => e && !e.startsWith('item:') ? `${e}:${p.state.skills[e] ?? 0}` : e ?? '').join(',');
+      const sig = this.page + '#' + hb.map(e => e && !e.startsWith('item:') ? `${e}:${p.state.skills[e] ?? 0}` : e ?? '').join(',');
       if (sig !== this.sig) { this.sig = sig; this.rebuild(); }
     }
     const mp = p.state.mp;
-    for (let i = 0; i < HOTBAR_SIZE; i++) {
-      const entry = hb[i];
+    for (let i = 0; i < HOTBAR_PAGE_SIZE; i++) {
+      const entry = hb[this.abs(i)];
       if (!entry) continue;
       const el = this.slots[i];
       if (entry.startsWith('item:')) {
@@ -265,7 +330,7 @@ export class Hotbar {
     }
   }
 
-  destroy() { this.el.remove(); }
+  destroy() { try { this.offPage(); } catch { /* ignore */ } this.el.remove(); }
 }
 
 // ───────────────────────────── Buff tray ─────────────────────────────

@@ -1,6 +1,6 @@
 # Credits
 
-Arcana Story's pixel art comes from the generous artists below. Every asset is used under its stated
+The Academy's pixel art comes from the generous artists below. Every asset is used under its stated
 license (CC0, CC-BY 3.0/4.0 or OGA-BY); attribution is given here as those licenses require. Each pack's
 original license text sits next to its files in `public/assets/<domain>/`.
 
@@ -23,11 +23,11 @@ All sheets are used as sliced / palette-swapped / integer-scaled sources by `src
 
 | Asset (folder) | Author | Source URL | License | Used for |
 |---|---|---|---|---|
-| Sunny mushroom (walk, breath, breath-no-gas), Grotto Escape 2 lizard (idle/walk/hurt), Grotto Escape 2 boss dragon (idle), flying creature (skin) — `ansimuz_sideview_fantasy/` | Luis Zuno (@ansimuz) | https://opengameart.org/content/sideview-fantasy-patreon-collection | CC0 (as posted on OGA by the author; the pack also ships a stale `patreon-license.txt` in the boss-dragon folder, superseded by the author's public CC0 release) | `cap_shroom`, `thorn_shroom` (purple cap swap, spore-breath idle), `lava_salamander` (lava ramp), `thunder_drake` (storm ramp), `storm_harpy` (storm ramp) |
+| Sunny mushroom (walk, breath, breath-no-gas), Grotto Escape 2 lizard (idle/walk/hurt), Grotto Escape 2 boss dragon (idle), flying creature (skin) — `ansimuz_sideview_fantasy/` | Luis Zuno (@ansimuz) | https://opengameart.org/content/sideview-fantasy-patreon-collection | CC0 (as posted on OGA by the author; the pack also ships a stale `patreon-license.txt` in the boss-dragon folder, superseded by the author's public CC0 release) | `cap_shroom`, `thorn_shroom` (purple cap swap, spore-breath idle), `lava_salamander` (lava ramp), `thunder_drake` (storm ramp), `storm_harpy` (storm ramp); field bosses `shroom_monarch` (crimson cap swap ×4, spore-breath attack) and `tempest_wyrm` (boss dragon, storm-violet/yellow swap ×3) |
 | Gothicvania Church — skeleton wizard sheet — `ansimuz_gothicvania_church/` | Luis Zuno (@ansimuz) | https://opengameart.org/content/gothicvania-church-pack | CC0 ("Public domain and free to use on whatever you want, personal or commercial", `public-license.txt`) | `lich_archon` boss (idle + 10-frame cast attack, arcane-violet fire swap, ×4) |
 | Sunny Land — enemy-death poof — `ansimuz_sunny_land/` | Luis Zuno (@ansimuz) | https://opengameart.org/content/sunny-land-2d-pixel-art-pack | CC0 (`public-license.txt`) | Derived death animation (fade + poof) for monsters without source death frames |
-| Dark Fantasy Platformer Bestiary — wartaur, golem (pal2), sparky — `emceeflesher_bestiary/` | Compiled/edited by Emcee Flesher; sparky from surt's Monster Boy mockup (CC0) edited by Emcee Flesher; wartaur by Redshrike (Stephen Challener); golem by Redshrike & William.Thompsonj (LPC golem) | https://opengameart.org/content/dark-fantasy-platformer-bestiary (originals: https://opengameart.org/content/monsterboy-in-wonder-world-mockup-assets , https://opengameart.org/content/lpc-golem , https://opengameart.org/content/tower-defense-prototyping-assets-4-monsters-some-tiles-a-background-image) | CC-BY 4.0 (bestiary page); components CC0 / CC-BY 3.0 | `snow_yeti` (snow-fur swap), `magma_golem` (magma ramp) + `crag_golem` (stone ramp), `ice_wisp` (ice ramp) + `void_wisp` (void ramp) |
-| Slime Snail — `reemax_snail/` | Reemax | https://opengameart.org/content/slime-snail | CC-BY 3.0 | `moss_snail` (right-facing crawl row; mossy shell hue shift) |
+| Dark Fantasy Platformer Bestiary — wartaur, golem (pal2), sparky — `emceeflesher_bestiary/` | Compiled/edited by Emcee Flesher; sparky from surt's Monster Boy mockup (CC0) edited by Emcee Flesher; wartaur by Redshrike (Stephen Challener); golem by Redshrike & William.Thompsonj (LPC golem) | https://opengameart.org/content/dark-fantasy-platformer-bestiary (originals: https://opengameart.org/content/monsterboy-in-wonder-world-mockup-assets , https://opengameart.org/content/lpc-golem , https://opengameart.org/content/tower-defense-prototyping-assets-4-monsters-some-tiles-a-background-image) | CC-BY 4.0 (bestiary page); components CC0 / CC-BY 3.0 | `snow_yeti` (snow-fur swap), `magma_golem` (magma ramp) + `crag_golem` (stone ramp), `ice_wisp` (ice ramp) + `void_wisp` (void ramp); field bosses `frostfang_alpha` (wartaur, deep-ice swap ×3, axe-swing attack) and `magmaw` (golem, molten ramp ×3, smash attack) |
+| Slime Snail — `reemax_snail/` | Reemax | https://opengameart.org/content/slime-snail | CC-BY 3.0 | `moss_snail` (right-facing crawl row; mossy shell hue shift); field boss `mossback_matriarch` (stone-moss swap ×4; its shell-spin cycles the sheet's four views) |
 | Slime monster 24x24 — `bonsaiheldin_slime/` | Bonsaiheldin (http://bonsaiheld.org) | https://opengameart.org/content/slime-monster-24x24 | CC-BY 4.0 (`Readme.txt`) | `puff_slime` |
 | 3/4-view stump creature walk cycle — `antiotter_stump/` | AntiOtter | https://opengameart.org/content/34-view-stump-creature-walk-cycle | CC-BY 4.0 ("Feel free to use, just credit me") | `stump_golem` |
 | Animated Imp — `calciumtrice_imp/` | Calciumtrice (recolor by Merry Dream Games) | https://opengameart.org/content/imp-1 | CC-BY 3.0 ("Credit should be given to Calciumtrice") | `ember_imp` (idle / walk / death; fire hue shift) |
@@ -36,7 +36,10 @@ All sheets are used as sliced / palette-swapped / integer-scaled sources by `src
 
 Original work (no third-party source): the meso bag (`drop_bag`) and the pixel status overlays
 (`monster_fx_*`: ice shell, shards, stun star, spark, ember, snow, puff, orb, aura, glow) are hand-placed
-pixel maps in `monsterArt.ts`, drawn at 1× and scaled ×2 (aura ×4).
+pixel maps in `monsterArt.ts`, drawn at 1× and scaled ×2 (aura ×4). Likewise original: the field boss
+overlays (Matriarch flower crown, Monarch gold crown, Alpha ice crest, Magmaw flame crest, Wyrm horns — stamped
+at 1× onto the sheet frames before scaling) and the boss attack textures (`boss_fx_*`: icicle, slime glob,
+puddle, spore cloud, shockwave, rock chip).
 
 Suggested attribution line: "Monster art by Luis Zuno (ansimuz, CC0), Emcee Flesher, surt, Redshrike, Reemax,
 William.Thompsonj, Bonsaiheldin, AntiOtter, Calciumtrice, Merry Dream Games, Admurin and zaphgames (CC-BY 3.0/4.0),
@@ -75,13 +78,21 @@ bunting, rope, portal swirl, particles, sun/moon/stars, waterfall/lava strips).
 
 | Theme (map) | Terrain | Parallax (back → front) | Notable decor |
 |---|---|---|---|
-| town (Mistvale) | Sunny Land, wooden log-beam platforms | Woods clouds → Woods mountains → Gothicvania town skyline (blue haze) → Woods tree-line | Sunny Land cottages ×6 (recoloured, widened, element banners), Fort tower, Gothicvania lamps/well/signs, Fort gate |
+| town (Academy campus, map id `mistvale`) | Sunny Land, wooden log-beam platforms | Woods clouds → Woods mountains → Gothicvania town skyline (blue haze) → Woods tree-line | Sunny Land cottages ×6 (recoloured, widened, element banners), Fort tower, Gothicvania lamps/well/signs, Fort gate |
 | forest (Whisperwood) | Sunny Land (greener grass) | Country-side sky → Country-side pine forest → Woods tree-line | Sunnyland trees, country tree, bushes, flowers, waterfall |
 | mushroom (Shroom Hollow) | Sunny Land → purple soil / teal moss | Warped forest silhouettes → Warped cave (night purple + teal) + stars | hand-pixelled giant mushrooms, Warped glow fungus, vines |
 | snow (Frostfang Cliffs) | Sunny Land → snow / ice-slate | Woods clouds (cool) → Fort mountains (icy) → Woods mountains (snow) → Country pines (frosted) | Magical Road + Sunnyland pines with snow caps, Rocky Pass crystals (ice), snowman, icicles |
 | volcano (Cinder Caverns) | Sunny Land → ember crust / basalt | Mountain-at-Dusk sky (red, moonless) → Rocky Pass rocks (dark) → Rocky Pass arches (crimson) | lava spires, obsidian, braziers, burnt pines, lava falls |
 | storm (Stormspire Peak) | Sunny Land → sage grass / slate | Magic Cliffs sky → Dusk mountains → Magic Cliffs clouds (drifting) → Magic Cliffs hills → Dusk tree-line | dead trees, wind pines, runestones, broken pillars, storm flags, 16-bit lightning |
 | sanctum (Arcane Sanctum) | Sunny Land → marble / gold | Fort sky (violet) → Fort mountains (violet) → Grotto ruins (violet) + stars + moon | Church pillars, arcane banners, floating crystals, arcane circle, arcane braziers |
+
+## The Academy additions (derived, no new downloads)
+
+`town/t_hall_holy.png`, `town/t_hall_shadow.png`, `town/t_sign_holy.png`, `town/t_sign_shadow.png`,
+`town/t_banner_holy.png`, `town/t_banner_shadow.png` are palette swaps of the existing pieces above
+(Sunny Land hall, Gothicvania Town hanging sign, Fort of Illusion banner — all CC0, Luis Zuno) with small
+hand-pixelled additions in the same palettes (Holy bell-cote + cross and sun emblem; Shadow gothic spires and
+skull emblem). The Shadow hall is flanked by the existing Gothicvania Church skull pillar (`d_pillar`).
 
 ## Vfx
 
@@ -103,6 +114,19 @@ nearest-neighbour filtering.
 | Ice Elemental (idle crystal frames) | Ouren | https://opengameart.org/content/ice-elemental | CC-BY 3.0 — attribution: "Ice Elemental" by Ouren; modified (re-packed, palette-swapped) | Frozen Orb core, Glacial Lance head |
 | Spark effect | kurohina | https://opengameart.org/content/spark-effect | CC0 | hit_generic, lightning zap hits, chain-jump sparks, claw/nova hits (tinted) |
 | 16x16 Simple Fantasy RPG FX | Emcee Flesher | https://opengameart.org/content/16x16-simple-fantasy-rpg-fx | CC0 | Flame Arrow / Salamander spit / Arcane Bolt projectiles, phoenix bolt, small flames, fire cast stars, ice bolt orb, snow burst, ice shatter, ice tornado, ice shards, arcane claw slashes, ring bursts, level-up/heal burst, pickup/respawn twinkles |
+
+## Holy School VFX
+
+New sheets for the holy tree. Everything else the holy VFX use is a gold/white palette swap of the shared CC0 sheets in
+`public/assets/vfx/` (see that folder's CREDITS.md): CodeManu Free Pixel Effects Pack, ansimuz Gothicvania Magic Pack 9 +
+Animated Explosions, StarsteelGaming Spell Effects, Chasersgaming Phoenix, kurohina Spark, Emcee Flesher 16x16 Simple
+Fantasy RPG FX. Recolouring happens at boot in `src/skills/holy/sheets.ts`.
+
+| Asset | Author | Source | License | Used for |
+|---|---|---|---|---|
+| Angels (angel-f-001, east-facing row) | Svetlana Kushnariova (Cabbit) <lana-chan@yandex.ru>, liftarn, johnny_automatic, freedo & Jordan Irwin (AntumDeluge) | https://opengameart.org/content/angels | CC-BY 3.0+ / OGA-BY 3.0+ — attribution: "Angels" by Svetlana Kushnariova (Cabbit) <lana-chan@yandex.ru> & Jordan Irwin (AntumDeluge); modified (cropped row, re-packed) | Seraph summon body |
+| Angel Wings Effect (white set) | Cethiel | https://opengameart.org/content/angel-wings-effect | CC0 | Seraph wing aura; unfolding wings on Bless / Holy Symbol / Divine Aegis / Angel Ray / Genesis / Judgment / Salvation / Holy Step / Prayer of Mana casts (gold & pale-light palette swaps); downsampled 2x with stepped alpha |
+| white wing 32x32 | twiswist | https://opengameart.org/content/white-wing-32x32 | CC0 | Guardian Spirit's little wings, Divine Aegis aura wings, Angel Ray spear-head wings, Seraph fallback |
 
 ## Ui
 

@@ -31,7 +31,7 @@ a resumed session (after a usage-limit pause) reads it to pick up exactly where 
     the Forbidden Wing mystery → the Lich Archon as the Final Thesis → graduation ceremony + credits screen).
   - Year 1 orientation/tutorial assignment chain that teaches movement, casting, hotbar, pickup, NPCs.
   - Academy Merit shop (spend Trial Hall merits: tomes, cosmetics/titles, rare accessories).
-- [ ] **7. Quality of life & polish**
+- [~] **7. Quality of life & polish** (save slots + controls in progress)
   - Multiple save slots / character select (MapleStory-style), with per-slot School + Year shown.
   - Key rebinding + controls screen (keyboard + gamepad map), settings persistence.
   - Help/UI mentions gamepad; damage-number readability options; screen-shake toggle.

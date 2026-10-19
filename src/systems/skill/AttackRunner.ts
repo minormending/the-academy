@@ -325,6 +325,9 @@ export class AttackRunner {
       const dx = Math.max(1, (o.aimAt.x - o.x) * o.facing);
       baseAngle = clamp(Math.atan2(o.aimAt.y - o.y, dx), -Math.PI / 3, Math.PI / 3);
     }
+    // A fanned volley shares one hit set so its shots spread across distinct foes instead of
+    // all landing on the nearest one (a fan advertises N targets x damage, not N x damage on one).
+    const sharedHits: Set<number> | null = spread && count > 1 ? new Set() : null;
     for (let i = 0; i < count; i++) {
       const offDeg = spread ? (i - (count - 1) / 2) * spread : 0;
       const spawnDelay = delay + (spread ? 0 : i * 70);
@@ -343,7 +346,7 @@ export class AttackRunner {
         this.projs.push({
           info, go, x, y, vx, vy, gravity, radius: Math.max(2, num(p.radius, 10)), travelled: 0,
           range: gravity > 0 ? spec.range * 1.6 : spec.range,
-          pierce: !!p.pierce, maxTargets: this.maxT(info), hitCount: 0, hitSet: new Set(),
+          pierce: !!p.pierce, maxTargets: this.maxT(info), hitCount: 0, hitSet: sharedHits ?? new Set(),
           explode: p.explodeArea, dead: false,
         });
       });

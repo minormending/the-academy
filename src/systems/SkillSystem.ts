@@ -217,8 +217,10 @@ export class SkillSystem implements ISkillSystem {
       sm.attackTimer += iv;
       if (sm.attackTimer < 0) sm.attackTimer = iv;
       const atk = spec.attack;
-      const reach = Math.max(num(atk.range, 300), atk.pattern === 'aoe_self' ? num(atk.area?.w, 0) / 2 : 0);
-      const target = this.runner.nearestAny(sm.x, sm.y, reach, Math.max(160, num(atk.area?.h, 0) / 2));
+      // aoe_self fields (e.g. Wall of Fire) wake for anything inside their rectangle, not just a w/2 circle.
+      const halfW = num(atk.area?.w, 0) / 2, halfH = num(atk.area?.h, 0) / 2;
+      const reach = Math.max(num(atk.range, 300), atk.pattern === 'aoe_self' ? Math.hypot(halfW, halfH) : 0);
+      const target = this.runner.nearestAny(sm.x, sm.y, reach, Math.max(160, halfH + 20));
       if (target) {
         const c = monsterCenter(target);
         sm.facing = c.x >= sm.x ? 1 : -1;

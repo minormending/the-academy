@@ -421,7 +421,7 @@ export const LIGHTNING_SKILLS: SkillDef[] = [
     sfx: 'thunder',
     attack: {
       pattern: 'rain',
-      damagePct: lin(130, 155, 10),
+      damagePct: lin(380, 520, 10),
       hits: () => 1,
       maxTargets: () => 6,
       range: 560,

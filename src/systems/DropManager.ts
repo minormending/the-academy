@@ -109,29 +109,27 @@ export class DropManager implements IDropManager {
     try {
       if (!s.player || s.progression?.isDead()) return false;
       const now = this.scene.time.now;
+      // Nearest first; an item that doesn't fit (full inventory) is skipped so mesos and
+      // stackable drops underneath it can still be collected.
+      const candidates = this.drops
+        .filter(d => d.state !== 'pick' && !(d.state === 'fly' && now - d.born < 250))
+        .map(d => ({ d, dist: Math.hypot(d.x - px, (d.y - py) * 1.2) }))
+        .filter(c => c.dist <= radius)
+        .sort((a, b) => a.dist - b.dist);
       let best: Drop | null = null;
-      let bestD = radius;
-      for (const d of this.drops) {
-        if (d.state === 'pick') continue;
-        if (d.state === 'fly' && now - d.born < 250) continue;
-        const dist = Math.hypot(d.x - px, (d.y - py) * 1.2);
-        if (dist <= bestD) { best = d; bestD = dist; }
+      let rejected = false;
+      for (const { d } of candidates) {
+        if (d.kind === 'mesos') { s.progression.addMesos(d.qty); s.audio?.play('mesos'); best = d; break; }
+        if (s.progression.addItem(d.itemId, d.qty)) { s.audio?.play('pickup'); best = d; break; }
+        rejected = true;
       }
-      if (!best) return false;
-      if (best.kind === 'mesos') {
-        s.progression.addMesos(best.qty);
-        s.audio?.play('mesos');
-      } else {
-        const ok = s.progression.addItem(best.itemId, best.qty);
-        if (!ok) {
-          if (now - this.lastFullMsg > 1500) {
-            this.lastFullMsg = now;
-            bus.emit('ui:log', { text: 'Your inventory is full.', color: '#ff9b9b' });
-            s.audio?.play('ui_error');
-          }
-          return false;
+      if (!best) {
+        if (rejected && now - this.lastFullMsg > 1500) {
+          this.lastFullMsg = now;
+          bus.emit('ui:log', { text: 'Your inventory is full.', color: '#ff9b9b' });
+          s.audio?.play('ui_error');
         }
-        s.audio?.play('pickup');
+        return false;
       }
       this.animatePickup(best);
       return true;

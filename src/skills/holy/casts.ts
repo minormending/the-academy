@@ -1,5 +1,6 @@
 // OWNER: Holy tree agent. Custom `onCast` behaviours for the holy tree (heals, MP prayer, holy step, consecration field).
 // Everything here only uses the SkillContext contract (services + runAttack + playVfx + bus).
+import Phaser from 'phaser';
 import type { AttackSpec, SkillContext } from '../../core/types';
 import { playVfx } from '../../core/vfx';
 import { bus } from '../../core/events';
@@ -91,6 +92,7 @@ export function castField(ctx: SkillContext, o: FieldOpts): void {
     done = true;
     timer.remove(false);
     offs.forEach(f => f());
+    scene.events.off(Phaser.Scenes.Events.SHUTDOWN, end);
     if (endActiveField === end) endActiveField = null;
     if (go && go.scene) {
       try {
@@ -117,5 +119,6 @@ export function castField(ctx: SkillContext, o: FieldOpts): void {
     },
   });
   offs.push(bus.on('map:changed', end), bus.on('player:died', end));
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, end);
   endActiveField = end;
 }

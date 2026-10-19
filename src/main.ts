@@ -4,6 +4,7 @@ import { GAME_HEIGHT, GAME_WIDTH, GRAVITY } from './core/constants';
 import { BootScene } from './scenes/BootScene';
 import { TitleScene } from './scenes/TitleScene';
 import { GameScene } from './scenes/GameScene';
+import { startGamepadBridge } from './systems/GamepadBridge';
 
 // All 2D canvases in this game are offscreen art-generation surfaces that we read back with getImageData
 // (palette swaps, outlines, pixelization). Default them to CPU-backed storage: faster reads and no
@@ -32,3 +33,6 @@ const game = new Phaser.Game({
   scene: [BootScene, TitleScene, GameScene],
 });
 (window as unknown as { game: Phaser.Game }).game = game;
+
+// Controllers drive the game through synthetic key events (see GamepadBridge for the mapping).
+startGamepadBridge();

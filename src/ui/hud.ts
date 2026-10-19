@@ -5,6 +5,7 @@ import { HOTBAR_PAGE_SIZE, HOTBAR_SIZE, type ActiveBuff } from '../core/types';
 import { bus } from '../core/events';
 import { Registry } from '../core/registry';
 import { expToNext } from '../core/balance';
+import { MAX_INVENTORY_STACKS } from '../systems/Progression';
 import type { UICtx, WindowName } from './context';
 import { clear, fmtNum, fmtSec, h, safe, setText, toggleClass } from './dom';
 import { iconEl } from './uiIcons';
@@ -66,6 +67,8 @@ export class StatusBar {
   private mp = new Gauge('mp', 'MP');
   private exp = new Gauge('exp', 'EXP');
   private sig = '';
+  private bagBadge = h('span', { class: 'ax-bag-badge', hidden: true });
+  private bagHintShown = false;
   /** Unsubscribers for the pixel-icon-sheet ready callbacks (released in destroy). */
   private iconSubs: (() => void)[] = [];
   private keySyncs: (() => void)[] = [];
@@ -85,6 +88,7 @@ export class StatusBar {
       const keyEl = h('span', { class: 'ax-quick-key' });
       const el = h('button', { class: 'ax-quick', onclick: () => { ctx.sfx('ui_click'); ctx.toggleWindow(win); } },
         ico, h('span', { class: 'ax-quick-label' }, label), keyEl);
+      if (win === 'inventory') el.appendChild(this.bagBadge);
       // Key hints follow the player's bindings (Controls window).
       const sync = () => { const k = keyLabel(getBinding(action)); setText(keyEl, k); el.title = `${title} (${k})`; };
       sync();
@@ -109,6 +113,14 @@ export class StatusBar {
   frame(dt: number) {
     const p = this.ctx.s.progression;
     const st = p.state;
+    const stacks = st.inventory.length;
+    this.bagBadge.hidden = stacks < MAX_INVENTORY_STACKS - 4;
+    setText(this.bagBadge, `Bag ${stacks}/${MAX_INVENTORY_STACKS}`);
+    toggleClass(this.bagBadge, 'ax-bag-full', stacks >= MAX_INVENTORY_STACKS);
+    if (stacks >= MAX_INVENTORY_STACKS && !this.bagHintShown) {
+      this.bagHintShown = true;
+      bus.emit('ui:banner', { text: 'Your bag is full — sell old gear at Bram or Tilda', color: '#ffd36b' });
+    }
     const d = safe(() => p.derived(), null);
     const maxHp = Math.max(1, d?.maxHp ?? 1), maxMp = Math.max(1, d?.maxMp ?? 1);
     const hp = Math.max(0, Math.round(st.hp)), mp = Math.max(0, Math.round(st.mp));
@@ -141,7 +153,7 @@ export class StatusBar {
 const HOTBAR_ORDER = [0, 1, 2, 3, 4, 10, 5, 6, 7, 8, 9, 11];
 const PAGES = Math.max(1, Math.floor(HOTBAR_SIZE / HOTBAR_PAGE_SIZE));
 
-interface SlotEls { root: HTMLElement; icon: HTMLElement; cd: HTMLElement; cdText: HTMLElement; badge: HTMLElement; lastCd: string; lastBadge: string; mpCost: number; }
+interface SlotEls { root: HTMLElement; icon: HTMLElement; cd: HTMLElement; cdText: HTMLElement; badge: HTMLElement; lastCd: string; lastBadge: string; mpCost: number; itemId: string | null; }
 
 /**
  * Two pages of 12 slots (HOTBAR_SIZE = 24). Only the current page's 12 slot elements exist; each carries its
@@ -185,7 +197,7 @@ export class Hotbar {
         return { entry, icon: v.icon, label: v.label, fromSlot: abs };
       });
       ctx.tooltip.attach(root, () => this.tip(this.abs(i)));
-      this.slots[i] = { root, icon, cd, cdText, badge, lastCd: '', lastBadge: '', mpCost: 0 };
+      this.slots[i] = { root, icon, cd, cdText, badge, lastCd: '', lastBadge: '', mpCost: 0, itemId: null };
     }
     for (const i of HOTBAR_ORDER) grid.appendChild(this.slots[i].root);
     const pager = h('div', { class: 'ax-hotbar-pager' });
@@ -255,6 +267,15 @@ export class Hotbar {
 
   private entry(abs: number): string | null { return this.ctx.s.progression.state.hotbar?.[abs] ?? null; }
 
+  private displayedItem(id: string): string {
+    const p = this.ctx.s.progression;
+    if (p.countItem(id) > 0) return id;
+    // Match useItem's strongest-first potion kinds; mixed HP/MP elixirs stay separate.
+    const kinds = [['white_potion', 'orange_potion', 'red_potion'], ['mana_elixir', 'blue_potion']];
+    return kinds.find(kind => kind.includes(id))
+      ?.find(candidate => p.countItem(candidate) > 0 && Registry.item(candidate)?.consumable) ?? id;
+  }
+
   private visual(entry: string) {
     if (entry.startsWith('item:')) {
       const def = Registry.item(entry.slice(5));
@@ -270,7 +291,10 @@ export class Hotbar {
     const p = this.ctx.s.progression;
     if (entry.startsWith('item:')) {
       const id = entry.slice(5);
-      return itemTooltip(Registry.item(id), { qty: p.countItem(id), level: p.state.level, branch: safe(() => p.jobDef().branch, 'none'), hint: 'Right-click or drag off the bar to clear.' }, id);
+      const shown = this.displayedItem(id);
+      const hint = shown === id ? 'Right-click or drag off the bar to clear.'
+        : `Out of ${Registry.item(id)?.name ?? id} — using ${Registry.item(shown)?.name ?? shown}. Right-click or drag off the bar to clear.`;
+      return itemTooltip(Registry.item(shown), { qty: p.countItem(shown), level: p.state.level, branch: safe(() => p.jobDef().branch, 'none'), hint }, shown);
     }
     const def = Registry.skill(entry);
     if (!def) return h('div', { class: 'ax-tt' }, entry);
@@ -298,8 +322,10 @@ export class Hotbar {
       s.lastCd = ''; s.lastBadge = '';
       s.cd.style.background = ''; s.cdText.textContent = ''; s.badge.textContent = '';
       s.mpCost = 0;
+      s.itemId = null;
       toggleClass(s.root, 'ax-empty', !entry);
       toggleClass(s.root, 'ax-dim', false);
+      toggleClass(s.root, 'ax-potion-fallback', false);
       toggleClass(s.root, 'ax-item', !!entry && entry.startsWith('item:'));
       if (!entry) continue;
       const v = this.visual(entry);
@@ -334,9 +360,18 @@ export class Hotbar {
       if (!entry) continue;
       const el = this.slots[i];
       if (entry.startsWith('item:')) {
-        const qty = safe(() => p.countItem(entry.slice(5)), 0);
+        const assigned = entry.slice(5);
+        const shown = this.displayedItem(assigned);
+        if (shown !== el.itemId) {
+          el.itemId = shown;
+          const def = Registry.item(shown);
+          el.icon.replaceChildren(iconEl(def?.icon, 36, def?.name ?? shown));
+        }
+        const qty = safe(() => p.countItem(shown), 0);
         const b = String(qty);
-        if (b !== el.lastBadge) { el.lastBadge = b; el.badge.textContent = b; toggleClass(el.root, 'ax-dim', qty <= 0); }
+        if (b !== el.lastBadge) { el.lastBadge = b; el.badge.textContent = b; }
+        toggleClass(el.root, 'ax-dim', qty <= 0);
+        toggleClass(el.root, 'ax-potion-fallback', shown !== assigned);
         continue;
       }
       const rem = safe(() => s.skills.getCooldownRemaining(entry), 0);

@@ -463,16 +463,31 @@ export class Progression implements IProgression {
     return Math.max(0, (this.itemReadyAt.get(itemId) ?? 0) - this.now);
   }
 
+  /** Last successful replacement for each assigned potion; repeated uses stay quiet. */
+  private potionSwitches = new Map<string, string>();
+
   useItem(itemId: string): boolean {
-    const def = Registry.item(itemId);
+    const requestedId = itemId;
+    let def = Registry.item(itemId);
     if (!def || def.type !== 'consumable' || !def.consumable) return false;
     if (this.dead) return false;
+    if (this.countItem(itemId) > 0) this.potionSwitches.delete(requestedId);
+    else if (this.state.hotbar.includes(`item:${itemId}`)) {
+      // Strongest first. Elixir and Power Elixir each form their own kind.
+      const kinds = [['white_potion', 'orange_potion', 'red_potion'], ['mana_elixir', 'blue_potion']];
+      const replacement = kinds.find(kind => kind.includes(itemId))
+        ?.find(id => this.countItem(id) > 0 && Registry.item(id)?.consumable);
+      if (replacement) {
+        itemId = replacement;
+        def = Registry.item(itemId)!;
+      } else this.potionSwitches.delete(requestedId);
+    }
     if (this.countItem(itemId) <= 0) {
       bus.emit('ui:log', { text: `You have no ${def.name}.`, color: LOG.warn });
       return false;
     }
     if (this.itemCooldownRemaining(itemId) > 0) return false;
-    const c = def.consumable;
+    const c = def.consumable!;
 
     if (c.returnToTown) {
       const game = this.services.game;
@@ -500,6 +515,11 @@ export class Progression implements IProgression {
     this.itemReadyAt.set(itemId, this.now + (c.cooldownMs ?? DEFAULT_ITEM_COOLDOWN_MS));
     this.heal(hp, mp);
     this.sfx(c.hpPct || c.mpPct ? 'heal' : 'potion');
+    if (itemId !== requestedId && this.potionSwitches.get(requestedId) !== itemId) {
+      this.potionSwitches.set(requestedId, itemId);
+      const name = Registry.item(requestedId)!.name;
+      bus.emit('ui:log', { text: `Out of ${name}s — used ${def.name} instead.`, color: LOG.info });
+    }
     return true;
   }
 
@@ -777,4 +797,3 @@ export class Progression implements IProgression {
     return true;
   }
 }
-

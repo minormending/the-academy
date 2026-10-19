@@ -971,3 +971,19 @@ body.ax-dragging, body.ax-dragging * { cursor: grabbing !important; }
 .ax-cr-fade-bot { bottom: 0; background: linear-gradient(0deg, #3a2878 0 24%, rgba(58, 40, 120, 0.75) 24% 48%, rgba(58, 40, 120, 0.4) 48% 74%, transparent 74%); }
 .ax-cr-end { position: absolute; left: 0; right: 0; bottom: 64px; display: flex; justify-content: center; }
 .ax-cr-hint { position: absolute; right: 24px; bottom: 16px; font-size: 16px; color: var(--ax-ink-faint); text-shadow: var(--ax-ts); }
+
+/* Inventory pressure and smart potion previews. */
+.ax-bag-badge {
+  position: absolute; bottom: calc(100% + 5px); left: 50%; transform: translateX(-50%);
+  padding: 3px 5px; white-space: nowrap; font-size: 16px; line-height: 14px;
+  color: var(--ax-gold); background: var(--ax-indigo-lo); text-shadow: var(--ax-ts);
+  box-shadow: 0 0 0 2px var(--ax-k); pointer-events: none;
+  animation: ax-bag-pulse 1.4s steps(4) infinite;
+}
+.ax-bag-badge[hidden] { display: none; }
+.ax-bag-badge.ax-bag-full { color: var(--ax-bad); }
+@keyframes ax-bag-pulse { 50% { opacity: 0.6; } }
+.ax-slot.ax-potion-fallback .ax-slot-icon { opacity: 0.5; }
+.ax-shop-junk { display: flex; margin: 6px 0; }
+.ax-shop-junk .ax-btn { white-space: normal; }
+@media (prefers-reduced-motion: reduce) { .ax-bag-badge { animation: none; } }

@@ -131,7 +131,7 @@ export class ShopWindow extends UIWindow {
 
   protected signature(): string {
     const st = this.ctx.s.progression.state;
-    return JSON.stringify([this.tab, st.mesos, st.inventory, [...this.qty], this.confirmSell]);
+    return JSON.stringify([this.tab, st.mesos, st.inventory, st.level, st.equipment, st.quests, [...this.qty], this.confirmSell]);
   }
 
   private stepper(key: string, max: number, onChange: () => void): HTMLElement {
@@ -178,10 +178,64 @@ export class ShopWindow extends UIWindow {
     }
     this.body.replaceChildren(
       tabStrip<ShopTab>([{ id: 'buy', label: 'Buy' }, { id: 'sell', label: 'Sell' }], this.tab, (t) => { this.tab = t; this.confirmSell = null; this.invalidate(); this.ctx.sfx('ui_click'); }),
+      ...(this.tab === 'sell' ? [this.sellJunkButton()] : []),
       list,
       h('div', { class: 'ax-win-footer' },
         h('div', { class: 'ax-mesos' }, h('span', { class: 'ax-coin' }), h('b', null, fmtNum(st.mesos)), h('span', { class: 'ax-dim' }, ' mesos')),
         h('button', { class: 'ax-btn ax-btn-secondary ax-btn-small', onclick: () => this.close() }, 'Leave')));
+  }
+
+  private junkStacks(): ItemStack[] {
+    const st = this.ctx.s.progression.state;
+    const needed = new Set<string>();
+    for (const quest of Registry.quests()) {
+      if (st.quests[quest.id]?.status === 'turned_in') continue;
+      for (const objective of quest.objectives) {
+        if (objective.kind === 'collect') needed.add(objective.itemId);
+      }
+    }
+    const equipped = new Set(Object.values(st.equipment).map(stack => stack?.uid));
+    return st.inventory.filter(stack => {
+      const def = Registry.item(stack.itemId);
+      if (!def || def.sellPrice <= 0 || stack.qty <= 0 || equipped.has(stack.uid)) return false;
+      return def.type === 'etc' ? !needed.has(stack.itemId)
+        : def.type === 'equip' && !!def.equip && def.equip.reqLevel <= st.level - 10;
+    });
+  }
+
+  private sellJunkButton(): HTMLElement {
+    const stacks = this.junkStacks();
+    const keyFor = (items: ItemStack[]) => `junk:${JSON.stringify(items.map(s => [s.uid, s.itemId, s.qty, Registry.item(s.itemId)?.sellPrice]))}`;
+    const key = keyFor(stacks);
+    const confirming = this.confirmSell === key;
+    const total = stacks.reduce((sum, s) => sum + Registry.item(s.itemId)!.sellPrice * s.qty, 0);
+    return h('div', { class: 'ax-shop-junk' }, h('button', {
+      class: `ax-btn ax-btn-small ${confirming ? 'ax-btn-danger' : 'ax-btn-secondary'}`,
+      disabled: !stacks.length,
+      title: 'Sell unneeded materials and unequipped gear at least 10 levels below you. Materials for assignments you have not handed in are kept.',
+      onclick: () => {
+        // Recheck before confirming: inventory, quest protection or prices may have changed.
+        const current = this.junkStacks();
+        const currentKey = keyFor(current);
+        if (!current.length) { this.confirmSell = null; this.invalidate(); return; }
+        if (!confirming || this.confirmSell !== key || currentKey !== key) {
+          this.confirmSell = currentKey;
+          this.ctx.sfx('ui_click');
+          this.invalidate();
+          return;
+        }
+        this.confirmSell = null;
+        let sold = false;
+        for (const stack of current) {
+          if (safe(() => this.ctx.s.progression.sell(stack.uid, stack.qty), false)) {
+            sold = true;
+            this.qty.delete(`s:${stack.uid}`);
+          }
+        }
+        this.ctx.sfx(sold ? 'mesos' : 'ui_error');
+        this.invalidate();
+      },
+    }, confirming ? `Confirm sell junk · ${fmtNum(total)} mesos` : 'Sell junk'));
   }
 
   private sellRow(s: ItemStack, def: ItemDef, level: number, branch: Branch, rerender: () => void) {

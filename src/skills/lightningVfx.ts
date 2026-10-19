@@ -17,6 +17,11 @@ import {
   capacitorArc, reversalCast, relayOut, relayIn, relayArrival, judgmentCage,
   railCharge, railBeam, conductorSigil,
 } from './lightning/academyVfx';
+import {
+  brandStamp, groundingSealBody, groundingSealPulse, circuitBreak, dynamoExchange,
+  skateDepart, skateArrive, skateTrail, channelFocus, channelArc,
+  circuitLattice, circuitPulse, reprisalAegis, reprisalFangs,
+} from './lightning/spellbookVfx';
 
 /** Boot hook: textures are built on first lightning VFX (or in the background while on the Title screen). */
 export function generateLightningTextures(scene: Phaser.Scene): void { scheduleIdle(scene, 'lightning', generateTextures); }
@@ -591,6 +596,21 @@ const surgeAura: VfxFn = (scene) => {
 // ───────────────────────────── registration ─────────────────────────────
 
 export function registerLightningVfx(): void {
+  // Phase 9: use the same lazy School registration and on-demand CC0 sheet kit.
+  registerVfx('ltn_brand_stamp', brandStamp);
+  registerVfx('ltn_grounding_seal_body', groundingSealBody);
+  registerVfx('ltn_grounding_seal_pulse', groundingSealPulse);
+  registerVfx('ltn_circuit_break', circuitBreak);
+  registerVfx('ltn_dynamo_exchange', dynamoExchange);
+  registerVfx('ltn_skate_depart', skateDepart);
+  registerVfx('ltn_skate_arrive', skateArrive);
+  registerVfx('ltn_skate_trail', skateTrail);
+  registerVfx('ltn_channel_focus', channelFocus);
+  registerVfx('ltn_channel_arc', channelArc);
+  registerVfx('ltn_circuit_lattice', circuitLattice);
+  registerVfx('ltn_circuit_pulse', circuitPulse);
+  registerVfx('ltn_reprisal_aegis', reprisalAegis);
+  registerVfx('ltn_reprisal_fangs', reprisalFangs);
   // Academy expansion (passive sigils accent studied attack casts while learned).
   registerVfx('ltn_needle_cast', needleCast);
   registerVfx('ltn_needle_proj', needleProj);

@@ -2,6 +2,7 @@
 import type { IconSpec, SkillContext, SkillDef, StatusSpec } from '../core/types';
 import { playVfx } from '../core/vfx';
 import { STORM, lerpLv } from './lightning/shared';
+import { SPELLBOOK_LIGHTNING_SKILLS } from './lightning/spellbook';
 
 const lin = (a: number, b: number, max: number) => (lv: number) => lerpLv(a, b, lv, max);
 const linR = (a: number, b: number, max: number) => (lv: number) => Math.round(lerpLv(a, b, lv, max));
@@ -551,4 +552,5 @@ export const LIGHTNING_SKILLS: SkillDef[] = [
       { stat: 'critDmg', add: lerpLv(0.02, 0.2, lv, 20) },
     ],
   },
+  ...SPELLBOOK_LIGHTNING_SKILLS,
 ];

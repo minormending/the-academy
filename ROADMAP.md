@@ -38,11 +38,12 @@ a resumed session (after a usage-limit pause) reads it to pick up exactly where 
   - [x] Key rebinding + controls screen (keyboard + gamepad map), settings persistence.
   - [x] Help/UI mentions gamepad; damage-number readability options; screen-shake toggle.
   - [x] Pacing QA levels 25–50 (Years 3–4) per School; boss tuning pass.
-- [~] **8. Ship**
-  - Full regression QA (all five Schools, every map, bosses, arena, saves) + Codex final review.
+- [x] **8. Ship**
+  - [x] Full regression QA (all five Schools, every map, bosses, arena, saves) + Codex final review.
   - [x] Performance pass (busy ultimates, load time), production build.
   - [x] README (how to play/run, credits); [x] final CREDITS merge.
-  - Publish the production build as a playable private Artifact link for the user.
+  - [x] Publish the production build as a playable private Artifact link: https://claude.ai/artifact/EQ1W2af4QsyPHZhd4UKomz
+        (republish: `npm run build && node scripts/make-publish-page.mjs`, then publish `dist/academy.html` with `dist/` as root).
 
 ## Definition of finished
 

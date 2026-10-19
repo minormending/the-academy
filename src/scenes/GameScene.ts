@@ -20,11 +20,13 @@ import { NpcManager } from '../systems/NpcManager';
 import { getAudio } from '../systems/AudioSystem';
 import { UIRoot } from '../ui/UIRoot';
 import { PetSystem } from '../systems/PetSystem';
+import { ArenaSystem } from '../systems/ArenaSystem';
 import { loadMap } from '../world/MapLoader';
 
 export class GameScene extends Phaser.Scene implements IGameApi {
   private s!: GameServices;
   private pet: PetSystem | null = null;
+  private arena: ArenaSystem | null = null;
   private map: IMapInstance | null = null;
   private initialState!: PlayerState;
   private inputBlocked = false;
@@ -62,6 +64,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     s.skills = new SkillSystem(this, s);
     s.monsters = new MonsterManager(this, s);
     s.drops = new DropManager(this, s);
+    this.arena = new ArenaSystem(this, s);
     s.npcs = new NpcManager(this, s);
     s.player = new Player(this, s, 200, 200, state.job);
     this.pet = new PetSystem(this, s);
@@ -128,6 +131,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
   private loadMapNow(mapId: string, portalId?: string) {
     const s = this.s;
     s.skills.clearWorld();
+    this.arena?.clear();
     s.monsters.clear();
     s.drops.clear();
     s.npcs.clear();
@@ -152,6 +156,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     s.drops.bindMap(map);
     s.npcs.bindMap(map);
     this.pet?.bindMap(map);
+    this.arena?.bindMap(map);
 
     s.audio.playMusic(map.def.music);
     bus.emit('map:changed', { mapId });
@@ -252,6 +257,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     s.combat.update(time, delta);
     s.drops.update(time, delta);
     this.pet?.update(time, delta);
+    this.arena?.update(time, delta);
     s.npcs.update(time, delta);
     this.map.update(time, delta);
     this.handleInput(time);
@@ -262,7 +268,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     const s = this.s;
     try { s.progression.save(); } catch { /* ignore */ }
     for (const fn of [() => s.ui.destroy(), () => s.skills.clearWorld(), () => s.monsters.clear(), () => s.drops.clear(),
-      () => s.npcs.clear(), () => this.pet?.destroy(), () => s.player.destroy(), () => this.map?.destroy()]) {
+      () => s.npcs.clear(), () => this.pet?.destroy(), () => this.arena?.destroy(), () => s.player.destroy(), () => this.map?.destroy()]) {
       try { fn(); } catch (e) { console.warn('[game] teardown step failed', e); }
     }
     this.map = null;

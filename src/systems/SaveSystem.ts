@@ -140,6 +140,8 @@ export function repairState(input: unknown): PlayerState {
     out.sp = Math.floor(num(s.sp, 0, 0));
     out.mesos = Math.floor(num(s.mesos, 0, 0));
     out.playTimeMs = num(s.playTimeMs, 0, 0);
+    out.merits = Math.floor(num(s.merits, 0, 0));
+    out.arenaBest = Math.floor(num(s.arenaBest, 0, 0));
     out.mapId = typeof s.mapId === 'string' && Registry.map(s.mapId) ? s.mapId : START_MAP;
     if (typeof s.mapId === 'string' && Registry.maps().length === 0) out.mapId = s.mapId; // maps not loaded yet: keep
 

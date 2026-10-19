@@ -735,3 +735,61 @@ body.ax-dragging, body.ax-dragging * { cursor: grabbing !important; }
 .ax-title-error { min-height: 16px; text-align: center; color: var(--ax-bad); font-size: 16px; text-shadow: var(--ax-ts2); }
 .ax-title-warn { text-align: center; color: #ffd28a; font-size: 16px; text-shadow: var(--ax-ts2); line-height: 1.1; }
 .ax-title-foot { position: absolute; left: 0; right: 0; bottom: 16px; text-align: center; font-size: 16px; color: rgba(210, 215, 255, 0.75); letter-spacing: 1px; text-shadow: var(--ax-ts2); pointer-events: none !important; }
+
+/* ─────────────────────────── Trial Hall (arena panel) ─────────────────────────── */
+
+.ax-arena {
+  position: absolute; right: 10px; top: 70px; z-index: 16; width: 236px; padding: 0 0 10px;
+  border: 1px solid transparent; border-image: var(--ax-img) 7 9 7 10 fill / 14px 18px 14px 20px / 4px 6px 4px 6px;
+  filter: drop-shadow(4px 6px 0 rgba(8, 6, 22, 0.5));
+  animation: ax-winin 0.12s steps(3);
+}
+.ax-arena-head {
+  display: flex; align-items: center; gap: 8px; height: 30px; margin: 2px 2px 0; padding: 0 10px 2px 8px; user-select: none;
+  background: var(--ax-indigo-lo);
+  box-shadow: inset 0 -2px 0 var(--ax-k), inset 0 -4px 0 var(--ax-gold-2), 0 2px 0 var(--ax-gold-dim);
+}
+.ax-arena-gem { background: linear-gradient(#fff3c4 0 2px, #ffcf4a 2px 6px, #d27d2c 6px); }
+.ax-arena-title { font-family: var(--ax-head); font-size: 16px; color: #f4eea0; letter-spacing: 1px; text-shadow: var(--ax-ts2); padding-top: 1px; }
+.ax-arena-best { margin-left: auto; font-size: 16px; color: var(--ax-ink-dim); text-shadow: var(--ax-ts); }
+.ax-arena-body { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 6px; }
+.ax-arena-text { font-size: 16px; line-height: 1.1; color: #e3e6ff; text-shadow: var(--ax-ts); }
+.ax-arena-stat { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 16px; text-shadow: var(--ax-ts); }
+.ax-arena-lbl { color: var(--ax-ink-dim); }
+.ax-arena-val { color: #fff; }
+.ax-arena-val.ax-gold { color: var(--ax-gold); }
+.ax-arena-val.ax-dim { color: var(--ax-ink-dim); }
+.ax-arena-exp { color: #c8f7a0 !important; }
+.ax-arena-actions { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }
+.ax-arena-begin { flex: 1; }
+.ax-arena-wave { display: flex; align-items: center; gap: 8px; }
+.ax-arena-wave-num { font-family: var(--ax-head); font-size: 24px; color: #f4eea0; text-shadow: var(--ax-ts2); line-height: 1; }
+.ax-arena-tag {
+  margin-left: auto; padding: 3px 6px 2px; font-size: 16px; line-height: 1; color: var(--ax-k);
+  background: var(--ax-gold); box-shadow: inset 0 0 0 2px var(--ax-k), inset -2px -2px 0 2px var(--ax-gold-2);
+}
+.ax-arena-tag.ax-arena-tag-boss { color: #fff; background: var(--ax-hp); box-shadow: inset 0 0 0 2px var(--ax-k), inset -2px -2px 0 2px #7a1f2b; animation: ax-blink 0.8s steps(2) infinite; }
+.ax-arena-tag.ax-arena-tag-rest { color: var(--ax-k); background: var(--ax-good); box-shadow: inset 0 0 0 2px var(--ax-k), inset -2px -2px 0 2px #4a8a2c; }
+.ax-arena-bar { position: relative; height: 12px; background: var(--ax-well); box-shadow: inset 0 0 0 2px var(--ax-k); overflow: hidden; }
+.ax-arena-bar-fill {
+  position: absolute; left: 2px; top: 2px; bottom: 2px; right: 2px; transform-origin: left center;
+  background: linear-gradient(#ff9a8a 0 2px, var(--ax-hp) 2px 6px, #8a2a34 6px); transition: transform 0.2s steps(4);
+}
+.ax-arena.ax-arena-bosswave .ax-arena-head { box-shadow: inset 0 -2px 0 var(--ax-k), inset 0 -4px 0 var(--ax-hp), 0 2px 0 #7a1f2b; }
+
+/* results card */
+.ax-arena-card { padding: 10px 10px 8px; display: flex; flex-direction: column; gap: 5px; border: 2px solid transparent; border-image: url("/assets/ui/golden/well.png") 3 fill / 6px / 0; }
+.ax-arena-card-title { font-family: var(--ax-head); font-size: 16px; text-align: center; color: #f4eea0; text-shadow: var(--ax-ts2); letter-spacing: 1px; }
+.ax-arena-fell .ax-arena-card-title { color: #ffb3c0; }
+.ax-arena-big { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin: 2px 0 4px; }
+.ax-arena-big-num { font-family: var(--ax-head); font-size: 40px; line-height: 1; color: var(--ax-gold); text-shadow: var(--ax-outline), 0 4px 0 var(--ax-k); }
+.ax-arena-big-lbl { font-size: 16px; color: var(--ax-ink-dim); text-shadow: var(--ax-ts); }
+.ax-arena-newbest { align-self: center; padding: 3px 8px 2px; font-size: 16px; color: var(--ax-k); background: var(--ax-gold); box-shadow: inset 0 0 0 2px var(--ax-k), inset -2px -2px 0 2px var(--ax-gold-2); animation: ax-glowpulse 0.8s steps(2) infinite; }
+
+/* centre countdown */
+.ax-arena-count { position: absolute; left: 0; right: 0; top: 190px; z-index: 29; text-align: center; opacity: 0; transition: opacity 0.2s steps(2); }
+.ax-arena-count.ax-show { opacity: 1; }
+.ax-arena-count-num { font-family: var(--ax-head); font-size: 96px; line-height: 1; color: #f4eea0; text-shadow: var(--ax-outline), 0 8px 0 var(--ax-k), 0 6px 0 rgba(90, 50, 0, 0.95); }
+.ax-arena-count-num.ax-bump { animation: ax-bump 0.3s steps(3); }
+.ax-arena-count-sub { margin-top: 10px; font-size: 16px; letter-spacing: 3px; text-transform: uppercase; color: #d6dbff; text-shadow: var(--ax-outline); }
+.ax-arena-count-boss .ax-arena-count-num { color: #ff9b6b; }

@@ -141,4 +141,21 @@ export const MAP_EXTRAS: Record<string, MapExtras> = {
       { key: 'd_crystal_float', x: 2180, y: 560, layer: 'back', scale: 0.8 },
     ],
   },
+  // Trial Hall: an intact, well-lit Academy hall (the same sanctum kit, no broken pillars).
+  trial_hall: {
+    spawn: { x: 160, y: 780 },
+    density: 0.4,
+    decor: [
+      ...[60, 660, 1140, 1740].map(x => ({ key: 'd_pillar', x, layer: 'back' as const })),
+      ...[260, 1540].map(x => ({ key: 'd_banner_arcane', x, layer: 'back' as const })),
+      { key: 'd_arcane_circle', x: 900, y: 812, layer: 'front', alpha: 0.75 },
+      { key: 'd_brazier_arcane', x: 230, layer: 'mid' },
+      { key: 'd_brazier_arcane', x: 640, layer: 'mid' },
+      { key: 'd_brazier_arcane', x: 1160, layer: 'mid' },
+      { key: 'd_brazier_arcane', x: 1690, layer: 'mid' },
+      { key: 'd_crystal_float', x: 900, y: 440, layer: 'back', scale: 1.2 },
+      { key: 'd_crystal_float', x: 450, y: 520, layer: 'back', scale: 0.8 },
+      { key: 'd_crystal_float', x: 1350, y: 520, layer: 'back', scale: 0.8 },
+    ],
+  },
 };

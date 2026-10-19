@@ -25,6 +25,7 @@ import { HelpWindow, JobsWindow, MenuWindow, applySavedVolumes } from './miscWin
 import { DeathModal, DialogWindow, ShopWindow } from './dialogs';
 import { BRANCH_COLORS, jobName } from './info';
 import { consumeNewCharacter } from './session';
+import { ArenaPanel } from './arenaPanel';
 import type { UIWindow } from './window';
 
 export class UIRoot implements IUI {
@@ -43,6 +44,7 @@ export class UIRoot implements IUI {
   private minimap: Minimap;
   private chat: ChatLog;
   private banners: Banners;
+  private arena: ArenaPanel;
   private death: DeathModal;
   private dialog: DialogWindow;
   private shop: ShopWindow;
@@ -92,6 +94,7 @@ export class UIRoot implements IUI {
     this.status = new StatusBar(this.ctx);
     this.hotbar = new Hotbar(this.ctx);
     this.banners = new Banners(this.ctx);
+    this.arena = new ArenaPanel(this.ctx);
 
     // Windows
     this.windows = {
@@ -326,6 +329,7 @@ export class UIRoot implements IUI {
       this.vignette.frame();
       this.minimap.frame(time);
       this.chat.frame(time);
+      this.arena.frame();
       for (const w of this.allWindows) w.tick(time, delta);
       this.tooltip.check();
       this.syncInputBlock();
@@ -351,6 +355,7 @@ export class UIRoot implements IUI {
     for (const w of this.allWindows) w.destroy();
     this.death.destroy();
     this.banners.destroy();
+    this.arena.destroy();
     this.status.destroy();
     this.hotbar.destroy();
     this.buffs.destroy();

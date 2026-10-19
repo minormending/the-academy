@@ -47,7 +47,11 @@ const mistvale: MapDef = (() => {
     platforms: [ground(0, W, G), awning, tower1, towerTop, hallWalk, hallTop, cloister, belfry],
     walls: [],
     ropes: [ladder(1392, tower1.y, G), rope(1560, towerTop.y, tower1.y)],
-    portals: [portal('east', 3720, G, 'whisperwood', 'west')],
+    portals: [
+      portal('east', 3720, G, 'whisperwood', 'west'),
+      // Trial Hall door on the Headmistress tower's balcony (ladder at x 1392 from the ground).
+      portal('trial', 1480, tower1.y, 'trial_hall', 'entry'),
+    ],
     spawns: [],
     npcs: [
       { npcId: 'smith_tilda', x: 400, y: G, facing: 1 },
@@ -240,4 +244,25 @@ const arcane_sanctum: MapDef = (() => {
   };
 })();
 
-export const MAPS: MapDef[] = [mistvale, whisperwood, shroom_hollow, frostfang_cliffs, cinder_caverns, stormspire_peak, arcane_sanctum];
+// ───────────────────────────── Trial Hall (wave-survival arena; ArenaSystem drives it) ─────────────────────────────
+//
+// One screen-ish hall under the Headmistress tower: flat duelling floor, two jump-up side galleries and a
+// high central dais on a rope. No natural spawns — ArenaSystem spawns every wave.
+
+const trial_hall: MapDef = (() => {
+  const W = 1800, H = 900, G = 780;
+  const galleryW = plat(300, 600, 695), galleryE = plat(1200, 1500, 695);
+  const dais = plat(720, 1080, 565);
+  return {
+    id: 'trial_hall', name: 'Trial Hall', region: 'The Academy · Proving Grounds', theme: 'sanctum', music: 'boss',
+    width: W, height: H, levelRange: [1, 50], safe: false,
+    platforms: [ground(0, W, G), galleryW, galleryE, dais],
+    walls: [],
+    ropes: [rope(900, dais.y, G)],
+    portals: [portal('entry', 110, G, 'mistvale', 'trial')],
+    spawns: [],
+    npcs: [],
+  };
+})();
+
+export const MAPS: MapDef[] = [mistvale, whisperwood, shroom_hollow, frostfang_cliffs, cinder_caverns, stormspire_peak, arcane_sanctum, trial_hall];

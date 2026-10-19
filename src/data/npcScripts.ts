@@ -1,10 +1,11 @@
 // OWNER: A9 (progression). NPC conversation scripts. Each script emits 'ui:dialog' / 'ui:shop' on the bus.
 // The Academy: Headmistress Maelis lets Year 1 students declare one of five Schools at level 10; each School's
-// Professor runs its Year 3 and Year 4 Exams (the job-advancement quests). NPC ids are unchanged.
+// Professor runs its Year 3 and Year 4 Exams and the Year 5 Fellowship Exam (the job-advancement quests). NPC ids are unchanged.
 import type { DialogOption, GameServices, JobId, QuestDef } from '../core/types';
 import { bus } from '../core/events';
 import { Registry } from '../core/registry';
-import { BRANCH_ROOT_JOB, SCHOOLS, SCHOOL_NAME, SCHOOL_PROFESSOR, isSchool, yearOfTier, type School } from './jobs';
+import { JOB_LEVELS } from '../core/constants';
+import { BRANCH_ROOT_JOB, FELLOWSHIP_YEAR, FINAL_YEAR, SCHOOLS, SCHOOL_NAME, SCHOOL_PROFESSOR, isSchool, yearOfTier, type School } from './jobs';
 import { FIELD_BOUNTY_QUEST_IDS, JOB_ADVANCEMENT_QUESTS, JOB_QUEST_IDS } from './quests';
 import { GRADUATION_QUEST_ID, STORY_FLOW, STORY_QUESTS, STORY_QUEST_IDS, storyStepUnlocked, type StoryStateView } from './storyQuests';
 import type { Progression } from '../systems/Progression';
@@ -51,7 +52,8 @@ function professorName(sc: School): string {
 function yearLine(job: JobId): string {
   const def = Registry.job(job);
   const year = yearOfTier(def?.tier ?? 1);
-  return year >= 4
+  if (year >= FELLOWSHIP_YEAR) return 'Welcome to the Fellowship, Archon. Year 5 has no syllabus — the stars are the syllabus now. (+3 SP)';
+  return year >= FINAL_YEAR
     ? 'Welcome to Year 4, your final year! Wear the title well — your Final Thesis awaits. (+3 SP)'
     : `Welcome to Year ${year}! (+3 SP)`;
 }
@@ -499,10 +501,17 @@ function forbiddenWingOption(c: Ctx, sc: School, back: () => void): DialogOption
 
 // ─────────────────────────── Year-end Exam logic ───────────────────────────
 
+/** Graduated (Commencement handed in) — the Fellowship is postgraduate, so its exam waits for this. */
+function hasGraduated(p: Progression): boolean {
+  return p.state.quests[GRADUATION_QUEST_ID]?.status === 'turned_in';
+}
+
 /** The next job in this School the player is level-eligible for, and its Year-end Exam quest. */
 function pendingExam(p: Progression, school: School): { job: JobId; questId: string } | null {
   const cur = p.jobDef();
-  if (cur.branch !== school || cur.tier < 2 || cur.tier >= 4) return null;
+  if (cur.branch !== school || cur.tier < 2 || cur.tier >= FELLOWSHIP_YEAR) return null;
+  // Year 4 -> Year 5: the Fellowship Exam opens only to graduates.
+  if (cur.tier >= FINAL_YEAR && !hasGraduated(p)) return null;
   const next = Registry.jobs().find(j => j.parent === cur.id);
   if (!next || p.state.level < next.requiredLevel) return null;
   const questId = JOB_ADVANCEMENT_QUESTS[next.id];
@@ -621,17 +630,28 @@ function elderMaelis(c: Ctx) {
 
   const sc = isSchool(job.branch) ? job.branch : null;
   const professor = sc ? professorName(sc) : 'your Professor';
-  if (job.tier >= 4) {
-    const graduated = p.state.quests[GRADUATION_QUEST_ID]?.status === 'turned_in';
+  if (job.tier >= FELLOWSHIP_YEAR) {
+    say(c, pick([
+      `Archon ${p.state.name}. The faculty still stands when you enter a room — I have stopped telling them not to.`,
+      `A Fellow of the ${sc ? SCHOOL_NAME[sc] : 'Arcane'} School. The Observatory has been restless, ${job.name}. I am glad it is yours to watch now.`,
+    ]), [...quests, bye('Goodbye, Headmistress.')]);
+    return;
+  }
+  if (job.tier >= FINAL_YEAR) {
+    const graduated = hasGraduated(p);
     const thesisDone = p.state.quests.story_final_thesis?.status === 'turned_in';
-    say(c, graduated
+    const fellowship = !graduated ? ''
+      : lv >= JOB_LEVELS[FELLOWSHIP_YEAR]
+        ? `\n\nAnd ${p.state.name}: the Fellowship has asked for you. ${professor} sets the Fellowship Exam — Year 5, for those who graduate and are not finished.`
+        : `\n\nWhen you reach level ${JOB_LEVELS[FELLOWSHIP_YEAR]}, come back to us. The Fellowship takes a handful of graduates each generation, and ${professor} has already said your name.`;
+    say(c, (graduated
       ? pick([
         `Our graduate returns! The Forbidden Wing sleeps soundly, ${p.state.name}, and so do I. The Trial Hall still has plenty to teach a ${job.name}, if you miss the excitement.`,
         `${job.name}. I still have your thesis on my desk. It is one line long. It is my favourite.`,
       ])
       : thesisDone
         ? `${job.name}... the Lich Archon has fallen, ${p.state.name}, and the whole Academy knows it. Only the ceremony remains — the faculty is waiting.`
-        : `${job.name}... I have watched many students graduate, ${p.state.name}, but few who shone like you. The Lich Archon still broods in the Arcane Sanctum. Consider it your final thesis.`,
+        : `${job.name}... I have watched many students graduate, ${p.state.name}, but few who shone like you. The Lich Archon still broods in the Arcane Sanctum. Consider it your final thesis.`) + fellowship,
     [...quests, bye(graduated ? 'Goodbye, Headmistress.' : thesisDone ? 'One moment.' : 'I will not fail.')]);
     return;
   }
@@ -647,6 +667,30 @@ function elderMaelis(c: Ctx) {
 }
 
 // ─────────────────────────── Professors ───────────────────────────
+
+/** Year 5: each Professor's invitation to the Fellowship (for graduates) and their line for a Fellow. */
+const FELLOWSHIP_LINES: Record<School, { invite: string; fellow: string[] }> = {
+  fire: {
+    invite: 'You graduated. Good. Now — ever wanted to set a star on fire? The Fellowship does that. I sit on the committee.',
+    fellow: ['A Pyre Archon. I taught you to light a candle once. Look at you now, lighting the sky.'],
+  },
+  ice: {
+    invite: 'Graduation is a pause, not an ending. The Fellowship studies the long winter between the stars. I would like you to join it.',
+    fellow: ['Winter Archon. The Observatory has never been so quiet. I suspect that is your doing.'],
+  },
+  lightning: {
+    invite: 'Graduated already? Then you\'re bored already. The Fellowship isn\'t boring. The Fellowship has a Rift.',
+    fellow: ['A Storm Archon! The weather office has filed a complaint about you. I framed it.'],
+  },
+  holy: {
+    invite: 'You have finished your studies, but not your calling. The Fellowship carries light where the Void has been. Will you carry it?',
+    fellow: ['Light Archon. Wherever you walk now, the dark remembers its manners.'],
+  },
+  shadow: {
+    invite: 'A graduate. How ordinary. The Fellowship is less ordinary — it goes to the places the Academy prefers not to map. I recommended you.',
+    fellow: ['A Night Archon. I would say I am proud. I will settle for saying I am not surprised.'],
+  },
+};
 
 interface ProfessorLines {
   apprentice: string[];
@@ -784,9 +828,16 @@ function professor(c: Ctx) {
     return;
   }
 
-  if (job.tier >= 4) { say(c, pick(L.graduate), [...quests, bye()]); return; }
+  if (job.tier >= FELLOWSHIP_YEAR) { say(c, pick(FELLOWSHIP_LINES[sc].fellow), [...quests, bye()]); return; }
 
   const exam = pendingExam(p, sc);
+  if (job.tier >= FINAL_YEAR && !exam) {
+    // Graduates are invited to the Fellowship at level 55; before Commencement the thesis comes first.
+    const invite = !hasGraduated(p) ? ''
+      : `\n\n${FELLOWSHIP_LINES[sc].invite}\n\n(Come back at level ${JOB_LEVELS[FELLOWSHIP_YEAR]} for your Fellowship Exam.)`;
+    say(c, `${pick(L.graduate)}${invite}`, [...quests, bye()]);
+    return;
+  }
   if (!exam) {
     const next = job.tier === 2 ? 25 : 40;
     say(c, `${pick(L.ownChat)}\n\n(Come back at level ${next} for your Year ${yearOfTier(job.tier) + 1} Exam.)`, [...quests, bye()]);

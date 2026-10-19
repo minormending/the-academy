@@ -198,12 +198,15 @@ export class JobsWindow extends UIWindow {
     const cur = safe(() => p.jobDef(), null);
     const cards = h('div', { class: 'ax-job-cards' });
     const declaring = (cur?.tier ?? 1) === 1;
+    const graduated = st.quests[GRADUATION_QUEST_ID]?.status === 'turned_in';
+    // Year 4 -> 5 is the postgraduate Fellowship, not another undergraduate Year.
+    const fellowship = (cur?.tier ?? 1) >= 4;
     // Five Schools to choose from in Year 1 → widen the window so every card fits on one row.
     const winW = avail.length > 3 ? Math.min(940, 40 + avail.length * 180) : 560;
     this.el.style.width = `${winW}px`;
     const left = parseFloat(this.el.style.left) || 0;
     if (left + winW > GAME_WIDTH) this.el.style.left = `${Math.max(0, GAME_WIDTH - winW - 8)}px`;
-    this.setTitle(declaring && avail.length ? 'Year-end Exam — Declare your School' : 'Year-end Exam');
+    this.setTitle(declaring && avail.length ? 'Year-end Exam — Declare your School' : fellowship ? 'Fellowship Exam' : 'Year-end Exam');
     for (const id of avail) {
       const j = safe(() => Registry.job(id), undefined as JobDef | undefined);
       if (!j) continue;
@@ -211,28 +214,35 @@ export class JobsWindow extends UIWindow {
       cards.appendChild(h('div', { class: 'ax-job-card', style: `--accent:${color}` },
         portraitEl(j.look, 72, j.name),
         h('div', { class: 'ax-job-name' }, j.name),
-        h('div', { class: 'ax-job-branch' }, `${schoolName(j.branch)} · Year ${j.tier}`),
+        h('div', { class: 'ax-job-branch' }, `${schoolName(j.branch)} · Year ${j.tier}${j.tier >= 5 ? ' · Fellowship' : ''}`),
         h('div', { class: 'ax-job-desc' }, j.description || ''),
         h('button', {
           class: 'ax-btn', onclick: () => {
             if (safe(() => p.advanceJob(id), false)) { this.close(); }
             else { this.ctx.sfx('ui_error'); this.ctx.log('You cannot advance right now.', '#ff9b9b'); }
           },
-        }, j.tier === 2 ? `Declare ${BRANCH_NAMES[j.branch] ?? j.name}` : `Begin Year ${j.tier}`)));
+        }, j.tier === 2 ? `Declare ${BRANCH_NAMES[j.branch] ?? j.name}` : j.tier >= 5 ? 'Begin your Fellowship' : `Begin Year ${j.tier}`)));
     }
     if (!cards.childElementCount) {
       const next = cur ? safe(() => Registry.jobs(), [] as JobDef[]).filter(j => j.parent === cur.id) : [];
       const lvl = next.length ? Math.min(...next.map(j => j.requiredLevel)) : 0;
-      cards.appendChild(h('div', { class: 'ax-empty-note' },
-        next.length ? (st.level < lvl ? `Your Year-end Exam opens at level ${lvl}. Keep studying!` : `Speak with ${examinerName(next[0])} on campus to sit your exam.`)
-          : st.quests[GRADUATION_QUEST_ID]?.status === 'turned_in'
-            ? 'You have graduated — the Academy has nothing left to teach you. (For now.)'
-            : 'This is your final Year. Your Final Thesis awaits — speak with Headmistress Maelis.'));
+      let note: string;
+      if (fellowship && !next.length) note = 'You are a Fellow of the Academy. There are no more exams — only the stars, and whatever waits beyond them.';
+      else if (fellowship && !graduated) note = 'This is your final Year. Your Final Thesis awaits — speak with Headmistress Maelis.';
+      else if (fellowship) note = st.level < lvl
+        ? `You have graduated! The Fellowship (Year 5) invites graduates at level ${lvl}.`
+        : `The Fellowship is waiting. Speak with ${examinerName(next[0])} on campus to sit your Fellowship Exam.`;
+      else if (next.length) note = st.level < lvl ? `Your Year-end Exam opens at level ${lvl}. Keep studying!` : `Speak with ${examinerName(next[0])} on campus to sit your exam.`;
+      else note = graduated ? 'You have graduated — the Academy has nothing left to teach you. (For now.)'
+        : 'This is your final Year. Your Final Thesis awaits — speak with Headmistress Maelis.';
+      cards.appendChild(h('div', { class: 'ax-empty-note' }, note));
     }
     this.body.replaceChildren(
       h('div', { class: 'ax-help-intro' }, !cur ? '' : declaring
         ? `Year 1 is over, ${st.name}. Declare the School you will study for the rest of your time at the Academy — this choice is permanent.`
-        : `You are a Year ${cur.tier} ${cur.name}. Pass this exam to begin your next Year.`),
+        : fellowship
+          ? `You are a Year ${cur.tier} ${cur.name}${cur.tier >= 5 ? ', a Fellow of the Academy' : ''}. ${cur.tier >= 5 ? 'Your studies are your own now.' : 'Graduates who pass their Professor\'s Fellowship Exam begin Year 5.'}`
+          : `You are a Year ${cur.tier} ${cur.name}. Pass this exam to begin your next Year.`),
       cards);
   }
 }

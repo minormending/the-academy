@@ -8,6 +8,7 @@ import type { VfxFn, VfxOptions } from '../core/types';
 import { generateFireTextures as genTextures, FT } from './fire/textures';
 import { generateFireSheets, fpx, fpxLoop } from './fire/sheets';
 import { registerFirePhase9Vfx } from './fire/vfx9';
+import { registerFireYear5Vfx } from './fire/vfx5';
 import {
   ADD, NORMAL, C, FIRE_TINTS, HOT_TINTS, ALIGN, img, tk, loop, shake, shock, flash, flare,
   burst, stream, attachTrail, tongue, zone,
@@ -1087,5 +1088,7 @@ export function registerFireVfx(): void {
   registerVfx('fire_cauterize_area', cauterizeArea);
   // Phase 9 — eight more spells (src/skills/fire/vfx9.ts)
   registerFirePhase9Vfx(registerVfx, { sparks, embers, smokePuff, hitFx, castFx, explosion, groundBelow, implode, scorchMark });
+  // Year 5 Fellowship — eight Pyre Archon spells (src/skills/fire/vfx5.ts)
+  registerFireYear5Vfx(registerVfx, { sparks, embers, smokePuff, hitFx, castFx, explosion, groundBelow, implode, scorchMark });
 }
 

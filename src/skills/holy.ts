@@ -3,6 +3,7 @@
 // Max levels deliberately exceed the SP a student earns per year (3/level): builds are choices.
 import type { AttackSpec, IconSpec, SkillDef, StatusSpec } from '../core/types';
 import { castField, castHeal, castHolyStep, castRestore } from './holy/casts';
+import { HOLY_Y5 } from './holy/year5';
 import { castDawnRay, castDawnRush, castMartyr, castRetribution, castSanctuary } from './holy/phase9';
 
 /** Linear interpolation across levels 1..max (clamped). */
@@ -463,4 +464,5 @@ export const HOLY_SKILLS: SkillDef[] = [
       durationMs: L(10000, 15000, SANCT_MAX)(lv), poolPct: L(0.25, 0.45, SANCT_MAX)(lv), burst: SANCT_BURST,
     }),
   },
+  ...HOLY_Y5,
 ];

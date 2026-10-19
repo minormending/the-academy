@@ -4,6 +4,7 @@
 import type { AttackSpec, IconSpec, SkillContext, SkillDef, StatusSpec } from '../core/types';
 import { playVfx } from '../core/vfx';
 import { FIRE_Y2_EXTRA, FIRE_Y3_EXTRA, FIRE_Y4_EXTRA } from './fire/phase9';
+import { FIRE_Y5 } from './fire/year5';
 
 /** Linear interpolation across levels 1..max (clamped). */
 const L = (a: number, b: number, max: number) => (lv: number) => a + ((b - a) * (Math.min(Math.max(lv, 1), max) - 1)) / (max - 1);
@@ -376,4 +377,5 @@ export const FIRE_SKILLS: SkillDef[] = [
     onCast: castCauterize,
   },
   ...FIRE_Y4_EXTRA,
+  ...FIRE_Y5,
 ];

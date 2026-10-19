@@ -11,6 +11,7 @@ import {
   C, GOLD_TINTS, LIGHT_TINTS, HEAL_TINTS, rnd, img, tweenOut, loop, counter, shake, flash, shock, burst, stream,
   attachTrail, zone, motes, sparks,
 } from './holy/fx';
+import { registerHolyY5Vfx } from './holy/vfx5';
 
 function buildHoly(scene: Phaser.Scene): void {
   generateHolyProceduralTextures(scene);
@@ -1139,4 +1140,6 @@ export function registerHolyVfx(): void {
   reg('holy_sanctuary_burst', sanctuaryBurst);
   reg('holy_dawn_beam', dawnBeam);
   reg('holy_dawn_hit', dawnHit);
+
+  registerHolyY5Vfx(reg); // Year 5 — Light Archon
 }

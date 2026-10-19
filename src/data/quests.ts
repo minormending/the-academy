@@ -6,7 +6,7 @@ import { expToNext } from '../core/balance';
 /** Quest EXP reward as a fraction of the EXP needed for `level`. */
 const xp = (level: number, frac: number) => Math.round(expToNext(level) * frac);
 
-/** Year-end Exam that must be turned in before advancing to a job (Year 3 and Year 4 jobs). */
+/** Year-end Exam that must be turned in before advancing to a job (Year 3 and Year 4 jobs, and the Year 5 Fellowship Exams). */
 export const JOB_ADVANCEMENT_QUESTS: Partial<Record<JobId, string>> = {
   flamebinder: 'q_job_flamebinder',
   inferno_sage: 'q_job_inferno_sage',
@@ -18,6 +18,12 @@ export const JOB_ADVANCEMENT_QUESTS: Partial<Record<JobId, string>> = {
   hierophant: 'q_job_hierophant',
   necromancer: 'q_job_necromancer',
   umbral_sage: 'q_job_umbral_sage',
+  // Year 5 — Fellowship Exams (postgraduate, lv 55)
+  pyre_archon: 'q_job_pyre_archon',
+  winter_archon: 'q_job_winter_archon',
+  storm_archon: 'q_job_storm_archon',
+  light_archon: 'q_job_light_archon',
+  night_archon: 'q_job_night_archon',
 };
 
 export const JOB_QUEST_IDS = new Set(Object.values(JOB_ADVANCEMENT_QUESTS));
@@ -55,6 +61,7 @@ function bountyQuest(b: FieldBounty): QuestDef {
 /** Rewards are identical for every school's exam of the same Year. */
 const YEAR3_REWARDS: QuestDef['rewards'] = { exp: xp(25, 0.3), mesos: 3000, items: [{ itemId: 'white_potion', qty: 15 }] };
 const YEAR4_REWARDS: QuestDef['rewards'] = { exp: xp(40, 0.3), mesos: 12000, items: [{ itemId: 'elixir', qty: 5 }] };
+const YEAR5_REWARDS: QuestDef['rewards'] = { exp: xp(55, 0.3), mesos: 30000, items: [{ itemId: 'power_elixir', qty: 5 }] };
 
 export const QUESTS: QuestDef[] = [
   // ───────────── Year 3 Exams (lv 25, collect) ─────────────
@@ -119,6 +126,39 @@ export const QUESTS: QuestDef[] = [
     description: 'Final exam. An Umbral Sage wears the night itself, and the night is fletched from stolen wings. Bring down 30 Storm Harpies on Stormspire Peak and bring Professor Morvane 10 Harpy Feathers.',
     objectives: [{ kind: 'kill', monsterId: 'storm_harpy', count: 30 }, { kind: 'collect', itemId: 'harpy_feather', count: 10 }],
     rewards: YEAR4_REWARDS,
+  },
+
+  // ───────────── Year 5 Fellowship Exams (lv 55, kill + collect Star Dust) ─────────────
+  // Monsters and star_dust come from the Year 5 maps/monsters/items agents (astral_observatory, void_rift).
+  {
+    id: 'q_job_pyre_archon', name: 'Fellowship Exam: Moths to the Pyre', giver: 'pyra', minLevel: 55, requiredJobBranch: 'fire',
+    description: 'Fellowship exam. The Star Moths of the Astral Observatory drink starlight and have never met a flame they could not resist. Be that flame. Burn 25 of them and bring Professor Pyra 8 pinches of Star Dust from their ashes.',
+    objectives: [{ kind: 'kill', monsterId: 'star_moth', count: 25 }, { kind: 'collect', itemId: 'star_dust', count: 8 }],
+    rewards: YEAR5_REWARDS,
+  },
+  {
+    id: 'q_job_winter_archon', name: 'Fellowship Exam: The Long Winter', giver: 'glacius', minLevel: 55, requiredJobBranch: 'ice',
+    description: 'Fellowship exam. Rift Stalkers hunt the Void Rift by moving faster than the eye. Nothing moves faster than a true winter. Still 25 of them for good and bring Professor Glacius 8 pinches of Star Dust, frozen in place.',
+    objectives: [{ kind: 'kill', monsterId: 'rift_stalker', count: 25 }, { kind: 'collect', itemId: 'star_dust', count: 8 }],
+    rewards: YEAR5_REWARDS,
+  },
+  {
+    id: 'q_job_storm_archon', name: 'Fellowship Exam: Lightning in the Glass', giver: 'voltis', minLevel: 55, requiredJobBranch: 'lightning',
+    description: 'Fellowship exam. Shard Horrors are what the Void Rift dreams when it has nightmares, and they are made of glass. Glass shatters beautifully under a proper bolt. Break 25 of them and bring Professor Voltis 8 pinches of Star Dust.',
+    objectives: [{ kind: 'kill', monsterId: 'shard_horror', count: 25 }, { kind: 'collect', itemId: 'star_dust', count: 8 }],
+    rewards: YEAR5_REWARDS,
+  },
+  {
+    id: 'q_job_light_archon', name: 'Fellowship Exam: Light in the Null', giver: 'seraphine', minLevel: 55, requiredJobBranch: 'holy',
+    description: 'Fellowship exam. Null Wisps are holes in the world shaped like lanterns, and they drift out of the Void Rift looking for light to swallow. Give them more than they can hold. Dispel 25 and bring Professor Seraphine 8 pinches of Star Dust for the chapel windows.',
+    objectives: [{ kind: 'kill', monsterId: 'null_wisp', count: 25 }, { kind: 'collect', itemId: 'star_dust', count: 8 }],
+    rewards: YEAR5_REWARDS,
+  },
+  {
+    id: 'q_job_night_archon', name: 'Fellowship Exam: Eclipse the Watchers', giver: 'morvane', minLevel: 55, requiredJobBranch: 'shadow',
+    description: 'Fellowship exam. The Astral Sentinels have watched the Observatory since before the Academy had a name. A Night Archon is the one thing they cannot see coming. Put out 25 of their eyes and bring Professor Morvane 8 pinches of Star Dust. She will not say what it is for.',
+    objectives: [{ kind: 'kill', monsterId: 'astral_sentinel', count: 25 }, { kind: 'collect', itemId: 'star_dust', count: 8 }],
+    rewards: YEAR5_REWARDS,
   },
 
   // ───────────── Assignments (side quests) ─────────────

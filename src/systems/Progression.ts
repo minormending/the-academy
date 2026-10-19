@@ -10,7 +10,7 @@ import { bus } from '../core/events';
 import { AP_PER_LEVEL, SP_PER_LEVEL, expToNext } from '../core/balance';
 import { MAX_LEVEL, TOWN_MAP } from '../core/constants';
 import { JOB_ADVANCEMENT_QUESTS } from '../data/quests';
-import { SCHOOL_NAME, SCHOOL_PROFESSOR, isSchool, yearOfTier } from '../data/jobs';
+import { FELLOWSHIP_YEAR, FINAL_YEAR, SCHOOL_NAME, SCHOOL_PROFESSOR, isSchool, yearOfTier } from '../data/jobs';
 import { computeDerived, deathExpLoss } from './progression/stats';
 import { newUid, repairState, writeSave } from './SaveSystem';
 
@@ -132,7 +132,10 @@ export class Progression implements IProgression {
         let text = 'You are ready to declare a School! Speak with Headmistress Maelis on campus.';
         if (job.tier > 1) {
           const prof = isSchool(job.branch) ? Registry.npc(SCHOOL_PROFESSOR[job.branch])?.name : undefined;
-          text = `Your Year ${yearOfTier(job.tier + 1)} Exam is open! See ${prof ?? 'your Professor'} on campus.`;
+          const nextYear = yearOfTier(job.tier + 1);
+          text = nextYear >= FELLOWSHIP_YEAR
+            ? `The Fellowship is open to you! See ${prof ?? 'your Professor'} on campus for your Fellowship Exam.`
+            : `Your Year ${nextYear} Exam is open! See ${prof ?? 'your Professor'} on campus.`;
         }
         bus.emit('ui:log', { text, color: LOG.quest });
       }
@@ -338,7 +341,7 @@ export class Progression implements IProgression {
       .map(j => j.id);
   }
 
-  /** Validates parent + level (the tier-3/4 trial quests are gated by NPC scripts / availableAdvancements). */
+  /** Validates parent + level (the tier-3/4/5 exam quests are gated by NPC scripts / availableAdvancements). */
   advanceJob(job: JobId): boolean {
     const def = Registry.job(job);
     const s = this.state;
@@ -351,7 +354,9 @@ export class Progression implements IProgression {
     s.mp = d.maxMp;
     const year = yearOfTier(def.tier);
     const school = isSchool(def.branch) ? `the ${SCHOOL_NAME[def.branch]} School` : '';
-    const text = `You are now a Year ${year} student${school ? ` of ${school}` : ''}: ${def.name}!${year >= 4 ? ' Your Final Thesis awaits.' : ''} (+${JOB_ADVANCE_BONUS_SP} SP)`;
+    const text = year >= FELLOWSHIP_YEAR
+      ? `You are now a Fellow${school ? ` of ${school}` : ''}: ${def.name}! Welcome to Year 5. (+${JOB_ADVANCE_BONUS_SP} SP)`
+      : `You are now a Year ${year} student${school ? ` of ${school}` : ''}: ${def.name}!${year >= FINAL_YEAR ? ' Your Final Thesis awaits.' : ''} (+${JOB_ADVANCE_BONUS_SP} SP)`;
     bus.emit('ui:log', { text, color: LOG.good });
     bus.emit('player:job', { job });
     this.refreshQuests();

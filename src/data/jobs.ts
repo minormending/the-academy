@@ -100,17 +100,34 @@ export const JOBS: JobDef[] = [
     description: 'Year 4 · Graduate of Shadow Magic. They walk where light forgets to reach. Umbral Sages command a legion of shades and drown whole fields in night.',
     look: look({ robe: 0x120d1a, robeTrim: 0xb48cff, hat: 0x6a3fc2, hatTrim: 0x7dff5a, staffGem: 0x7dff5a, hatStyle: 'crown', hair: 0xf2f2f2, skin: 0xe4d6cc }),
   },
-  // ── Year 5: the Fellowship (postgraduate) ──
-  { id: 'pyre_archon', name: 'Pyre Archon', branch: 'fire', tier: 5, requiredLevel: JOB_LEVELS[5], parent: 'inferno_sage',
-    description: 'Year 5 · Fellowship of Fire.', look: look({ robe: 0x7a1408, robeTrim: 0xffd447, hat: 0xffd447, hatTrim: 0xff5a1f, staffGem: 0xfff0a0, hatStyle: 'crown', hair: 0xff7a3d }) },
-  { id: 'winter_archon', name: 'Winter Archon', branch: 'ice', tier: 5, requiredLevel: JOB_LEVELS[5], parent: 'glacial_sage',
-    description: 'Year 5 · Fellowship of Ice.', look: look({ robe: 0xeaf6ff, robeTrim: 0x7fd8ff, hat: 0xbfe9ff, hatTrim: 0xffffff, staffGem: 0xdff8ff, hatStyle: 'crown', hair: 0xf2fbff }) },
-  { id: 'storm_archon', name: 'Storm Archon', branch: 'lightning', tier: 5, requiredLevel: JOB_LEVELS[5], parent: 'tempest_sage',
-    description: 'Year 5 · Fellowship of Storms.', look: look({ robe: 0x180a3a, robeTrim: 0xfff36b, hat: 0xfff36b, hatTrim: 0x9f6bff, staffGem: 0xffffff, hatStyle: 'crown', hair: 0xe8e0ff }) },
-  { id: 'light_archon', name: 'Light Archon', branch: 'holy', tier: 5, requiredLevel: JOB_LEVELS[5], parent: 'hierophant',
-    description: 'Year 5 · Fellowship of Light.', look: look({ robe: 0xfffdf4, robeTrim: 0xffc83d, hat: 0xffe27a, hatTrim: 0x7fe7ff, staffGem: 0xffffff, hatStyle: 'crown', hair: 0xfff0c0 }) },
-  { id: 'night_archon', name: 'Night Archon', branch: 'shadow', tier: 5, requiredLevel: JOB_LEVELS[5], parent: 'umbral_sage',
-    description: 'Year 5 · Fellowship of Shadow.', look: look({ robe: 0x07050c, robeTrim: 0x7dff5a, hat: 0x3a1f6e, hatTrim: 0x7dff5a, staffGem: 0xb48cff, hatStyle: 'crown', hair: 0x101010, skin: 0xd8cfc8 }) },
+  // ── Year 5: the Fellowship (postgraduate, lv 55) ──
+  // Graduation stays at Commencement; the Fellowship is the Academy's invitation back. Looks go one step past Year 4:
+  // white-gold or starlit trim on the deepest robe of each School, a crown, and a gem that is nearly pure light.
+  {
+    id: 'pyre_archon', name: 'Pyre Archon', branch: 'fire', tier: 5, requiredLevel: JOB_LEVELS[5], parent: 'inferno_sage',
+    description: 'Year 5 · Fellowship of Fire. The sunrise kept a vigil, and it chose you. Pyre Archons burn stars down to their cores and call the fire that was lit before the world was.',
+    look: look({ robe: 0x5c0a06, robeTrim: 0xfff0a0, hat: 0xffe066, hatTrim: 0xff4a12, staffGem: 0xffffff, hatStyle: 'crown', hair: 0xff7a3d }),
+  },
+  {
+    id: 'winter_archon', name: 'Winter Archon', branch: 'ice', tier: 5, requiredLevel: JOB_LEVELS[5], parent: 'glacial_sage',
+    description: 'Year 5 · Fellowship of Ice. The last winter, the one that does not end. Winter Archons freeze light in mid-flight and hold whole rifts still while the world catches its breath.',
+    look: look({ robe: 0xeaf6ff, robeTrim: 0x4fc3ff, hat: 0xbfe9ff, hatTrim: 0xffffff, staffGem: 0xf2fdff, hatStyle: 'crown', hair: 0xf2fbff }),
+  },
+  {
+    id: 'storm_archon', name: 'Storm Archon', branch: 'lightning', tier: 5, requiredLevel: JOB_LEVELS[5], parent: 'tempest_sage',
+    description: 'Year 5 · Fellowship of Storms. The sky asks their permission. Storm Archons write in lightning across the stars, and the thunder arrives a little late, out of respect.',
+    look: look({ robe: 0x120630, robeTrim: 0xfff36b, hat: 0xfff36b, hatTrim: 0x9f6bff, staffGem: 0xffffff, hatStyle: 'crown', hair: 0xe8e0ff }),
+  },
+  {
+    id: 'light_archon', name: 'Light Archon', branch: 'holy', tier: 5, requiredLevel: JOB_LEVELS[5], parent: 'hierophant',
+    description: 'Year 5 · Fellowship of Light. A dawn that walks. Light Archons mend what the Void unmakes and shine into places that have never once been lit.',
+    look: look({ robe: 0xfffdf4, robeTrim: 0xffc83d, hat: 0xffe27a, hatTrim: 0x7fe7ff, staffGem: 0xffffff, hatStyle: 'crown', hair: 0xfff0c0 }),
+  },
+  {
+    id: 'night_archon', name: 'Night Archon', branch: 'shadow', tier: 5, requiredLevel: JOB_LEVELS[5], parent: 'umbral_sage',
+    description: 'Year 5 · Fellowship of Shadow. The dark between the stars, given a name and a seat at the faculty table. Night Archons command what the Rift is afraid of.',
+    look: look({ robe: 0x07050c, robeTrim: 0x7dff5a, hat: 0x2a1452, hatTrim: 0x7dff5a, staffGem: 0xd0b0ff, hatStyle: 'crown', hair: 0x101010, skin: 0xd8cfc8 }),
+  },
 ];
 
 /** The five Schools a student can declare in Year 2 (job branches other than 'none'). */
@@ -127,7 +144,7 @@ export const SCHOOL_NAME: Record<School, string> = {
   fire: 'Fire', ice: 'Ice', lightning: 'Lightning', holy: 'Holy', shadow: 'Shadow',
 };
 
-/** NPC id of the Professor who heads each School (runs its Year 3/4 Exams). */
+/** NPC id of the Professor who heads each School (runs its Year 3/4 Exams and Year 5 Fellowship Exam). */
 export const SCHOOL_PROFESSOR: Record<School, string> = {
   fire: 'pyra', ice: 'glacius', lightning: 'voltis', holy: 'seraphine', shadow: 'morvane',
 };
@@ -136,5 +153,9 @@ export function isSchool(b: string | undefined | null): b is School {
   return !!b && (SCHOOLS as string[]).includes(b);
 }
 
-/** School Year for a job tier (Year 1 = Apprentice … Year 4 = graduate title). */
-export function yearOfTier(tier: number): number { return Math.max(1, Math.min(4, tier | 0)); }
+/** Last undergraduate Year (graduation is Commencement, a story step, not a job). */
+export const FINAL_YEAR = 4;
+/** Postgraduate Fellowship Year (tier 5, lv 55). */
+export const FELLOWSHIP_YEAR = 5;
+/** School Year for a job tier (Year 1 = Apprentice … Year 4 = graduate title, Year 5 = Fellowship). */
+export function yearOfTier(tier: number): number { return Math.max(1, Math.min(FELLOWSHIP_YEAR, tier | 0)); }

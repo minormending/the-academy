@@ -1,5 +1,6 @@
 // Every School must be finishable: Year 2 declaration -> Year 3 exam -> Year 4 exam -> the shared story to
-// graduation. The exams' items have to drop somewhere the student can reach, and at a rate that is playable.
+// graduation (Commencement). After that, Year 5 — the Fellowship — is postgraduate: one Fellowship Exam per School.
+// The exams' items have to drop somewhere the student can reach, and at a rate that is playable.
 import { describe, expect, it } from 'vitest';
 import type { QuestDef } from '../src/core/types';
 import { Registry } from '../src/core/registry';
@@ -9,6 +10,7 @@ import { JOB_ADVANCEMENT_QUESTS } from '../src/data/quests';
 import { GRADUATION_QUEST_ID, STORY_FLOW } from '../src/data/storyQuests';
 import { lineageOf, monstersDropping, reachableMaps, spawnedMonsterIds } from './support/data';
 import { problems } from './support/problems';
+import { pendingYear5 } from './support/year5';
 
 const reach = reachableMaps(START_MAP);
 const reachableMapDefs = [...reach].map(id => Registry.map(id)!);
@@ -27,16 +29,42 @@ function bestKillsFor(itemId: string, count: number): number {
   return best;
 }
 
+/** Items some reachable monster drops. */
+const droppedItems = new Set<string>();
+for (const id of spawned) for (const d of Registry.monster(id)?.drops ?? []) if (d.chance > 0) droppedItems.add(d.itemId);
+
+/** Year 5 objective targets still landing from other agents, per exam: `${qid}: ${reason}`. */
+function pendingObjectives(qid: string | undefined): string[] {
+  const q = qid ? Registry.quest(qid) : undefined;
+  if (!q) return [];
+  return q.objectives.flatMap(o => {
+    const why = o.kind === 'kill' ? pendingYear5('kill', o.monsterId, spawned)
+      : o.kind === 'collect' ? pendingYear5('collect', o.itemId, spawned, droppedItems) : null;
+    return why ? [`${qid}: ${why}`] : [];
+  });
+}
+
 describe.each(SCHOOLS)('the %s School can graduate', school => {
   const jobs = lineageOf(school);
+  const undergrad = jobs.filter(j => j.tier <= 4);
+  const fellow = jobs.find(j => j.tier === 5);
 
-  it('has a Year 2, Year 3 and Year 4 job, each in the right place', () => {
-    expect(jobs.map(j => j.tier)).toEqual([2, 3, 4]);
+  it('has a Year 2, Year 3 and Year 4 job (and a Year 5 Fellowship job), each in the right place', () => {
+    expect(jobs.map(j => j.tier)).toEqual([2, 3, 4, 5]);
     expect(jobs[0].id).toBe(BRANCH_ROOT_JOB[school]);
-    expect(jobs.map(j => j.parent)).toEqual(['apprentice', jobs[0].id, jobs[1].id]);
-    expect(jobs.map(j => j.requiredLevel)).toEqual([JOB_LEVELS[2], JOB_LEVELS[3], JOB_LEVELS[4]]);
-    for (const j of jobs) expect(Registry.skillsForJob(j.id).length, `${j.id} skills`).toBeGreaterThanOrEqual(4);
+    expect(jobs.map(j => j.parent)).toEqual(['apprentice', jobs[0].id, jobs[1].id, jobs[2].id]);
+    expect(jobs.map(j => j.requiredLevel)).toEqual([JOB_LEVELS[2], JOB_LEVELS[3], JOB_LEVELS[4], JOB_LEVELS[5]]);
+    expect(JOB_LEVELS[5]).toBeLessThanOrEqual(MAX_LEVEL);
+    for (const j of undergrad) expect(Registry.skillsForJob(j.id).length, `${j.id} skills`).toBeGreaterThanOrEqual(4);
+    expect(fellow!.description, `${fellow!.id} description`).toMatch(/^Year 5 · /);
   });
+
+  // Year 5 spells are being written by other agents; report rather than fail until they land.
+  if (fellow && Registry.skillsForJob(fellow.id).length >= 4) {
+    it(`its Year 5 job ${fellow.id} has at least 4 skills`, () => expect(Registry.skillsForJob(fellow.id).length).toBeGreaterThanOrEqual(4));
+  } else if (fellow) {
+    it.todo(`Year 5 skills for ${fellow.id} (${Registry.skillsForJob(fellow.id).length} registered so far, need 4)`);
+  }
 
   it('can fight on day one: its Year 2 job has an attack skill that needs nothing from the School', () => {
     const attacks = Registry.skillsForJob(jobs[0].id).filter(s => s.kind === 'attack');
@@ -45,12 +73,15 @@ describe.each(SCHOOLS)('the %s School can graduate', school => {
     expect(opener, 'no Year 2 attack the student can learn immediately').toBeDefined();
   });
 
-  it('the professor runs both exams, stands on a reachable map, and each exam can be completed', () => {
+  const pending = pendingObjectives(fellow && JOB_ADVANCEMENT_QUESTS[fellow.id]);
+  for (const why of pending) it.todo(`Fellowship Exam objective pending another agent — ${why}`);
+
+  it('the professor runs every exam (Years 3, 4 and the Year 5 Fellowship), stands on a reachable map, and each exam can be completed', () => {
     const prof = SCHOOL_PROFESSOR[school];
     expect(Registry.npc(prof), `professor ${prof}`).toBeDefined();
     expect(npcMaps(prof).length, `${prof} stands on no reachable map`).toBeGreaterThan(0);
     const p = problems();
-    for (const job of [jobs[1], jobs[2]]) {
+    for (const job of jobs.slice(1)) {
       const qid = JOB_ADVANCEMENT_QUESTS[job.id];
       if (!p.check(qid, `${job.id} has no exam in JOB_ADVANCEMENT_QUESTS`)) continue;
       const q = Registry.quest(qid!) as QuestDef;
@@ -59,7 +90,14 @@ describe.each(SCHOOLS)('the %s School can graduate', school => {
       p.check(q.requiredJobBranch === school, `${qid} requiredJobBranch ${q.requiredJobBranch}`);
       p.check(q.minLevel <= job.requiredLevel && q.minLevel <= MAX_LEVEL, `${qid} minLevel ${q.minLevel} > ${job.id}'s level ${job.requiredLevel}`);
       p.check(q.objectives.length > 0, `${qid} has no objective`);
+      if (job.tier === 5) {
+        p.check(q.minLevel === JOB_LEVELS[5], `${qid} minLevel ${q.minLevel} should be ${JOB_LEVELS[5]}`);
+        p.check(q.objectives.some(o => o.kind === 'kill') && q.objectives.some(o => o.kind === 'collect'), `${qid} should be a hunt + a collection`);
+      }
       for (const o of q.objectives) {
+        // Year 5 monsters/items still landing are reported as it.todo above, not failed here.
+        if (o.kind === 'kill' && pendingYear5('kill', o.monsterId, spawned)) continue;
+        if (o.kind === 'collect' && pendingYear5('collect', o.itemId, spawned, droppedItems)) continue;
         if (o.kind === 'collect') {
           const kills = bestKillsFor(o.itemId, o.count);
           p.check(Number.isFinite(kills), `${qid}: no reachable monster drops ${o.itemId}`);

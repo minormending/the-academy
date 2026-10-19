@@ -43,20 +43,21 @@ export function fmtModifier(m: StatModifier): string {
   return `${label} ${parts.join(' & ') || '+0'}`;
 }
 
-/** The Academy: every job tier is a school Year (1 = Apprentice core curriculum, 4 = graduate title). */
+/** The Academy: every job tier is a school Year (1 = Apprentice core curriculum, 4 = graduate title, 5 = postgraduate Fellowship). */
 export function jobYear(id: string | undefined): number {
   if (!id) return 1;
   return safe(() => Registry.job(id as JobDef['id'])?.tier, undefined) ?? 1;
 }
-/** "Year 2 · Pyromancer" */
+/** "Year 2 · Pyromancer" / "Year 5 Fellow · Pyre Archon" */
 export function yearJobLabel(id: string | undefined): string {
-  return `Year ${jobYear(id)} · ${jobName(id)}`;
+  const year = jobYear(id);
+  return `Year ${year}${year >= 5 ? ' Fellow' : ''} · ${jobName(id)}`;
 }
 /** "School of Fire" (Apprentices have not declared a School yet). */
 export function schoolName(branch: Branch): string {
   return branch === 'none' ? 'Core Curriculum' : `School of ${BRANCH_NAMES[branch] ?? branch} Magic`;
 }
-/** Who runs the exam that leads into `job`: the Headmistress declares Schools (Year 2); each School's Professor runs Years 3–4. */
+/** Who runs the exam that leads into `job`: the Headmistress declares Schools (Year 2); each School's Professor runs Years 3–4 and the Year 5 Fellowship Exam. */
 export function examinerName(job: JobDef | undefined): string {
   const head = npcName('elder_maelis', 'Headmistress Maelis');
   if (!job || job.tier <= 2 || !isSchool(job.branch)) return head;

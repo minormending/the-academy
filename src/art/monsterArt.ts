@@ -7,6 +7,7 @@
 // Art is drawn facing RIGHT (+x); entities flip with setFlipX.
 import type Phaser from 'phaser';
 import { MONSTERS } from '../data/monsters';
+import { RAID_BOSSES } from '../data/raidBosses';
 import { PIXEL_SCALE } from '../core/constants';
 import { sourceImage } from './assets';
 import { timed } from './perf';
@@ -2132,6 +2133,37 @@ function buildPixelSpecs(): Record<string, PixelSpec> {
         '..YW...YW.',
         '...YW...YW',
       ], pal: { Y: 0xfff27a, W: 0xffffff } }] },
+    // ── raid boss (archon_spire) ──
+    // The Unwritten: the Lich Archon's wizard at ×4 bleached to a blank parchment ghost with ink-black shadows,
+    // a blank open book hovering over its head and ink dripping from the hem.
+    the_unwritten: { scale: 4, flip: true, outline: 0x1a1430,
+      recolor: gradientMap([0x1a1430, 0x4a4060, 0xb8ae98, 0xe8dcc0, 0xfffaf0]),
+      idle: { frames: wizard(...range(0, 4)), rate: 6 }, move: { frames: wizard(...range(0, 4)), rate: 8 },
+      attack: { frames: wizard(...range(5, 14)), rate: 14 },
+      overlays: [
+        { at: 'peak', dy: -3, rows: [
+          '.kkkkk.kkkkk.',
+          'kWWWWWkWWWWWk',
+          'kWpWpWkWpWWWk',
+          'kWWWWWkWWWpWk',
+          'kWpWWWkWWWWWk',
+          'kWWWWWkWWWWWk',
+          '.kkkkkkkkkkk.',
+          '......k......',
+        ], pal: { k: 0x1a1430, W: 0xfffaf0, p: 0xd8ccb0 }, skip: ['die'] },
+        { at: 'anchor', dx: 0, dy: 0, rows: [
+          'k..k...k..k',
+          'k......k...',
+          '...k.......',
+        ], pal: { k: 0x1a1430 }, skip: ['die'] },
+      ] },
+    // Unwritten Page: the animated tome bleached to blank paper, with ink-slit eyes.
+    unwritten_page: { recolor: rampMap([0x4a4060, 0xb8ae98, 0xe8dcc0, 0xfffaf0], 0.2, 1),
+      outline: 0x1a1430,
+      idle: { frames: bob(icon(OPEN_BOOK, OPEN_BOOK, OPEN_BOOK, OPEN_BOOK), [0, 1, 2, 1]), rate: 6 },
+      move: { frames: bob(icon(OPEN_BOOK, SPELL_BOOK, OPEN_BOOK, SPELL_BOOK), [0, 2, 1, 3]), rate: 10 },
+      hit: icon(SPELL_BOOK)[0],
+      overlays: [{ at: 'anchor', dx: 1, dy: -11, rows: ['kk...kk', '.k...k.'], pal: { k: 0x1a1430 } }] },
   };
 }
 
@@ -2588,7 +2620,7 @@ let monsterIds: Set<string> | null = null;
 export function ensureMonsterTexture(scene: Phaser.Scene, id: string): boolean {
   const key = monsterTextureKey(id);
   if (scene.textures.exists(key)) return true;
-  monsterIds ??= new Set<string>([...MONSTERS.map(m => m.id), ...Object.keys(ART)]);
+  monsterIds ??= new Set<string>([...MONSTERS.map(m => m.id), ...RAID_BOSSES.map(m => m.id), ...Object.keys(ART)]);
   if (!monsterIds.has(id)) return false;   // unknown ids use the shared fallback sheet
   try {
     let sheet: MonsterSheet | null = null;

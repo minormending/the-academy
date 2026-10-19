@@ -7,6 +7,7 @@ import { Monster, type MonsterSpawnOptions } from '../entities/Monster';
 import { ensureMonsterTexture } from '../art/monsterArt';
 import { LichArchon } from '../entities/monsters/LichArchon';
 import { FIELD_BOSS_CLASSES } from '../entities/monsters/fieldBosses';
+import { Unwritten } from '../entities/monsters/Unwritten';
 import { FIELD_BOSSES, fieldBossTitle, isFieldBoss } from '../data/monsters';
 
 const DEFAULT_RESPAWN_MS = 7000;
@@ -133,7 +134,7 @@ export class MonsterManager implements IMonsterManager {
   private create(def: MonsterDef, x: number, y: number, opts: MonsterSpawnOptions): Monster | null {
     if (!this.map) return null;
     try {
-      const FB = FIELD_BOSS_CLASSES[def.id];
+      const FB = def.id === 'the_unwritten' ? Unwritten : FIELD_BOSS_CLASSES[def.id];
       const m = FB
         ? new FB(this.scene, this.services, def, x, y, this.map, opts)
         : def.id === 'lich_archon'

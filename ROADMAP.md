@@ -50,3 +50,15 @@ a resumed session (after a usage-limit pause) reads it to pick up exactly where 
 All phases `[x]`; `npx tsc --noEmit` clean; `npm run build` clean; a new player can go from the title screen
 through Year 1 → graduation (Lich Archon Final Thesis) in any of the five Schools without blockers or console
 errors; every asset credited; playable build published.
+
+## Phase 10: Year 5 — the Fellowship (in progress)
+
+- [x] Contract: tier 5 jobs `pyre_archon`, `winter_archon`, `storm_archon`, `light_archon`, `night_archon` (lv 55), cap 70,
+      music keys `astral`/`rift`, registries `src/data/items5.ts` + `src/data/raidBosses.ts`.
+- [ ] 8 Year-5 spells per School (`src/skills/<school>/year5.ts` + `vfx5.ts`).
+- [ ] Jobs polish, five Fellowship Exams, advancement UI, `tests/graduation.test.ts` accepts Year 5 (tests currently red until this lands — don't push before `npm test` is green).
+- [ ] Maps `astral_observatory` (from `arcane_sanctum:observatory`), `void_rift`, `archon_spire`.
+- [ ] Monsters `star_moth`, `astral_sentinel`, `rift_stalker`, `null_wisp`, `shard_horror`, `archon_knight`, `unwritten_page`;
+      raid boss `the_unwritten` (`src/entities/monsters/Unwritten.ts`); items in `items5.ts`; music `astral`, `rift`.
+- [ ] Integrate: `npx tsc --noEmit`, `npm test`, `npm run build`, browser smoke (warp to the new maps, cast Year-5 spells),
+      docs sync (README/handbook/devdocs: Year 5, cap 70, new zones), commit, push, verify the Pages deploy.

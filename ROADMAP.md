@@ -27,12 +27,14 @@ a resumed session (after a usage-limit pause) reads it to pick up exactly where 
   - [x] Trial Hall wave arena (+ GameScene wiring by lead)
   - [~] Pacing playthrough QA levels 1–25
 - [~] **6. Story & structure**
-  - Main questline across the four Years (Headmistress narrative: orientation day → declaring a School →
-    the Forbidden Wing mystery → the Lich Archon as the Final Thesis → graduation ceremony + credits screen).
-  - Year 1 orientation/tutorial assignment chain that teaches movement, casting, hotbar, pickup, NPCs.
-  - Academy Merit shop (spend Trial Hall merits: tomes, cosmetics/titles, rare accessories).
+  - [x] Main questline across the four Years (13 `story_` quests, all five Schools reach graduation).
+  - [x] Year 1 orientation/tutorial assignment chain.
+  - [x] Academy Merit shop (Bram → Merit Exchange; `buyWithMerits`).
+  - [ ] UI wiring: graduation credits screen on `quest:updated` for `GRADUATION_QUEST_ID` turned_in;
+        quest log hides locked story steps (`storyStepUnlocked`, `STORY_QUEST_IDS`); no banner flash for
+        talk-only steps that go straight to turned_in; rename `q_maelis_archon` to avoid name overlap.
 - [~] **7. Quality of life & polish** (save slots + controls in progress)
-  - Multiple save slots / character select (MapleStory-style), with per-slot School + Year shown.
+  - [x] Multiple save slots / character select (MapleStory-style), with per-slot School + Year shown.
   - Key rebinding + controls screen (keyboard + gamepad map), settings persistence.
   - Help/UI mentions gamepad; damage-number readability options; screen-shake toggle.
   - Pacing QA levels 25–50 (Years 3–4) per School; boss tuning pass.

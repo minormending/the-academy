@@ -286,7 +286,7 @@ export const LIGHTNING_SKILLS: SkillDef[] = [
       vfx: 'ltn_totem',
       attack: {
         pattern: 'chain',
-        damagePct: lin(130, 200, 15),
+        damagePct: lin(110, 170, 15),
         hits: () => 1,
         maxTargets: () => 3,
         range: 360,
@@ -382,7 +382,7 @@ export const LIGHTNING_SKILLS: SkillDef[] = [
   {
     id: 'ltn_arc_storm',
     name: 'Arc Storm',
-    description: 'A raging chain lightning that arcs through 6-8 foes, striking each twice and shocking them.',
+    description: 'A raging chain lightning that arcs through 4-6 foes, striking each twice and shocking them.',
     element: 'lightning',
     job: 'tempest_sage',
     kind: 'attack',
@@ -393,9 +393,9 @@ export const LIGHTNING_SKILLS: SkillDef[] = [
     sfx: 'cast_lightning',
     attack: {
       pattern: 'chain',
-      damagePct: lin(175, 250, 20),
+      damagePct: lin(150, 215, 20),
       hits: () => 2,
-      maxTargets: (lv) => 6 + Math.floor(lv / 10),
+      maxTargets: (lv) => 4 + Math.floor(lv / 10),
       range: 420,
       chain: { jumpRange: 240, jumpDelayMs: 70 },
       hitIntervalMs: 80,

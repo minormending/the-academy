@@ -235,7 +235,7 @@ export const HOLY_SKILLS: SkillDef[] = [
     icon: icon('wings', 0xffffff, 0xffd84a), requires: [{ skillId: 'holy_sacred_lance', level: 10 }],
     mpCost: Li(44, 66, 20), castTimeMs: 480, sfx: 'cast_holy',
     attack: {
-      pattern: 'projectile', damagePct: L(115, 180, 20), hits: K(3), maxTargets: K(4), range: 600,
+      pattern: 'projectile', damagePct: L(125, 190, 20), hits: K(3), maxTargets: K(4), range: 600,
       projectile: { speed: 780, radius: 16, pierce: true }, hitIntervalMs: 80,
       status: stun(20, [0.08, 0.16], [1000, 1500]),
       vfx: { cast: 'holy_angelray_cast', projectile: 'holy_angelray_proj', hit: 'holy_hit_big' },

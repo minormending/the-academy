@@ -34,21 +34,21 @@ export const ARENA_TUNING = {
   bossEvery: 5,
   /** Wave size: min(maxCount, baseCount + wave). */
   baseCount: 3,
-  maxCount: 12,
+  maxCount: 14,
   /** Target monster level = player level + levelBias + levelStep × floor((wave−1)/levelEvery), capped at +maxOffset. */
   levelBias: -2,
-  levelStep: 2,
+  levelStep: 3,
   levelEvery: 3,
   maxOffset: 10,
   /** Normal-monster HP grows by this fraction per wave (on top of level normalisation). */
-  hpPerWave: 0.05,
+  hpPerWave: 0.09,
   /** Field boss HP multiplier on the first boss wave, and the increase per later boss wave. */
-  bossHpFirst: 0.4,
-  bossHpStep: 0.15,
+  bossHpFirst: 0.5,
+  bossHpStep: 0.25,
   /** Elite HP multiplier (elites appear from wave 6, one more every 5 waves; boss-wave fallback ×2). */
-  eliteHp: 4,
+  eliteHp: 5,
   /** Spawn pacing within a wave. */
-  spawnIntervalMs: 160,
+  spawnIntervalMs: 120,
   /** Keep new spawns at least this far (px) from the player. */
   spawnClearance: 200,
 } as const;

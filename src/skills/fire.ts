@@ -187,7 +187,7 @@ export const FIRE_SKILLS: SkillDef[] = [
     icon: icon('explosion', 0xffe27a, 0xff4a10), requires: [{ skillId: 'fire_arrow', level: 10 }],
     mpCost: Li(28, 42, 20), castTimeMs: 480, sfx: 'cast_fire',
     attack: {
-      pattern: 'projectile', damagePct: L(245, 345, 20), hits: K(1), maxTargets: K(5), range: 620,
+      pattern: 'projectile', damagePct: L(285, 400, 20), hits: K(1), maxTargets: K(5), range: 620,
       area: { w: 210, h: 150 },
       projectile: { speed: 520, radius: 18, explodeArea: { w: 210, h: 150 } },
       status: burn(20, [0.35, 0.6], [4000, 6000], [14, 22]),

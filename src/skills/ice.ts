@@ -381,15 +381,16 @@ const glacialLance: SkillDef = {
   icon: icon('icicle', 0xd8f8ff, 0x4aa8ff),
   requires: [{ skillId: 'ice_lance', level: 10 }],
   mpCost: lerpR(45, 60, 20),
-  // No cooldown: it is the tier-4 primary (fire/lightning primaries have none); with an 800ms cd ice
-  // single-target DPS at lv48 measured ~1/3 of fire's.
+  // No cooldown: it is the tier-4 primary (fire/lightning primaries have none). A fanned volley shares one
+  // hit set (AttackRunner), so a target takes ONE lance per cast: the per-hit % carries the single-target
+  // damage and the per-lance target cap keeps the cone's AoE near fire's 6-target lance.
   castTimeMs: 480,
   sfx: 'cast_ice',
   attack: {
     pattern: 'projectile',
-    damagePct: lerp(150, 215, 20),
+    damagePct: lerp(350, 500, 20),
     hits: () => 1,
-    maxTargets: lv => 4 + Math.floor(lv / 5),
+    maxTargets: lv => 2 + Math.floor(lv / 10),
     range: 700,
     projectile: { speed: 860, radius: 15, pierce: true, count: () => 3, spreadDeg: 7 },
     status: chill([0.85, 1], [3500, 6000], [0.45, 0.65], 20),

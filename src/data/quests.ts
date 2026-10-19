@@ -53,7 +53,7 @@ function bountyQuest(b: FieldBounty): QuestDef {
 }
 
 /** Rewards are identical for every school's exam of the same Year. */
-const YEAR3_REWARDS: QuestDef['rewards'] = { exp: xp(25, 0.3), mesos: 3000, items: [{ itemId: 'orange_potion', qty: 20 }] };
+const YEAR3_REWARDS: QuestDef['rewards'] = { exp: xp(25, 0.3), mesos: 3000, items: [{ itemId: 'white_potion', qty: 15 }] };
 const YEAR4_REWARDS: QuestDef['rewards'] = { exp: xp(40, 0.3), mesos: 12000, items: [{ itemId: 'elixir', qty: 5 }] };
 
 export const QUESTS: QuestDef[] = [

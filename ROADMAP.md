@@ -41,7 +41,7 @@ a resumed session (after a usage-limit pause) reads it to pick up exactly where 
 - [ ] **8. Ship**
   - Full regression QA (all five Schools, every map, bosses, arena, saves) + Codex final review.
   - Performance pass (busy ultimates, load time), production build.
-  - README (how to play/run, credits), final CREDITS merge.
+  - [x] README (how to play/run, credits); [ ] final CREDITS merge (holy pack + boss notes).
   - Publish the production build as a playable private Artifact link for the user.
 
 ## Definition of finished

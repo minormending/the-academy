@@ -30,7 +30,7 @@ const RECKON_CURSE: AttackSpec = {
   vfx: { area: 'shd_reckon_curse', hit: 'shd_curse_hit' },
 };
 const LEDGER: AttackSpec = {
-  pattern: 'aoe_self', damagePct: L(320, 480, 10), hits: K(1), maxTargets: K(6), range: 170,
+  pattern: 'aoe_self', damagePct: L(400, 600, 10), hits: K(1), maxTargets: K(6), range: 170,
   area: { w: 340, h: 170, offsetX: 0 }, vfx: { area: 'shd_ledger_area', hit: 'shd_drain_hit' },
 };
 const RIFT_BURST: AttackSpec = {
@@ -94,7 +94,7 @@ function penumbraRift(ctx: SkillContext, lv: number): void {
 export const SHADOW_Y5: SkillDef[] = [
   {
     id: 'shd_eclipse_cascade', name: 'Eclipse Cascade', job: 'night_archon', element: 'shadow', kind: 'attack', maxLevel: 15,
-    description: 'Drag a wide field into eclipse and crush it three times over, leaving a lingering poison.',
+    description: 'Drag a wide field into eclipse and crush up to 8 foes three times over, leaving a lingering poison.',
     icon: icon('storm', 0xb48cff, 0xe6c15a), requires: [{ skillId: 'shd_death_scythe', level: 5 }],
     mpCost: Li(60, 86, 15), cooldownMs: Li(14000, 10000, 15), castTimeMs: 620, sfx: 'cast_shadow',
     attack: {
@@ -106,7 +106,7 @@ export const SHADOW_Y5: SkillDef[] = [
   },
   {
     id: 'shd_void_requiem', name: 'Void Requiem', job: 'night_archon', element: 'shadow', kind: 'attack', maxLevel: 15,
-    description: 'Fire a single funerary spear of void at one foe; cursed targets take 1.3x damage.',
+    description: 'Fire a funerary spear of void at one foe for heavy damage; cursed targets take 1.3× damage without losing their curse.',
     icon: icon('missile', 0xe6c15a, 0xb48cff), requires: [{ skillId: 'shd_oblivion_lance', level: 5 }],
     mpCost: Li(70, 96, 15), cooldownMs: Li(8000, 6000, 15), castTimeMs: 560, sfx: 'cast_shadow',
     attack: {
@@ -117,7 +117,7 @@ export const SHADOW_Y5: SkillDef[] = [
   },
   {
     id: 'shd_fellowship_of_night', name: 'Fellowship of Night', job: 'night_archon', element: 'shadow', kind: 'attack', maxLevel: 10,
-    description: 'Call the whole fellowship of the dead: a vast rain of gilded shadow spears that curses and shatters a battlefield.',
+    description: 'Call the fellowship of the dead: a vast rain of gilded shadow spears that curses and shatters up to 6 foes per impact.',
     icon: icon('scythe', 0xe6c15a, 0xb48cff), requires: [{ skillId: 'shd_night_tide', level: 5 }],
     mpCost: Li(95, 125, 10), cooldownMs: Li(150000, 120000, 10), castTimeMs: 1000, sfx: 'cast_shadow',
     attack: {
@@ -131,7 +131,7 @@ export const SHADOW_Y5: SkillDef[] = [
   },
   {
     id: 'shd_gravewarden', name: 'Gravewarden', job: 'night_archon', element: 'shadow', kind: 'summon', maxLevel: 15,
-    description: 'Raise a hulking warden that stays where it stands and shatters nearby foes with curse-laden pulses.',
+    description: 'Raise a hulking warden that holds its ground and shatters nearby foes with curse-laden pulses every 1.8s.',
     icon: icon('shield', 0xe6c15a, 0xdde6ba), requires: [{ skillId: 'shd_lich_shade', level: 3 }],
     mpCost: Li(70, 92, 15), cooldownMs: Li(70000, 55000, 15), castTimeMs: 700, sfx: 'cast_shadow',
     summon: {
@@ -146,14 +146,14 @@ export const SHADOW_Y5: SkillDef[] = [
   },
   {
     id: 'shd_reckoning', name: 'Reckoning', job: 'night_archon', element: 'shadow', kind: 'attack', maxLevel: 15,
-    description: 'Cash in your attrition: one sweep consumes poison for 2.2x damage, a second consumes curse for 2x.',
+    description: 'Cash in your attrition: one sweep consumes poison for 2.2× damage, a second consumes curse for 2×.',
     icon: icon('skull', 0xe6c15a, 0x9dce69), requires: [{ skillId: 'shd_hex_relay', level: 3 }],
     mpCost: Li(52, 74, 15), cooldownMs: Li(13000, 9500, 15), castTimeMs: 560, sfx: 'curse',
     attack: RECKON_POISON, onCast: reckoning,
   },
   {
     id: 'shd_faustian_ledger', name: 'Faustian Ledger', job: 'night_archon', element: 'shadow', kind: 'attack', maxLevel: 10,
-    description: 'Pay 10% of your maximum HP for a burst of shadow, then reclaim half of the damage dealt (up to 12-20% maximum HP).',
+    description: 'Pay 10% of your maximum HP for a burst of shadow, then reclaim half of the damage dealt (capped at 12-20% of maximum HP).',
     icon: icon('heart', 0xe6c15a, 0xc76c85), requires: [{ skillId: 'shd_soul_ward', level: 3 }],
     mpCost: Li(40, 56, 10), cooldownMs: Li(22000, 16000, 10), castTimeMs: 520, sfx: 'curse',
     attack: LEDGER, onCast: ledger,

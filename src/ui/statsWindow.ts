@@ -8,6 +8,7 @@ import { fmtNum, h, safe } from './dom';
 import { BRANCH_COLORS, SLOT_LABELS, derivedRows, itemTooltip, jobName, jobYear, schoolName } from './info';
 import { iconEl, portraitEl } from './uiIcons';
 import { UIWindow } from './window';
+import { AppearanceEditor } from './appearanceEditor';
 
 const BASE: { key: BaseStatKey; label: string; hint: string }[] = [
   { key: 'str', label: 'STR', hint: 'Max HP and a little defense.' },
@@ -24,6 +25,13 @@ export class StatsWindow extends UIWindow {
   private lastExp = '';
   /** Phones: equipment slot whose item details are expanded (replaces the hover tooltip). */
   private infoSlot = '';
+  private editor: AppearanceEditor | null = null;
+
+  destroy() {
+    try { this.editor?.destroy(); } catch { /* ignore */ }
+    this.editor = null;
+    super.destroy();
+  }
   constructor(ctx: UICtx) {
     super(ctx, 'stats', 'Character', { width: 452, x: 420, y: 76, className: 'ax-stats-win' });
   }
@@ -45,7 +53,11 @@ export class StatsWindow extends UIWindow {
     const ident = h('div', { class: 'ax-char-ident' },
       h('div', { class: 'ax-char-name' }, st.name),
       h('div', { class: 'ax-char-job', style: `color:${BRANCH_COLORS[branch]}` }, `Year ${jobYear(st.job)} ${jobName(st.job)} · ${schoolName(branch)}`),
-      h('div', { class: 'ax-char-lv' }, `Level ${st.level}`, this.expSpan));
+      h('div', { class: 'ax-char-lv' }, `Level ${st.level}`, this.expSpan),
+      h('button', {
+        class: 'ax-btn ax-btn-small ax-btn-secondary', title: 'Change your skin, hair and accent colours',
+        onclick: () => { this.ctx.sfx('ui_click'); (this.editor ??= new AppearanceEditor(this.ctx)).open(); },
+      }, 'Change look'));
     this.expSpan.textContent = '';
     this.lastExp = '';
 

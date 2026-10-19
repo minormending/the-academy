@@ -201,6 +201,14 @@ export function generateCharacterTextures(scene: Phaser.Scene): void {
   for (const j of jobs) if (j !== 'apprentice') scheduleIdle(scene, `job:${j}`, sc => { ensurePlayerTexture(sc, j); });
 }
 
+/** Build the next Year's sheets for this student's look in the background, so a job advance doesn't hitch. */
+export function prewarmNextJobs(scene: Phaser.Scene, job: JobId, appearance?: Appearance | null): void {
+  if (!appearance) return; // default-look sheets are already warmed by generateCharacterTextures
+  let next: JobId[] = [];
+  try { next = Registry.jobs().filter(j => j.parent === job).map(j => j.id); } catch { return; }
+  for (const j of next) scheduleIdle(scene, `job:${j}:${appearanceKey(appearance)}`, sc => { ensurePlayerTexture(sc, j, appearance); });
+}
+
 // ───────────────────────────── NPCs ─────────────────────────────
 
 const HAIR_STYLES: HairStyle[] = ['tuft', 'bob', 'long', 'ponytail', 'spiky'];

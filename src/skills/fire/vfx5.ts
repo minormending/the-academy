@@ -54,8 +54,9 @@ export function registerFireYear5Vfx(reg: (key: string, fn: VfxFn) => void, k: F
       pxFx(scene, 'cm_flamelash', x, y, { scale: 2, delay: 120, dur: 380, depth: DEPTH.VFX_TOP });
       flash(scene, x, y, C.white, 150, 260, 1);
       shock(scene, x, gy - 2, C.white, w * 1.8, 380, 0.3);
-      k.sparks(scene, x, y, 10, 360, 300);
-      k.embers(scene, x, gy - 10, 6, 160);
+      k.sparks(scene, x, y, 16, 380, 300);
+      k.embers(scene, x, gy - 10, 10, 160);
+      flash(scene, x, y, C.yellow, 90, 380, 0.7);
       k.scorchMark(scene, x, gy, w * 1.1, 600);
       shake(scene, 140, 0.005);
     });
@@ -98,7 +99,7 @@ export function registerFireYear5Vfx(reg: (key: string, fn: VfxFn) => void, k: F
             speed: { min: 200, max: 420 }, angle: { min: 235, max: 305 }, gravityY: 860, lifespan: { min: 500, max: 850 },
             scale: { start: 0.45, end: 0.2 }, alpha: { start: 1, end: 0 }, rotate: { min: 0, max: 360 }, blendMode: NORMAL,
           });
-          k.sparks(scene, cx, gy - 40, 3, 320, 360);
+          k.sparks(scene, cx, gy - 40, 5, 340, 360);
         });
       }
       flash(scene, x, gy - 40, C.white, w * 0.5, 220, 0.8);
@@ -158,11 +159,11 @@ export function registerFireYear5Vfx(reg: (key: string, fn: VfxFn) => void, k: F
           const cx = x + dir * t * w * 0.46 + rnd(-24, 24);
           pxFx(scene, wave % 2 ? 'ex6' : 'ex2', cx, y + rnd(-h * 0.25, h * 0.15), { scale: 2, delay: wave * 110, depth: DEPTH.VFX_TOP });
           pxFx(scene, 'cm_fire', cx, gy + 6, { scale: wave % 2 ? 2 : 4, oy: 1, delay: wave * 110, dur: 560, flipX: dir < 0, depth: DEPTH.VFX });
-          scene.time.delayedCall(wave * 110, () => { if (live(scene)) { flash(scene, cx, gy - 40, C.white, 120, 200, 0.7); k.sparks(scene, cx, gy - 50, 4, 340, 300); } });
+          scene.time.delayedCall(wave * 110, () => { if (live(scene)) { flash(scene, cx, gy - 40, C.white, 120, 200, 0.7); k.sparks(scene, cx, gy - 50, 6, 360, 300); } });
         }
         scene.time.delayedCall(wave * 110, () => shake(scene, 120, 0.007));
       }
-      k.embers(scene, x, y, 18, 320);
+      k.embers(scene, x, y, 26, 340);
       k.smokePuff(scene, x, gy - 30, 5, 1.6);
       k.scorchMark(scene, x, gy, w * 0.8, 1200);
       shake(scene, 700, 0.011);
@@ -211,7 +212,7 @@ export function registerFireYear5Vfx(reg: (key: string, fn: VfxFn) => void, k: F
       const fx = o.x + rnd(-w * 0.4, w * 0.4);
       if (!pxFx(scene, 'cm_brightfire', fx, gy + 4, { scale: 2, oy: 1, delay: i * 50, dur: 460, flipX: fx < o.x })) tongue(scene, fx, gy, FIRE_TINTS[i], 22, 60, i * 50, 400);
     }
-    k.sparks(scene, o.x, gy - 40, 4, 220, 260);
+    k.sparks(scene, o.x, gy - 40, 5, 230, 260);
   };
 
   // ───────────────────────── Cremation ─────────────────────────
@@ -235,7 +236,7 @@ export function registerFireYear5Vfx(reg: (key: string, fn: VfxFn) => void, k: F
         speed: { min: 30, max: 110 }, angle: { min: 230, max: 310 }, gravityY: 70, blendMode: NORMAL,
         lifespan: { min: 700, max: 1100 }, scale: { start: 0.25, end: 0.7 }, alpha: { start: 0.7, end: 0 }, tint: ASH,
       }, DEPTH.VFX_TOP);
-      burst(scene, x, y, FT.ember, 12, 1000, {
+      burst(scene, x, y, FT.ember, 16, 1000, {
         speed: { min: 40, max: 160 }, angle: { min: 0, max: 360 }, gravityY: 90, lifespan: { min: 600, max: 1000 },
         scale: { start: 0.9, end: 0 }, alpha: { start: 1, end: 0 }, tint: [C.white, ASH, C.orange],
       });
@@ -329,7 +330,7 @@ export function registerFireYear5Vfx(reg: (key: string, fn: VfxFn) => void, k: F
       const fx = ox + (x - ox) * ((i + 0.5) / n);
       if (!pxFx(scene, 'sf_flame_s', fx, y + 2, { scale: 2, oy: 1, delay: i * 30, fps: 10, depth: DEPTH.VFX })) tongue(scene, fx, y, FIRE_TINTS[i % 3], 18, 40, i * 30, 500);
     }
-    k.sparks(scene, x, y - 24, 5, 240, 280);
+    k.sparks(scene, x, y - 24, 8, 260, 280);
   };
 
   const cometArea: VfxFn = (scene, o) => {

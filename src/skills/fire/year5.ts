@@ -114,16 +114,16 @@ function castCometStride(ctx: SkillContext, lv: number): void {
 export const FIRE_Y5: SkillDef[] = [
   {
     id: 'fire_solar_spear', name: 'Solar Spear', job: 'pyre_archon', element: 'fire', kind: 'attack', maxLevel: SPEAR_MAX,
-    description: 'Hurl a lance of concentrated sunlight through the nearest foe: two white-hot strikes and a deep burn.',
+    description: 'Hurl a lance of sunlight through the nearest foe: two white-hot strikes for heavy single-target damage, and a deep burn.',
     icon: icon('missile', 0xfff4d0, 0xff9a1a), requires: [{ skillId: 'fire_inferno_lance', level: 10 }],
     mpCost: Li(70, 96, SPEAR_MAX), cooldownMs: L(7000, 4500, SPEAR_MAX), castTimeMs: 560, sfx: 'explosion',
     attack: SOLAR_SPEAR,
   },
   {
     id: 'fire_pyroclasm', name: 'Pyroclasm', job: 'pyre_archon', element: 'fire', kind: 'attack', maxLevel: PYRO_MAX,
-    description: 'Split the ground beneath the whole field: columns of magma erupt around you, three blasts deep.',
+    description: 'Split the ground across the whole screen: magma erupts around you in three blasts, burning up to twelve foes.',
     icon: icon('explosion', 0xffe27a, 0xc2321a), requires: [{ skillId: 'fire_meteor_storm', level: 5 }],
-    mpCost: Li(80, 110, PYRO_MAX), cooldownMs: L(16000, 11000, PYRO_MAX), castTimeMs: 700, sfx: 'explosion',
+    mpCost: Li(80, 110, PYRO_MAX), cooldownMs: L(24000, 16000, PYRO_MAX), castTimeMs: 700, sfx: 'explosion',
     attack: PYROCLASM,
   },
   {
@@ -135,24 +135,24 @@ export const FIRE_Y5: SkillDef[] = [
   },
   {
     id: 'fire_pyre_brazier', name: 'Pyre Brazier', job: 'pyre_archon', element: 'fire', kind: 'summon', maxLevel: BRAZ_MAX,
-    description: 'Set down a roaring brazier that stays where it stands and scorches every enemy that comes near it.',
+    description: 'Plant a brazier that stays put and scorches every enemy near it, again and again, until it gutters out.',
     icon: icon('ember', 0xffe27a, 0xff7a1a), requires: [{ skillId: 'fire_last_ember', level: 3 }],
-    mpCost: Li(60, 80, BRAZ_MAX), cooldownMs: L(30000, 20000, BRAZ_MAX), castTimeMs: 600, sfx: 'cast_fire',
+    mpCost: Li(60, 80, BRAZ_MAX), cooldownMs: L(32000, 24000, BRAZ_MAX), castTimeMs: 600, sfx: 'cast_fire',
     summon: {
-      durationMs: L(14000, 22000, BRAZ_MAX), attackIntervalMs: 800, offset: { x: 90, y: 0 }, follow: false, vfx: 'fire_brazier',
+      durationMs: L(12000, 18000, BRAZ_MAX), attackIntervalMs: 800, offset: { x: 90, y: 0 }, follow: false, vfx: 'fire_brazier',
       attack: BRAZIER,
     },
   },
   {
     id: 'fire_cremation', name: 'Cremation', job: 'pyre_archon', element: 'fire', kind: 'attack', maxLevel: CREM_MAX,
-    description: 'Reduce burning foes to ash: strikes up to four enemies for double damage against any that are burning, and consumes the burn.',
+    description: 'Reduce burning foes to ash: strike up to four enemies for double damage against any that are burning, consuming their burn.',
     icon: icon('skull', 0xfff4d0, 0x9a1a0a), requires: [{ skillId: 'fire_immolation', level: 5 }],
-    mpCost: Li(55, 80, CREM_MAX), cooldownMs: L(10000, 6500, CREM_MAX), castTimeMs: 480, sfx: 'explosion',
+    mpCost: Li(55, 80, CREM_MAX), cooldownMs: L(12000, 8000, CREM_MAX), castTimeMs: 480, sfx: 'explosion',
     attack: CREMATION,
   },
   {
     id: 'fire_pyre_covenant', name: 'Pyre Covenant', job: 'pyre_archon', element: 'fire', kind: 'buff', maxLevel: 10,
-    description: 'Swear the Fellowship oath in flame: more fire damage, faster casts and shorter cooldowns for a time.',
+    description: 'Swear the Fellowship oath in flame: for a time, deal more fire damage, cast faster and recover skills sooner.',
     icon: icon('halo', 0xfff4d0, 0xff9a1a), requires: [{ skillId: 'fire_ascension', level: 5 }],
     mpCost: Li(70, 90, 10), cooldownMs: L(120000, 90000, 10), castTimeMs: 600, sfx: 'buff',
     buff: {
@@ -167,7 +167,7 @@ export const FIRE_Y5: SkillDef[] = [
   },
   {
     id: 'fire_archon_furnace', name: "Archon's Furnace", job: 'pyre_archon', element: 'fire', kind: 'passive', maxLevel: 15,
-    description: 'The fire in you never banks: permanently more fire damage, critical rate and MP regeneration.',
+    description: 'The fire in you never banks: permanently gain fire damage, critical rate and MP regeneration.',
     icon: icon('flame', 0xfff4d0, 0xff4a10), requires: [{ skillId: 'fire_inferno_heart', level: 5 }],
     mpCost: K(0),
     passive: (lv) => [{ stat: 'dmgFire', add: 0.015 * lv }, { stat: 'critRate', add: 0.006 * lv }, { stat: 'mpRegen', add: 2 * lv }],

@@ -13,11 +13,17 @@ see below), with 3rd and 4th advancements at 25 and 40:
 
 > **Current state (read this first).** This file is the original team contract and still describes how the code is
 > laid out, but several of its opening statements are history. Today: there are **five Schools** (Fire, Ice,
-> Lightning, **Holy, Shadow**; see "Phase 3" and "Phase 4" below) with ten Apprentice-line skills plus 24 per
-> School; there are **eight maps** (the seven chained world maps plus `trial_hall`, the Trial Hall arena); the
+> Lightning, **Holy, Shadow**; see "Phase 3" and "Phase 4" below) and **five tiers**: Years 1-4 plus the Year 5
+> **Fellowship** (tier-5 Archons at level 55, level cap 70). The spellbook is **214 spells**: 14 Year 1 core
+> (Phase 9) + **40 per School** (32 across Years 2-4, +8 in Year 5). There are **fourteen maps**: the seven chained
+> world maps, `trial_hall`, the three branch zones, and the three Year 5 endgame maps (`astral_observatory`,
+> `void_rift`, `archon_spire`, home of the raid boss The Unwritten, `src/data/raidBosses.ts`). Students design
+> their look at enrolment ("Character creation") and phones get their own layout ("Phase 11"). The
 > art is **mostly external CC0 / CC-BY pixel packs** (see "Art pivot" and `CREDITS.md`), with the procedural
 > generators kept as fallbacks; audio is still fully synthesized (WebAudio). The frame order, ids and ownership
-> rules below were updated where they changed; the Phase 3 / Phase 4 sections are the authority on newer content.
+> rules below were updated where they changed; the Phase 3 / Phase 4 / Phase 9 sections and the two sections at the
+> end of this file are the authority on newer content. Where a Phase section quotes an older spell count (24 or 32
+> per School, 10 in Year 1), it is superseded by the numbers here.
 
 Stack: **TypeScript + Phaser 3.90 (Arcade physics) + Vite**. The original contract said "no external assets —
 all art is procedural" (Canvas 2D / Phaser Graphics → textures); that held until the art pivot below. All audio is synthesized (WebAudio).
@@ -333,3 +339,55 @@ never heal/act while dead. Every new spell gets its own readable pixel VFX (keys
 through that School's `lazyRegister` (see "Lazy art generation"). Keep `requires` chains shallow (several roots per
 Year); new spells should open new build paths, not lengthen one chain. Max levels 10–15 for most new spells so SP
 choices stay meaningful.
+
+---
+
+## Year 5: the Fellowship (tier 5, level 55, cap 70)
+
+`JOB_LEVELS` in `src/core/constants.ts` is `{1: 1, 2: 10, 3: 25, 4: 40, 5: 55}` and `MAX_LEVEL` is 70. At level 55 a
+Year 4 graduate can take the School Professor's **Fellowship Exam** and become an **Archon** (`pyre_archon`,
+`winter_archon`, `storm_archon`, `light_archon`, `night_archon`; `tier: 5` in `src/data/jobs.ts`). The Exam window
+(`src/ui/miscWindows.ts`) shows "Fellowship Exam" / "Begin your Fellowship" for the Year 4 → 5 step.
+Each School adds **8 spells** in `src/skills/<school>/year5.ts` (`job: '<archon id>'`), so a School has 40 and the
+game 14 + 5 × 40 = **214**. Three endgame maps extend the chain past the Arcane Sanctum:
+`arcane_sanctum` → `astral_observatory` → `void_rift` → `archon_spire` (level range 64-70), which also has a return
+portal to `mistvale`. The **Unwritten** (`src/data/raidBosses.ts`, AI in `src/entities/monsters/Unwritten.ts`, a
+`FieldBoss`) is the level-70 raid boss: three phases, every attack telegraphed with the shared warning shapes.
+
+---
+
+## Character creation (`PlayerState.appearance`)
+
+Enrolling a student opens a character creator before the first map. **Data** (`src/data/appearance.ts`, pure, safe to
+import anywhere): `APPEARANCE_OPTIONS` (6 skin, 8 hair, 8 accent colours), `DEFAULT_APPEARANCE`, `randomAppearance()`,
+`applyAppearance(look, a)` (swaps the job look's `skin`, `hair` and `staffGem`), `appearanceKey(a)` (e.g.
+`ffe0c4-5a3a22-7fe3ff`) and `repairAppearance(v)`. **UI** (`src/ui/characterCreator.ts`, `CharacterCreator`): live
+preview (idle / walk / cast), swatches, Randomize, Begin / Back (Esc); owned by the title menu
+(`src/ui/titleMenu.ts`), which also draws each Character Select card with that slot's saved look.
+**State**: `PlayerState.appearance?: Appearance` (`src/core/types.ts`) is set by `newPlayerState(name, appearance)` and
+sanitised on load through `repairAppearance` in `SaveSystem`; older saves have none and use the job's authored look,
+so no save-version bump was needed. The three colours are the student's own and persist across every School and Year;
+only the robe and hat still come from the job.
+**Art** (`src/art/characters.ts`): `playerTextureKey(job, appearance)` returns `player_<job>` without an appearance and
+`player_<job>__<rrggbb-rrggbb-rrggbb>` with one, building the sheet on demand (`ensurePlayerTexture`, per "Lazy art
+generation"). Anything that draws the player must ask for the key with the appearance, never hard-code `player_<job>`.
+
+---
+
+## Phase 11: phone layout
+
+`src/ui/mobile.ts` is the single switch. `isMobileLayout()` is true when touch is active (Settings → Touch: auto uses
+`(pointer: coarse)`, on, off) **and** the short side of the window is under 600 CSS px; it re-checks on `resize`,
+`orientationchange` and settings changes, toggles the class **`html.ax-mobile`**, and notifies `onMobileLayoutChanged`
+subscribers. On a phone:
+- **UI scale**: `#ui-root` is laid out at `MOBILE_UI` = **720 × 405** (desktop 1280 × 720) and then scaled to the
+  screen; `uiLogicalSize()` returns the current size and the scaler (`src/ui/scaler.ts`) reads it.
+- **World zoom**: `MOBILE_CAMERA_ZOOM` = **1.8** (`cameraZoom()`; 1 on desktop). Phaser zooms scroll-factor-0 objects
+  around the camera centre too, so HUD-style world objects use `pinToScreen(obj, cam, sx, sy, scale)` to undo it.
+- **Windows are sheets**: in `src/ui/window.ts` each window gets `ax-sheet` and renders as a full-screen sheet with a
+  large header (CSS `html.ax-mobile .ax-window` / `.ax-sheet` in `src/ui/ui.css`), re-rendering on a layout switch.
+  Phones show **one sheet at a time**: opening a window closes every other open one (the registry of live windows in
+  `window.ts`).
+- The HUD (`src/ui/hud.ts`) switches to short EXP text and a menu button in place of the quick buttons.
+New UI must be laid out for both sizes and must not assume 1280 × 720; subscribe with `onMobileLayoutChanged` rather
+than reading `innerWidth`.

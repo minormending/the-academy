@@ -4,7 +4,7 @@
 import type { Element, MonsterDef, StatusKind } from '../core/types';
 import { Registry } from '../core/registry';
 import { JOB_LEVELS, MAX_LEVEL } from '../core/constants';
-import { SCHOOLS, SCHOOL_PROFESSOR, type School } from '../data/jobs';
+import { FELLOWSHIP_YEAR, SCHOOLS, SCHOOL_PROFESSOR, type School } from '../data/jobs';
 import { h } from './dom';
 import { jobImg, portraitImg } from './art';
 import type { Guide } from './context';
@@ -41,7 +41,7 @@ function allocList(a: Alloc): HTMLElement {
 function buildCard(b: Build): HTMLElement {
   const c = checkBuild(b);
   if (c.problems.length && import.meta.env.DEV) console.warn(`[guide] build "${b.name}":`, c.problems);
-  const yearLabel = ['Year 1 (core)', 'Year 2', 'Year 3', 'Year 4'];
+  const yearLabel = ['Year 1 (core)', 'Year 2', 'Year 3', 'Year 4', `Year ${FELLOWSHIP_YEAR}`];
   return h('article.build',
     h('h5', b.name),
     h('p.small', b.style),
@@ -85,7 +85,7 @@ function schoolSection(g: Guide, s: School): HTMLElement {
     h('div.school-hero',
       h('div.school-hero-text',
         h('p.lead', PLAYSTYLE[s]),
-        h('p', 'Head of School: ', npcLink(prof, true), `. Declare at level ${JOB_LEVELS[2]} with the Headmistress; your Professor sets the Year 3 Exam at level ${JOB_LEVELS[3]} and the Year 4 Exam at level ${JOB_LEVELS[4]}.`),
+        h('p', 'Head of School: ', npcLink(prof, true), `. Declare at level ${JOB_LEVELS[2]} with the Headmistress; your Professor sets the Year 3 Exam at level ${JOB_LEVELS[3]} and the Year 4 Exam at level ${JOB_LEVELS[4]}. After graduation, the Fellowship Exam at level ${JOB_LEVELS[FELLOWSHIP_YEAR]} makes you an Archon.`),
         matchups(g, s),
         schoolGear(g, s),
       ),
@@ -129,11 +129,11 @@ export function coreSection(g: Guide): RefSection {
 export function schoolsSection(g: Guide): RefSection {
   const el = h('section.ref', { id: 'schools' },
     sectionHeading(2, 'schools-h', 'The Five Schools', 'Reference'),
-    h('p.lead', `At level ${JOB_LEVELS[2]} you declare one School for life. Each has ${schoolJobs('fire').reduce((n, j) => n + skillsOf(j.id).length, 0)} spells over Years 2–4, its own statuses, and its own answers to the Academy's monsters. Spell damage is a % of your Magic ATK per hit, shown from level 1 to the spell's max level.`),
+    h('p.lead', `At level ${JOB_LEVELS[2]} you declare one School for life. Each has ${schoolJobs('fire').reduce((n, j) => n + skillsOf(j.id).length, 0)} spells over Years 2–${FELLOWSHIP_YEAR}, its own statuses, and its own answers to the Academy's monsters. Spell damage is a % of your Magic ATK per hit, shown from level 1 to the spell's max level.`),
     h('div.schools-grid', SCHOOLS.map(s => h('a.school-tile', { href: `#${anchor.school(s)}`, class: `sc-${s}` },
       portraitImg(SCHOOL_PROFESSOR[s], 48), h('strong', schoolName(s)), h('small', schoolJobs(s).map(j => j.name).join(' → ')),
     ))),
-    h('p.small', `SP budget: a student has ${spAtLevel(JOB_LEVELS[3] - 1)} SP by level ${JOB_LEVELS[3] - 1}, ${spAtLevel(JOB_LEVELS[4] - 1)} by level ${JOB_LEVELS[4] - 1} and ${spAtLevel(MAX_LEVEL)} at level ${MAX_LEVEL}; one School's spells alone take ${num(schoolJobs('fire').reduce((n, j) => n + spToMax(skillsOf(j.id)), 0))} SP to max. Nobody can learn everything.`),
+    h('p.small', `SP budget: a student has ${spAtLevel(JOB_LEVELS[3] - 1)} SP by level ${JOB_LEVELS[3] - 1}, ${spAtLevel(JOB_LEVELS[4] - 1)} by level ${JOB_LEVELS[4] - 1}, ${spAtLevel(JOB_LEVELS[FELLOWSHIP_YEAR] - 1)} by level ${JOB_LEVELS[FELLOWSHIP_YEAR] - 1} and ${spAtLevel(MAX_LEVEL)} at level ${MAX_LEVEL}; one School's spells alone take ${num(schoolJobs('fire').reduce((n, j) => n + spToMax(skillsOf(j.id)), 0))} SP to max. Nobody can learn everything.`),
     SCHOOLS.map(s => schoolSection(g, s)),
   );
   return { id: 'schools', title: 'The Five Schools', el };

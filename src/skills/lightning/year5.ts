@@ -15,7 +15,7 @@ const shock = (max: number, chance: [number, number], duration: [number, number]
 export const LIGHTNING_Y5: SkillDef[] = [
   {
     id: 'ltn_voltage_cascade', name: 'Voltage Cascade',
-    description: 'A branching chain that leaps through six to eight foes, striking each twice and shocking them.',
+    description: 'Branching chain lightning that leaps through six to eight foes, striking each twice and shocking them (60-90% chance).',
     element: 'lightning', job: 'storm_archon', kind: 'attack', maxLevel: 15,
     icon: icon('chain', 0xffffff), requires: [{ skillId: 'ltn_arc_storm', level: 5 }],
     mpCost: int(70, 95, 15), cooldownMs: int(7000, 5000, 15), castTimeMs: 420, sfx: 'cast_lightning',
@@ -42,12 +42,12 @@ export const LIGHTNING_Y5: SkillDef[] = [
   },
   {
     id: 'ltn_fellowship_of_storms', name: 'Fellowship of Storms',
-    description: 'Ultimate: the whole Fellowship answers your call. Ten sky-to-ground strikes hammer every foe on the screen and shock them.',
+    description: 'Ultimate: the whole Fellowship answers your call. Ten sky-to-ground strikes hammer up to ten foes across the screen, each struck ten times and always shocked.',
     element: 'lightning', job: 'storm_archon', kind: 'attack', maxLevel: 10,
     icon: icon('thunder_cloud', 0xffffff, 0xfff36b), requires: [{ skillId: 'ltn_thunderstorm', level: 5 }],
     mpCost: int(120, 150, 10), cooldownMs: int(90000, 65000, 10), castTimeMs: 1000, sfx: 'thunder',
     attack: {
-      pattern: 'aoe_self', damagePct: lin(150, 230, 10), hits: () => 10, maxTargets: () => 10,
+      pattern: 'aoe_self', damagePct: lin(140, 200, 10), hits: () => 10, maxTargets: () => 10,
       range: 500, area: { w: 1000, h: 460 }, delayMs: 650, hitIntervalMs: 75,
       status: shock(10, [1, 1], [7000, 9000], [0.35, 0.45]),
       vfx: { cast: 'ltn5_fellowship_cast', area: 'ltn5_fellowship_area', hit: 'ltn_hit_shock' },
@@ -55,7 +55,7 @@ export const LIGHTNING_Y5: SkillDef[] = [
   },
   {
     id: 'ltn_pylon_array', name: 'Pylon Array',
-    description: 'Raise a ring of storm pylons that wake when foes step between them, shocking everything inside; one array at a time.',
+    description: 'Raise four storm pylons for 9-14 seconds; every 0.7s they arc between each other, striking up to eight foes inside twice and shocking them. One array at a time.',
     element: 'lightning', job: 'storm_archon', kind: 'summon', maxLevel: 15,
     icon: icon('staff', 0xffffff), requires: [{ skillId: 'ltn_storm_circuit', level: 3 }],
     mpCost: int(90, 120, 15), cooldownMs: int(22000, 18000, 15), castTimeMs: 520, sfx: 'cast_lightning',
@@ -64,7 +64,7 @@ export const LIGHTNING_Y5: SkillDef[] = [
       durationMs: int(9000, 14000, 15), attackIntervalMs: 700, offset: { x: 140, y: -34 }, follow: false,
       vfx: 'ltn5_pylon_body',
       attack: {
-        pattern: 'aoe_self', damagePct: lin(75, 115, 15), hits: () => 2, maxTargets: () => 8,
+        pattern: 'aoe_self', damagePct: lin(50, 75, 15), hits: () => 2, maxTargets: () => 8,
         range: 260, area: { w: 520, h: 240 }, hitIntervalMs: 60,
         status: shock(15, [0.8, 1], [3000, 4500], [0.3, 0.4]),
         vfx: { area: 'ltn5_pylon_pulse', hit: 'ltn_hit_zap' },
@@ -73,20 +73,20 @@ export const LIGHTNING_Y5: SkillDef[] = [
   },
   {
     id: 'ltn_reckoning_peal', name: 'Reckoning Peal',
-    description: 'Combo payoff: call down four hammering peals that consume shock for 150% more damage.',
+    description: 'Combo payoff: call down four hammering peals on up to three foes; shocked targets take 100% more damage and the shock is consumed.',
     element: 'lightning', job: 'storm_archon', kind: 'attack', maxLevel: 15,
     icon: icon('spark', 0xffffff, 0xff9fe8), requires: [{ skillId: 'ltn_ion_judgment', level: 3 }],
     mpCost: int(75, 100, 15), cooldownMs: int(9000, 7000, 15), castTimeMs: 460, sfx: 'thunder',
     attack: {
-      pattern: 'aoe_target', damagePct: lin(190, 290, 15), hits: () => 4, maxTargets: () => 3,
+      pattern: 'aoe_target', damagePct: lin(160, 240, 15), hits: () => 4, maxTargets: () => 3,
       range: 520, area: { w: 150, h: 240 }, delayMs: 120, hitIntervalMs: 65,
-      bonusVs: { status: 'shock', mult: 2.5, consume: true },
+      bonusVs: { status: 'shock', mult: 2, consume: true },
       vfx: { cast: 'ltn5_peal_cast', area: 'ltn5_peal_strike', hit: 'ltn5_hit_surge' },
     },
   },
   {
     id: 'ltn_archon_conduit', name: "Archon's Conduit",
-    description: 'Become the storm: boosts Lightning damage, casting speed, cooldown recovery and critical damage for a long while.',
+    description: 'Become the storm for 30-50 seconds: +15-35% Lightning damage, +10-25% casting speed, +5-15% cooldown recovery and +10-30% critical damage.',
     element: 'lightning', job: 'storm_archon', kind: 'buff', maxLevel: 10,
     icon: icon('halo', 0xffffff, 0xfff36b), requires: [{ skillId: 'ltn_thunderbird', level: 3 }],
     mpCost: int(80, 100, 10), cooldownMs: () => 60000, castTimeMs: 500, sfx: 'buff',
@@ -103,7 +103,7 @@ export const LIGHTNING_Y5: SkillDef[] = [
   },
   {
     id: 'ltn_voltaic_doctrine', name: 'Voltaic Doctrine',
-    description: 'Passive: postgraduate study of the storm. Raises Lightning damage, critical rate and maximum MP.',
+    description: 'Passive: postgraduate study of the storm. Permanently raises Lightning damage (+2-20%), critical rate (+1-7%) and maximum MP (+2-15%).',
     element: 'lightning', job: 'storm_archon', kind: 'passive', maxLevel: 15,
     icon: icon('book', 0xfff36b, 0x9f6bff), requires: [{ skillId: 'ltn_eye_of_the_storm', level: 5 }],
     mpCost: () => 0, sfx: 'buff',
@@ -118,11 +118,11 @@ export const LIGHTNING_Y5: SkillDef[] = [
     description: 'Become a bolt: blink up to 460 px, shredding and shocking every foe along the path with three cuts.',
     element: 'lightning', job: 'storm_archon', kind: 'movement', maxLevel: 15,
     icon: icon('teleport', 0xffffff), requires: [{ skillId: 'ltn_tempest_surge', level: 3 }],
-    mpCost: int(60, 80, 15), cooldownMs: int(9000, 7000, 15), castTimeMs: 160, sfx: 'blink',
+    mpCost: int(52, 70, 15), cooldownMs: int(9000, 7000, 15), castTimeMs: 160, sfx: 'blink',
     movement: { kind: 'blink', distance: int(300, 460, 15), vfxOut: 'ltn5_ride_out', vfxIn: 'ltn5_ride_in' },
     onCast: arcSkate,
     attack: {
-      pattern: 'beam', damagePct: lin(110, 170, 15), hits: () => 3, maxTargets: () => 8,
+      pattern: 'beam', damagePct: lin(80, 120, 15), hits: () => 3, maxTargets: () => 8,
       range: 460, area: { w: 460, h: 90 }, hitIntervalMs: 45,
       status: shock(15, [0.7, 1], [3000, 5000], [0.25, 0.35]),
       vfx: { area: 'ltn5_ride_trail', hit: 'ltn_hit_zap' },

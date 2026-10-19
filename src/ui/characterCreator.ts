@@ -7,6 +7,8 @@
 import type { Appearance, JobId } from '../core/types';
 import { APPEARANCE_OPTIONS, DEFAULT_APPEARANCE, randomAppearance } from '../data/appearance';
 import { jobPreviewDataUrl, playerAnimFrameCount, type PlayerAnim } from '../art/characters';
+import { getBinding } from '../core/bindings';
+import { connectedGamepad } from '../systems/GamepadBridge';
 import { h, safe } from './dom';
 
 type Row = keyof Appearance;
@@ -53,16 +55,20 @@ export class CharacterCreator {
   private lastAt = 0;
   private preview: HTMLImageElement;
   private body: HTMLElement;
+  private hint: HTMLElement;
+  private hintAt = 0;
 
   constructor(private opts: CreatorOpts) {
     this.a = { ...(opts.initial ?? DEFAULT_APPEARANCE) };
     this.preview = h('img', { class: 'ax-cc-sprite', alt: `${opts.name}'s preview`, draggable: false });
     this.body = h('div', { class: 'ax-cc-body' });
+    this.hint = h('div', { class: 'ax-cs-sub', style: 'text-align:center;margin-top:6px;display:none' },
+      'D-pad: choose · A: Begin · X: Randomize · B: Back · Select: Animation');
     this.el = h('div', { class: 'ax-cs-frame ax-cc ax-cs-enter' },
       h('div', { class: 'ax-cs-head' },
         h('div', { class: 'ax-title-h' }, 'Design your mage'),
         h('div', { class: 'ax-cs-sub' }, `${opts.name} · Year 1 Apprentice`)),
-      this.body);
+      this.body, this.hint);
     this.render();
   }
 
@@ -75,14 +81,30 @@ export class CharacterCreator {
     this.a = { ...this.a, [key]: v };
     this.sfx('ui_click');
     this.render();
+    this.pop();
+  }
+
+  /** Brief scale + brightness pop on the preview when the look changes. */
+  private pop() {
+    try {
+      this.preview.animate(
+        [{ transform: 'scale(1)', filter: 'brightness(1)' }, { transform: 'scale(1.1)', filter: 'brightness(1.6)', offset: 0.35 }, { transform: 'scale(1)', filter: 'brightness(1)' }],
+        { duration: 240, easing: 'ease-out' });
+    } catch { /* Web Animations unsupported */ }
   }
 
   private randomize() {
+    const same = (x: Appearance) => x.skin === this.a.skin && x.hair === this.a.hair && x.accent === this.a.accent;
     let next = randomAppearance();
-    for (let n = 0; n < 4 && next.skin === this.a.skin && next.hair === this.a.hair && next.accent === this.a.accent; n++) next = randomAppearance();
+    for (let n = 0; n < 30 && same(next); n++) next = randomAppearance();
+    if (same(next)) { // vanishingly unlikely: force a change by stepping hair to its next option
+      const hairs = APPEARANCE_OPTIONS.hair as readonly number[];
+      next = { ...next, hair: hairs[(Math.max(0, hairs.indexOf(next.hair)) + 1) % hairs.length] };
+    }
     this.a = next;
     this.sfx('ui_click');
     this.render();
+    this.pop();
   }
 
   private setMode(i: number) { this.mode = i; this.frame = 0; this.tick = 0; this.sfx('ui_click'); this.render(); }
@@ -138,7 +160,13 @@ export class CharacterCreator {
 
   /** Keyboard: ↑↓ choose a row, ←→ change its colour (or button), Enter begins (or presses the button), R randomizes. */
   key(e: KeyboardEvent): void {
-    const k = e.code;
+    if (e.repeat) return; // a held Enter from the name step must not start the game
+    // Pad buttons arrive as whatever key their action is bound to: A = jump (Begin), X = slot 1 (Randomize), B = pick up (Back).
+    const kc = e.keyCode;
+    const k = kc && (kc === getBinding('jump') || kc === getBinding('jump2')) ? 'Enter'
+      : kc && kc === getBinding('slot0') ? 'KeyR'
+      : kc && kc === getBinding('pickup') ? 'Escape'
+      : e.code;
     const opts = this.row < 3 ? (APPEARANCE_OPTIONS[ROWS[this.row].key] as readonly number[]) : null;
     if (k === 'ArrowUp' || k === 'ArrowDown') {
       e.preventDefault();
@@ -164,6 +192,11 @@ export class CharacterCreator {
 
   /** Steps the preview animation (call every frame). */
   update(time: number): void {
+    if (time - this.hintAt > 500) { // show the pad hint only while a gamepad is connected
+      this.hintAt = time;
+      const want = safe(() => connectedGamepad() !== null, false) ? '' : 'none';
+      if (this.hint.style.display !== want) this.hint.style.display = want;
+    }
     const m = MODES[this.mode];
     if (time - this.lastAt < m.ms) return;
     this.lastAt = time;

@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 import { DEPTH, PLAYER_HITBOX } from '../core/constants';
 import { actionsForKey, getBinding, onBindingsChanged, type ActionId } from '../core/bindings';
 import type { Appearance, GameServices, IMapInstance, IPlayer, JobId, RopeDef } from '../core/types';
-import { playerAnimKey, playerTextureKey, type PlayerAnim } from '../art/characters';
+import { playerAnimKey, playerTextureKey, prewarmNextJobs, type PlayerAnim } from '../art/characters';
 import { ensureFallbackTexture } from './player/fallbackTexture';
 import { NameTag } from './player/NameTag';
 import { PT } from './player/tuning';
@@ -128,6 +128,7 @@ export class Player implements IPlayer {
     const key = this.resolveTextureKey();
     this.sprite = scene.physics.add.sprite(x, y, key);
     this.sprite.setDepth(DEPTH.PLAYER);
+    prewarmNextJobs(scene, job, this.appearance());
     this.sprite.setCollideWorldBounds(true);
     this.sprite.setMaxVelocity(PT.maxVx, PT.maxVy);
     this.applyBodySize();
@@ -323,6 +324,7 @@ export class Player implements IPlayer {
 
   setJob(job: JobId) {
     this.job = job;
+    prewarmNextJobs(this.scene, job, this.appearance());
     const key = this.resolveTextureKey();
     if (this.sprite.texture.key !== key) {
       this.sprite.anims.stop();

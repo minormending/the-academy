@@ -7,6 +7,8 @@ import { C, ST } from './textures';
 import { fade, image, loop, motes, root, sheet } from './fx';
 
 const GOLD = 0xe6c15a, BLOOD = 0xc76c85;
+/** Cheap camera punch; shakes are skipped if the camera is unavailable (e.g. torn-down scene). */
+const punch = (scene: Phaser.Scene, ms: number, force: number) => { try { scene.cameras.main.shake(ms, force); } catch { /* ignore */ } };
 const dist = (o: VfxOptions, fallback: number) => {
   const dx = (o.targetX ?? o.x + o.facing * fallback) - o.x, dy = (o.targetY ?? o.y) - o.y;
   return { dx, dy, len: Math.hypot(dx, dy), angle: Math.atan2(dy, dx) };
@@ -24,11 +26,12 @@ export function cascadeArea(scene: Phaser.Scene, o: VfxOptions): void {
     ring.once(Phaser.GameObjects.Events.DESTROY, () => scene.tweens.killTweensOf(ring));
   }
   motes(scene, o.x, o.y, 6, true);
+  punch(scene, 140, 0.002);
 }
 
 export function cascadeHit(scene: Phaser.Scene, o: VfxOptions): void {
   const moon = image(scene, ST.skull, o.x, o.y - 10).setTint(GOLD);
-  fade(scene, moon, 380, { y: o.y - 28 });
+  fade(scene, moon, 380, { y: o.y - 28, scaleX: 3, scaleY: 3 });
 }
 
 export function requiemCast(scene: Phaser.Scene, o: VfxOptions): void {
@@ -37,7 +40,7 @@ export function requiemCast(scene: Phaser.Scene, o: VfxOptions): void {
     fade(scene, bone, 320, { y: o.y, x: o.x + o.facing * 34 });
   }
   const flash = sheet(scene, 'g9_spark', o.x + o.facing * 10, o.y, { dur: 320 });
-  if (flash) { flash.setTint(GOLD); }
+  if (flash) { flash.setTint(GOLD); flash.setBlendMode(Phaser.BlendModes.ADD); }
 }
 
 export function requiemProj(scene: Phaser.Scene, o: VfxOptions): Phaser.GameObjects.Container {
@@ -57,8 +60,11 @@ export function requiemHit(scene: Phaser.Scene, o: VfxOptions): void {
     fade(scene, bone, 420, { x: o.x + Math.cos(a) * 38, y: o.y + Math.sin(a) * 30 });
   }
   const burst = sheet(scene, 'g9_darkbolt', o.x, o.y, { scale: 3, dur: 420 });
-  if (burst) burst.setTint(GOLD);
+  if (burst) { burst.setTint(GOLD); burst.setBlendMode(Phaser.BlendModes.ADD); }
+  const ring = image(scene, ST.ring, o.x, o.y, 1).setTint(GOLD);
+  fade(scene, ring, 300, { scaleX: 4, scaleY: 4 });
   motes(scene, o.x, o.y, 5);
+  punch(scene, 90, 0.0022);
 }
 
 export function fellowshipCast(scene: Phaser.Scene, o: VfxOptions): void {
@@ -71,6 +77,7 @@ export function fellowshipCast(scene: Phaser.Scene, o: VfxOptions): void {
     fade(scene, ghost, 950, { y: o.y - 64 - (2 - Math.abs(i)) * 8 });
   }
   motes(scene, o.x, o.y - 20, 6, true);
+  punch(scene, 260, 0.0018);
 }
 
 export function fellowshipProj(scene: Phaser.Scene, o: VfxOptions): Phaser.GameObjects.Container {
@@ -86,7 +93,7 @@ export function fellowshipProj(scene: Phaser.Scene, o: VfxOptions): Phaser.GameO
 export function fellowshipImpact(scene: Phaser.Scene, o: VfxOptions): void {
   const y = o.y - Math.min(o.h ?? 170, 170) / 2;
   const boom = sheet(scene, 'cm_midnight', o.x, y, { scale: 4, dur: 520 }) ?? image(scene, ST.cloud, o.x, y, 4);
-  boom.setTint(GOLD); fade(scene, boom, 540);
+  boom.setTint(GOLD); boom.setBlendMode(Phaser.BlendModes.ADD); fade(scene, boom, 540);
   const smoke = sheet(scene, 'cm_nebula', o.x, y, { dur: 560, alpha: 0.6 }) ?? image(scene, ST.slash, o.x, y);
   smoke.setTint(C.violet); fade(scene, smoke, 580);
   const ring = image(scene, ST.ring, o.x, o.y - 4, 3).setTint(GOLD);
@@ -115,6 +122,9 @@ export function wardenPulse(scene: Phaser.Scene, o: VfxOptions): void {
   }
   const wave = sheet(scene, 'cm_shield', o.x, o.y, { scale: 4, dur: 480, alpha: 0.6 }) ?? image(scene, ST.ring, o.x, o.y, 4);
   wave.setTint(C.violet); fade(scene, wave, 500);
+  const shock = image(scene, ST.ring, o.x, o.y + 24, 2).setTint(GOLD);
+  fade(scene, shock, 360, { scaleX: rx / 16, scaleY: 3 });
+  punch(scene, 70, 0.0015);
 }
 
 export function reckonCast(scene: Phaser.Scene, o: VfxOptions): void {
@@ -125,7 +135,7 @@ export function reckonCast(scene: Phaser.Scene, o: VfxOptions): void {
 function sweep(scene: Phaser.Scene, o: VfxOptions, tint: number, glyph: string, count: number): void {
   const rx = (o.w ?? 340) / 2;
   const slash = sheet(scene, 'sf_slash', o.x, o.y, { scale: 5, dur: 420, flipX: o.facing < 0 });
-  if (slash) slash.setTint(tint);
+  if (slash) { slash.setTint(tint); slash.setBlendMode(Phaser.BlendModes.ADD); }
   for (let i = 0; i < count; i++) {
     const t = count === 1 ? 0 : -1 + 2 * i / (count - 1);
     const mark = image(scene, glyph, o.x + t * rx * 0.8, o.y + 4).setTint(tint);
@@ -188,6 +198,9 @@ export function riftBurst(scene: Phaser.Scene, o: VfxOptions): void {
   const cloud = sheet(scene, 'cm_nebula', o.x, o.y, { dur: 460, alpha: 0.7 }) ?? image(scene, ST.cloud, o.x, o.y);
   cloud.setTint(C.green); fade(scene, cloud, 480);
   motes(scene, o.x, o.y, 5, true);
+  const ring = image(scene, ST.ring, o.x, floor, 2).setTint(C.green);
+  fade(scene, ring, 380, { scaleX: 9, scaleY: 2 });
+  punch(scene, 110, 0.0024);
 }
 
 /** Called once from shadowVfx.ts with the School's lazy `registerVfx`, so textures exist before any of these play. */

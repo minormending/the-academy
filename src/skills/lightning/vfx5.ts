@@ -26,6 +26,7 @@ const cascadeArc: VfxFn = (scene, o) => {
   spawnBolt(scene, o.x, o.y, tx, ty, { w: 1.5, jitter: 20, forks: 3, frames: 4, frameMs: 40, glow: C.violet, mid: C.yellow });
   spawnBolt(scene, o.x, o.y + 4, tx, ty - 4, { w: 0.8, jitter: 14, forks: 1, frames: 3, glow: C.deepViolet, mid: C.white });
   ring(scene, tx, ty, 70, C.yellow, 220);
+  flash(scene, tx, ty, 36, C.white, 140);
   pxFx(scene, 'g9_spark', tx, ty, { v: 'ltn', scale: 2, add: true, dur: 240 });
   sparks(scene, tx, ty, 5);
 };
@@ -57,6 +58,8 @@ const lanceStrike: VfxFn = (scene, o) => {
     });
   }
   pxFx(scene, 'g9_lightning', o.x, base, { v: 'ltn', scale: 2, oy: 1, add: true, dur: 420 });
+  flash(scene, o.x, base - 20, 110, C.white, 160);
+  scene.cameras.main.shake(140, 0.004);
   screenFlash(scene, 0.2, 100);
 };
 
@@ -142,6 +145,7 @@ const pylonPulse: VfxFn = (scene, o) => {
     spawnBolt(scene, o.x + xs[i - 1], tipY, o.x + xs[i], tipY, { w: 1.1, jitter: 10, forks: 1, frames: 3, mid: C.white });
   }
   ring(scene, o.x, base, o.w ?? 520, C.yellow, 260, 0.25);
+  flash(scene, o.x, o.y, 56, C.white, 150);
   sparks(scene, o.x, o.y, 4);
 };
 
@@ -167,6 +171,8 @@ const pealStrike: VfxFn = (scene, o) => {
   // Pink-white burst marks that shock was consumed.
   flash(scene, o.x, o.y, 90, 0xff9fe8, 260);
   pxFx(scene, 'g9_spark', o.x, o.y, { v: 'ltn', scale: 3, add: true, dur: 300 });
+  ring(scene, o.x, base, 150, 0xff9fe8, 260, 0.3);
+  scene.cameras.main.shake(120, 0.003);
   screenFlash(scene, 0.15, 90, 0xffd6f6);
 };
 
@@ -239,6 +245,7 @@ const rideTrail: VfxFn = (scene, o) => {
     flash(scene, x, o.y, 34, C.yellow, 180);
   }
   sparks(scene, tx, ty, 5);
+  scene.cameras.main.shake(70, 0.002);
 };
 
 export function registerLightningYear5Vfx(registerVfx: Register): void {

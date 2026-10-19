@@ -1,6 +1,6 @@
 /**
- * Keeps #ui-root laid out at a logical 1280×720 (MOBILE_UI = 720×405 on phones, so every DOM element renders
- * ~1.8× larger) and scaled to exactly cover the Phaser canvas.
+ * Keeps #ui-root laid out at a logical 1280×720 (on phones: 405 tall and as wide as the device aspect, so every
+ * DOM element renders ~1.8× larger and right-anchored HUD sits at the screen edge) and scaled to exactly cover the Phaser canvas.
  */
 import Phaser from 'phaser';
 import { onMobileLayoutChanged, uiLogicalSize } from './mobile';
@@ -22,7 +22,7 @@ export class UIScaler {
   private nextCheck = 0;
   private readonly onResize = () => this.apply();
   private offMobile: () => void;
-  /** Logical size #ui-root is laid out at (1280×720, or 720×405 in the mobile layout). */
+  /** Logical size #ui-root is laid out at (1280×720, or ~W×405 in the mobile layout, W following the canvas aspect). */
   w = 1280;
   h = 720;
 
@@ -77,7 +77,7 @@ export class UIScaler {
     st.transform = `scale(${k})`;
   }
 
-  /** Client (viewport) coordinates → logical UI coordinates (1280×720, or 720×405 on phones). */
+  /** Client (viewport) coordinates → logical UI coordinates (1280×720, or ~W×405 on phones). */
   toLogical(clientX: number, clientY: number): { x: number; y: number } {
     const r = this.root.getBoundingClientRect();
     const k = this.k || 1;

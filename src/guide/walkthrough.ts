@@ -1,13 +1,15 @@
-// The walkthrough: four school Years in play order. Writers supply the prose and say WHICH zone, quest, boss or
+// The walkthrough: five school Years in play order. Writers supply the prose and say WHICH zone, quest, boss or
 // shop to show; the blocks print every number from the game's data (docs/GUIDE.md). Prose tokens such as
 // {key:skills}, {joblv:2}, {qlv:story_violet_thorns}, {mlv:moss_snail} and {zlv:whisperwood} expand from the data too.
 
+import { MAX_LEVEL } from '../core/constants';
 import type { Section } from './types';
 
 const Y1 = 'Year 1 · Apprentice';
 const Y2 = 'Year 2 · Declared';
 const Y3 = 'Year 3 · Binder';
 const Y4 = 'Year 4 · Final Year';
+const Y5 = 'Year 5 · The Fellowship';
 const GRAD = 'Graduation and beyond';
 
 export const WALKTHROUGH: Section[] = [
@@ -15,7 +17,8 @@ export const WALKTHROUGH: Section[] = [
   {
     id: 'y1-enrolment', part: Y1, title: 'Enrolment Day',
     blocks: [
-      { image: 'title.jpg', alt: 'The title screen: the Academy logo beside the Headmistress\'s tower under a crescent moon', caption: 'Pick New Game, name your student, and you are enrolled. Six save slots live under Character Select.' },
+      { p: '**Design your mage.** Choose New Game and name your student, then pick a **Skin**, **Hair** and **Accent** colour from the swatches, or press Randomize until a look suits you. The preview animates your Apprentice as you choose, and a strip beneath it shows the same student in each School\'s Year 2 robes: the look you pick here carries into every School robe you will ever wear.' },
+      { image: 'title.jpg', alt: 'The title screen: the Academy logo beside the Headmistress\'s tower under a crescent moon', caption: 'Pick New Game, name and design your student, and you are enrolled. Six save slots live under Character Select.' },
       { p: 'Every student starts in the same place: the **Academy Grounds**, a long campus walk from the armory in the west to the east gate. You arrive as an **Apprentice** with Arcane Bolt on {key:slot0}, a Red Potion on {key:slot10} and a Blue Potion on {key:slot11}. Your starting kit is in [[How to play|#how-to-play]].' },
       { p: 'From west to east you will pass Tilda\'s armory, Bram\'s quartermaster counter, the dormitory fountain, the **Headmistress\'s tower** and the five School halls with a Professor in front of each. The east gate leads to Whisperwood.' },
       { zone: 'mistvale', note: 'Campus is a safe zone: no monsters, and HP and MP recover faster here than in the field.' },
@@ -191,6 +194,42 @@ export const WALKTHROUGH: Section[] = [
       { boss: 'lich_archon' },
       { image: 'sanctum-lich.jpg', alt: 'An Inferno Sage and a summoned phoenix fighting the Lich Archon under a rain of meteors in the Arcane Sanctum', caption: 'Meteor Storm and a Summon Phoenix against the Lich Archon. His HP bar sits at the top of the screen.' },
       { checklist: ['Potions on both hotbar pages', 'Your School\'s Year 4 staff (or better)', 'Every ultimate learned and off cooldown', 'Wisps on the ledges cleared before you engage'] },
+    ],
+  },
+
+  // ───────────────────────────── Year 5 ─────────────────────────────
+  {
+    id: 'y5-fellowship', part: Y5, title: 'The Fellowship Exam',
+    blocks: [
+      { p: 'Graduation is not the last Year. At level {joblv:5} your own Professor invites you back for a postgraduate **Fellowship Exam**, and passing it makes you an **Archon**: the fifth and last title of your School. The level cap is ' + MAX_LEVEL + '.' },
+      { quests: ['q_job_pyre_archon', 'q_job_winter_archon', 'q_job_storm_archon', 'q_job_light_archon', 'q_job_night_archon'], title: 'The five Fellowship Exams' },
+      { p: 'Each exam is a hunt plus a handful of Star Dust, and the targets live in the Fellowship\'s endgame maps below. Your Archon adds a new page of spells to your School; see [[the Five Schools|#schools]] for every table.' },
+    ],
+  },
+  {
+    id: 'y5-observatory', part: Y5, title: 'The Astral Observatory',
+    blocks: [
+      { p: 'A portal in the Arcane Sanctum climbs above the clouds to the **Astral Observatory** (levels {zlv:astral_observatory}). Astral Sentinels hold the floor and the dais, and Star Moths drift over the high ledges.' },
+      { zone: 'astral_observatory' },
+      { training: [50, 57] },
+    ],
+  },
+  {
+    id: 'y5-rift', part: Y5, title: 'The Void Rift',
+    blocks: [
+      { p: 'East of the Observatory the world is torn open. The **Void Rift** (levels {zlv:void_rift}) is floating shards and broken ledges: Rift Stalkers prowl the floor, Null Wisps drift over the ledges, and Shard Horrors guard the shard rocks.' },
+      { zone: 'void_rift' },
+      { training: [57, 64] },
+    ],
+  },
+  {
+    id: 'y5-spire', part: Y5, title: 'The Archon Spire and The Unwritten',
+    blocks: [
+      { p: 'The last portal leads to the **Archon Spire** (levels {zlv:archon_spire}), a gold-and-violet tower. Archon Knights and Unwritten Pages hold the galleries; at the top, across one wide arena floor, waits the raid boss **The Unwritten**. A portal on the east side leads back to campus.' },
+      { zone: 'archon_spire' },
+      { training: [64, 70] },
+      { boss: 'the_unwritten', note: 'It is weak to nothing and resists nothing, so every School is a valid answer.' },
+      { checklist: ['Archon title and your newest spells trained', 'Potions on both hotbar pages', 'Every ultimate off cooldown', 'The galleries cleared of Pages before you reach the arena'] },
     ],
   },
 

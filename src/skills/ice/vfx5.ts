@@ -45,6 +45,11 @@ function tween(scene: Phaser.Scene, owner: Group, target: Phaser.GameObjects.Gam
 function finish(scene: Phaser.Scene, owner: Group, hold = 160, fade = 220): void {
   tween(scene, owner, owner, { alpha: 0, delay: hold, duration: fade, onComplete: () => owner.destroy() });
 }
+/** Impact pop: starts small and snaps to full size in a few stepped frames (one tween, no extra objects). */
+function pop(scene: Phaser.Scene, owner: Group, from = 0.6): void {
+  owner.setScale(from);
+  tween(scene, owner, owner, { scaleX: 1, scaleY: 1, duration: 120, ease: 'Stepped', easeParams: [4] });
+}
 function sheet(scene: Phaser.Scene, owner: Group, id: string, x = 0, y = 0, scale = 2, dur = 400, ice = true): void {
   const s = pxFx(scene, id, x, y, { scale, v: ice ? 'ice' : undefined, dur, alpha: 0.8 });
   if (s) owner.add(s);
@@ -57,6 +62,8 @@ const cataclysmCast: VfxFn = (scene, o) => {
   snow(g, 0, -14, 14);
   for (const s of [-1, 1]) for (let i = 1; i <= 3; i++) gem(g, s * i * 12, -4 - i * 3, 5 - i + 2, i % 2 ? PALE : CYAN);
   sheet(scene, c, 'cm_ring', 0, -20, 3, 420);
+  sheet(scene, c, 'sf_snow', 0, -14, 3, 360);
+  pop(scene, c, 0.7);
   finish(scene, c, 200, 240);
 };
 
@@ -106,6 +113,8 @@ const judgmentHit: VfxFn = (scene, o) => {
   for (let i = -3; i <= 3; i++) { gem(g, i * 7, (i % 2 ? -10 : 10) - Math.abs(i), 5, i % 2 ? PALE : CYAN); }
   rect(g, -20, -1, 40, 3, WHITE);
   sheet(scene, c, 'sf_shatter', 0, 0, 4, 420);
+  sheet(scene, c, 'cm_ring', 0, 0, 4, 300);
+  pop(scene, c, 0.5);
   finish(scene, c, 140, 240);
 };
 
@@ -161,6 +170,7 @@ const winterHit: VfxFn = (scene, o) => {
   for (let i = -2; i <= 2; i++) { gem(g, i * 8, i % 2 ? -10 : 10, 8, PALE); rect(g, i * 8, -18, 1, 36, WHITE); }
   snow(g, 0, 0, 10);
   sheet(scene, c, 'sf_shatter', 0, 0, 4, 420);
+  pop(scene, c);
   finish(scene, c, 160, 260);
 };
 
@@ -215,6 +225,7 @@ const cryoclasmArea: VfxFn = (scene, o) => {
   }
   snow(g, 0, -4, 18);
   sheet(scene, c, 'cm_ring', 0, 0, 5, 380);
+  sheet(scene, c, 'sf_shatter', 0, -4, 5, 320);
   finish(scene, c, 240, 240);
 };
 
@@ -224,6 +235,7 @@ const cryoclasmHit: VfxFn = (scene, o) => {
   for (let i = -12; i <= 12; i++) { rect(g, i, i, 2, 2, i % 3 ? WHITE : CYAN); rect(g, i, -i, 2, 2, i % 3 ? WHITE : CYAN); }
   for (const [x, y] of [[-16, -6], [15, -9], [-8, 13], [9, 12]]) gem(g, x, y, 4, PALE);
   sheet(scene, c, 'sf_shatter', 0, 0, 4, 380);
+  pop(scene, c, 0.5);
   finish(scene, c, 100, 220);
 };
 

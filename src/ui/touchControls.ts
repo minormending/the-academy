@@ -107,6 +107,11 @@ function installTouchMode() {
 
 installTouchMode();
 
+/** Light haptic tick for jump / spell presses; no-op where vibration is unsupported or touch mode is off. */
+function tick() {
+  try { if (isTouchMode()) navigator.vibrate?.(8); } catch { /* unsupported or blocked */ }
+}
+
 // ───────────────────────────── synthetic keys ─────────────────────────────
 
 function dispatchKey(type: 'keydown' | 'keyup', keyCode: number) {
@@ -212,7 +217,7 @@ export class TouchControls {
       const badge = h('div', { class: 'ax-tc-slot-badge' });
       const el = h('div', { class: 'ax-tc-btn ax-tc-slot ax-empty', 'data-hotbar-slot': String(HALVES[0][i]) }, icon, cd, cdText, badge);
       // Slots are drop targets too (UIRoot.onDrop reads data-hotbar-slot), so spells can be dragged straight here.
-      this.pressable(el, `slot${i}`, () => [SLOT_ACTIONS[HALVES[this.half][i]]]);
+      this.pressable(el, `slot${i}`, () => [SLOT_ACTIONS[HALVES[this.half][i]]], true);
       grid.appendChild(el);
       this.slots.push({ el, icon, cd, cdText, badge, sig: '', lastCd: '', mpCost: 0 });
     }
@@ -223,7 +228,7 @@ export class TouchControls {
     this.bindFlip();
 
     const jump = h('div', { class: 'ax-tc-btn ax-tc-jump' }, h('span', { class: 'ax-tc-jump-arrow' }), h('span', { class: 'ax-tc-label' }, 'Jump'));
-    this.pressable(jump, 'jump', () => [getBinding('jump') ? 'jump' : 'jump2']);
+    this.pressable(jump, 'jump', () => [getBinding('jump') ? 'jump' : 'jump2'], true);
     const pickIco = h('span', { class: 'ax-tc-ico' });
     const pickup = h('div', { class: 'ax-tc-btn ax-tc-pickup' }, pickIco, h('span', { class: 'ax-tc-label' }, 'Loot'));
     this.pressable(pickup, 'pickup', () => ['pickup']);
@@ -295,13 +300,16 @@ export class TouchControls {
   }
 
   /** Hold-to-press button: keydown on the first finger, keyup when the last one lifts (or is cancelled). */
-  private pressable(el: HTMLElement, source: string, actions: () => readonly ActionId[]) {
+  private pressable(el: HTMLElement, source: string, actions: () => readonly ActionId[], haptic = false) {
     el.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       e.preventDefault();
       try { el.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
       if (this.downEls.get(el)?.has(e.pointerId)) return;
-      if (this.track(el, e.pointerId, true) === 1) this.keys.set(source, actions());
+      if (this.track(el, e.pointerId, true) === 1) {
+        this.keys.set(source, actions());
+        if (haptic) tick();
+      }
     });
     const up = (e: PointerEvent) => {
       if (!this.downEls.get(el)?.has(e.pointerId)) return;

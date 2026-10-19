@@ -22,7 +22,7 @@ export interface MeritEntry { itemId: string; qty: number; cost: number; page: '
 export interface Guide {
   sections: Section[];
   maps: MapDef[];
-  /** Maps the walkthrough tours, in play order (the town first, the Trial Hall last). */
+  /** Maps the walkthrough tours, in play order (the town first, the Fellowship maps after the Sanctum, then the rest). */
   zoneOrder: string[];
   monsters: MonsterDef[];
   items: ItemDef[];
@@ -49,7 +49,7 @@ export interface Guide {
   merit: MeritEntry[];
   /** Story steps in chain order. */
   story: QuestDef[];
-  exams: Record<School, { 3: QuestDef | undefined; 4: QuestDef | undefined }>;
+  exams: Record<School, { 3: QuestDef | undefined; 4: QuestDef | undefined; 5: QuestDef | undefined }>;
   bounties: QuestDef[];
   /** Side assignments (not story, not exams, not bounties), by minimum level. */
   assignments: QuestDef[];
@@ -63,7 +63,7 @@ export const npc = (id: string) => Registry.npc(id);
 export const quest = (id: string) => Registry.quest(id);
 export const job = (id: JobId) => Registry.job(id);
 
-/** The jobs of a School by Year: [Year 2, Year 3, Year 4]. */
+/** The jobs of a School by Year: [Year 2, Year 3, Year 4, Year 5 (the Fellowship Archon)]. */
 export function schoolJobs(s: School): JobDef[] {
   const out: JobDef[] = [];
   let j: JobDef | undefined = Registry.job(BRANCH_ROOT_JOB[s]);
@@ -183,10 +183,11 @@ export function buildGuide(sections: Section[]): Guide {
 
   const exams = {} as Guide['exams'];
   for (const s of SCHOOLS) {
-    const [, y3, y4] = schoolJobs(s);
+    const [, y3, y4, y5] = schoolJobs(s);
     exams[s] = {
       3: y3 ? quest(JOB_ADVANCEMENT_QUESTS[y3.id] ?? '') : undefined,
       4: y4 ? quest(JOB_ADVANCEMENT_QUESTS[y4.id] ?? '') : undefined,
+      5: y5 ? quest(JOB_ADVANCEMENT_QUESTS[y5.id] ?? '') : undefined,
     };
   }
 
@@ -202,6 +203,11 @@ export function buildGuide(sections: Section[]): Guide {
     zoneOrder.push(cur.id);
     const east: MapDef | undefined = cur.portals.filter(p => p.id === 'east').map(p => Registry.map(p.targetMap)).find(Boolean);
     cur = east;
+  }
+  // The Fellowship's endgame maps follow the Arcane Sanctum: Observatory → Rift → Spire along the east portals.
+  for (let cur: MapDef | undefined = Registry.map('astral_observatory'); cur && !zoneOrder.includes(cur.id);) {
+    zoneOrder.push(cur.id);
+    cur = cur.portals.filter(p => p.id === 'east').map(p => Registry.map(p.targetMap)).find(Boolean);
   }
   for (const m of maps) if (!zoneOrder.includes(m.id)) zoneOrder.push(m.id);
 

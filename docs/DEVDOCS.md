@@ -123,7 +123,7 @@ sections for the file name and re-check the numbers.
 ### Numbers in prose
 
 A count of game data (how many spells there are, how many a School has) is written as
-`<span data-stat="spells">174</span>`, not as a bare number. `fillStats` in `main.ts` replaces the text with the
+`<span data-stat="spells">214</span>`, not as a bare number. `fillStats` in `main.ts` replaces the text with the
 value from `spellStats` (`charts/data.ts`) when the game modules load, and `check.mjs` rejects a name that is not in
 `STAT_NAMES` (`names.ts`). The number typed inside the span is only a fallback; in `npm run dev` a stale one is
 listed in the red banner, so a content change shows up the next time someone opens the page. To add a stat, add

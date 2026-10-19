@@ -25,7 +25,7 @@ import { PetSystem } from '../systems/PetSystem';
 import { ArenaSystem } from '../systems/ArenaSystem';
 import { HonorsSystem } from '../systems/HonorsSystem';
 import { loadMap } from '../world/MapLoader';
-import { cameraZoom, onMobileLayoutChanged } from '../ui/mobile';
+import { cameraZoom, isMobileLayout, onMobileLayoutChanged } from '../ui/mobile';
 
 export class GameScene extends Phaser.Scene implements IGameApi {
   private s!: GameServices;
@@ -159,14 +159,13 @@ export class GameScene extends Phaser.Scene implements IGameApi {
 
     this.physics.world.setBounds(0, 0, map.widthPx, map.heightPx);
     const cam = this.cameras.main;
-    cam.setBounds(0, 0, map.widthPx, map.heightPx);
     this.applyCameraZoom();
 
     s.player.bindMap(map);
     const portal = portalId ? map.getPortalById(portalId) : null;
     const spawn = portal ? { x: portal.x, y: portal.y } : map.getDefaultSpawn();
     s.player.placeAt(spawn.x, spawn.y);
-    cam.startFollow(s.player.sprite, true, 0.12, 0.12, 0, 40);
+    cam.startFollow(s.player.sprite, true, 0.12, 0.12, 0, isMobileLayout() ? 10 : 40);
 
     s.monsters.bindMap(map);
     s.drops.bindMap(map);
@@ -186,6 +185,16 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     if (!cam) return;
     const z = cameraZoom();
     if (cam.zoom !== z) cam.setZoom(z);
+    // Phones: pad the camera bounds so the player can scroll clear of the d-pad (left) / spell pad (right) / bottom edge.
+    const m = this.map;
+    if (m) {
+      const mobile = isMobileLayout();
+      const padX = mobile ? 120 : 0;
+      const padBottom = mobile ? 60 : 0;
+      cam.setBounds(-padX, 0, m.widthPx + padX * 2, m.heightPx + padBottom);
+      // Smaller offset = player sits higher on screen, above the bottom controls.
+      cam.setFollowOffset(0, mobile ? 10 : 40);
+    }
   }
 
   private wireEvents() {

@@ -1148,7 +1148,7 @@ html.ax-touch .ax-drag-active .ax-hotbar { display: flex; right: 8px; bottom: 30
 /* ===== Mobile windows (M2) ===== */
 /* Phones (html.ax-mobile, #ui-root laid out at 720×405): every window is a full-screen sheet with a big header,
    one open at a time, momentum-scrolled body; the dialog is a bottom sheet. Kenney Pixel is a 1x pixel font,
-   so body text goes up to 26px (≈ 14+ CSS px of glyph on a 667–812 px wide phone). */
+   so body text goes up to 30px (≈ 14+ CSS px of glyph on a 667–812 px wide phone). */
 
 html.ax-mobile #ui-root .ax-window.ax-sheet {
   left: 0 !important; top: 0 !important; right: 0; bottom: 0; width: auto !important;
@@ -1167,18 +1167,18 @@ html.ax-mobile #ui-root .ax-sheet .ax-win-close::before, html.ax-mobile #ui-root
 html.ax-mobile #ui-root .ax-sheet .ax-win-body {
   flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 8px 12px 6px;
   -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y;
-  font-size: 26px; line-height: 1.15;
+  font-size: 30px; line-height: 1.15;
 }
 html.ax-mobile #ui-root .ax-m-scroll { overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; }
 /* text: lift the desktop 16px everywhere inside a sheet; Kenney Mini headings stay a notch smaller (they are 2x wide). */
-html.ax-mobile #ui-root .ax-sheet .ax-win-body :where(div, span, b, p, li, label, button, a, small) { font-size: 26px; }
-html.ax-mobile #ui-root .ax-sheet :is(.ax-tt-name, .ax-panel-head, .ax-help-head, .ax-book-title b, .ax-char-name, .ax-job-name, .ax-dlg-name, .ax-m-group, .ax-sp b, .ax-book-sp b) { font-size: 18px; line-height: 1.2; }
-html.ax-mobile #ui-root .ax-sheet :is(.ax-qty, .ax-kind, .ax-slot-label) { font-size: 22px; line-height: 1; }
-html.ax-mobile #ui-root .ax-sheet .ax-win-footer { font-size: 24px; }
-html.ax-mobile #ui-root .ax-sheet :is(.ax-btn, .ax-btn-small) { min-height: 44px; padding: 8px 14px; font-size: 26px; }
+html.ax-mobile #ui-root .ax-sheet .ax-win-body :where(div, span, b, p, li, label, button, a, small) { font-size: 30px; }
+html.ax-mobile #ui-root .ax-sheet :is(.ax-tt-name, .ax-panel-head, .ax-help-head, .ax-book-title b, .ax-char-name, .ax-job-name, .ax-dlg-name, .ax-m-group, .ax-sp b, .ax-book-sp b) { font-size: 20px; line-height: 1.2; }
+html.ax-mobile #ui-root .ax-sheet :is(.ax-qty, .ax-kind, .ax-slot-label) { font-size: 26px; line-height: 1; }
+html.ax-mobile #ui-root .ax-sheet .ax-win-footer { font-size: 28px; }
+html.ax-mobile #ui-root .ax-sheet :is(.ax-btn, .ax-btn-small) { min-height: 44px; padding: 8px 14px; font-size: 30px; }
 html.ax-mobile #ui-root .ax-sheet .ax-tabs { flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding-bottom: 8px; scrollbar-width: none; touch-action: pan-x; }
-html.ax-mobile #ui-root .ax-sheet .ax-tab { min-height: 44px; padding: 8px 16px; font-size: 26px; flex: 1 0 auto; justify-content: center; }
-html.ax-mobile #ui-root .ax-sheet .ax-chip { min-height: 40px; padding: 6px 12px; font-size: 24px; }
+html.ax-mobile #ui-root .ax-sheet .ax-tab { min-height: 44px; padding: 8px 16px; font-size: 30px; flex: 1 0 auto; justify-content: center; }
+html.ax-mobile #ui-root .ax-sheet .ax-chip { min-height: 40px; padding: 6px 12px; font-size: 28px; }
 html.ax-mobile #ui-root .ax-sheet ::-webkit-scrollbar { width: 6px; height: 0; }
 html.ax-mobile #ui-root .ax-sheet :is(.ax-skill-list, .ax-inv-scroll, .ax-quest-list, .ax-shop-list) { max-height: none; overflow: visible; }
 
@@ -1199,7 +1199,7 @@ html.ax-mobile #ui-root .ax-sheet.ax-inv-win .ax-win-body { display: flex; flex-
 .ax-m-unlearn .ax-m-actions > .ax-m-btn { flex: 1 1 auto; }
 .ax-m-detail > .ax-m-actions { position: sticky; bottom: -10px; margin: 8px -10px -10px; padding: 8px 10px 10px; background: var(--ax-well); box-shadow: 0 -2px 0 var(--ax-line); }
 .ax-m-detail > .ax-m-picker { margin: 0 0 10px; padding-bottom: 10px; border-bottom: 2px solid var(--ax-line); }
-html.ax-mobile #ui-root .ax-sheet .ax-m-btn { min-height: 48px; font-size: 26px; }
+html.ax-mobile #ui-root .ax-sheet .ax-m-btn { min-height: 48px; font-size: 30px; }
 .ax-m-row {
   display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 6px 8px; cursor: pointer;
   border: 2px solid transparent; border-image: url("/assets/ui/golden/well.png") 3 fill / 6px / 0;
@@ -1230,8 +1230,8 @@ html.ax-mobile #ui-root .ax-sheet .ax-win-body .ax-m-plus { flex: none; width: 5
 }
 .ax-m-yeartab.ax-active { background: var(--ax-gold); box-shadow: inset 0 0 0 2px #fff4c4; }
 .ax-m-yeartab.ax-locked { opacity: 0.75; }
-html.ax-mobile #ui-root .ax-sheet .ax-m-yeartab-year { display: flex; align-items: center; gap: 4px; font-size: 18px; text-transform: uppercase; letter-spacing: 1px; color: var(--ax-ink-faint); }
-html.ax-mobile #ui-root .ax-sheet .ax-m-yeartab-name { font-size: 26px; color: var(--accent); white-space: nowrap; text-shadow: var(--ax-ts); }
+html.ax-mobile #ui-root .ax-sheet .ax-m-yeartab-year { display: flex; align-items: center; gap: 4px; font-size: 20px; text-transform: uppercase; letter-spacing: 1px; color: var(--ax-ink-faint); }
+html.ax-mobile #ui-root .ax-sheet .ax-m-yeartab-name { font-size: 30px; color: var(--accent); white-space: nowrap; text-shadow: var(--ax-ts); }
 .ax-m-yeartab.ax-active .ax-m-yeartab-year { color: #5e3d06; }
 .ax-m-yeartab.ax-active .ax-m-yeartab-name { color: var(--ax-k); text-shadow: none; }
 .ax-m-chips { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; padding-bottom: 2px; }
@@ -1261,7 +1261,7 @@ html.ax-mobile #ui-root .ax-sheet .ax-m-pick-half { font-family: var(--ax-head);
 }
 .ax-m-pick-slot.ax-active { border-image-source: url("/assets/ui/golden/slot_hover.png"); box-shadow: 0 0 0 2px var(--ax-gold); }
 .ax-m-pick-slot .ax-icon { width: 30px !important; height: 30px !important; }
-html.ax-mobile #ui-root .ax-sheet .ax-m-pick-head b { font-size: 26px; }
+html.ax-mobile #ui-root .ax-sheet .ax-m-pick-head b { font-size: 30px; }
 
 /* Dialog: bottom sheet */
 html.ax-mobile #ui-root .ax-window.ax-sheet.ax-dialog-win { top: auto !important; max-height: 100%; animation: ax-sheetup 0.16s steps(4); }
@@ -1270,12 +1270,12 @@ html.ax-mobile #ui-root .ax-sheet.ax-dialog-win .ax-win-title { height: 44px; }
 html.ax-mobile #ui-root .ax-sheet .ax-dlg { gap: 12px; }
 html.ax-mobile #ui-root .ax-sheet .ax-dlg-left { width: 92px; }
 html.ax-mobile #ui-root .ax-sheet .ax-dlg-name { display: none; }
-html.ax-mobile #ui-root .ax-sheet .ax-dlg-title { font-size: 18px; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg-title { font-size: 20px; }
 html.ax-mobile #ui-root .ax-sheet .ax-dlg-right { gap: 8px; }
 html.ax-mobile #ui-root .ax-sheet .ax-dlg-text { min-height: 0; max-height: none; overflow: visible; padding: 8px 12px; line-height: 1.2; }
-html.ax-mobile #ui-root .ax-sheet .ax-dlg-text :is(span) { font-size: 28px; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg-text :is(span) { font-size: 32px; }
 html.ax-mobile #ui-root .ax-sheet .ax-dlg-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-html.ax-mobile #ui-root .ax-sheet .ax-dlg-opt { min-height: 48px; padding: 6px 12px; font-size: 26px; line-height: 1.1; }
+html.ax-mobile #ui-root .ax-sheet .ax-dlg-opt { min-height: 48px; padding: 6px 12px; font-size: 30px; line-height: 1.1; }
 html.ax-mobile #ui-root .ax-sheet .ax-dlg-opt.ax-single { grid-column: 1 / -1; align-self: stretch; }
 html.ax-mobile #ui-root .ax-sheet .ax-dlg-opts > .ax-dlg-opt:last-child:nth-child(odd) { grid-column: 1 / -1; }
 html.ax-mobile #ui-root .ax-sheet .ax-dlg-opt:hover { transform: none; }
@@ -1287,8 +1287,8 @@ html.ax-mobile #ui-root .ax-sheet .ax-shop-row { min-height: 60px; gap: 10px; }
 html.ax-mobile #ui-root .ax-sheet .ax-shop-row.ax-sel { border-image-source: url("/assets/ui/golden/slot_hover.png"); border-image-slice: 4 fill; }
 html.ax-mobile #ui-root .ax-sheet .ax-shop-row .ax-icon { width: 40px !important; height: 40px !important; }
 html.ax-mobile #ui-root .ax-sheet .ax-stepper { gap: 4px; min-width: 0; }
-html.ax-mobile #ui-root .ax-sheet .ax-step { width: 44px; height: 44px; font-size: 26px; }
-html.ax-mobile #ui-root .ax-sheet .ax-step-wide { width: 56px; font-size: 24px; }
+html.ax-mobile #ui-root .ax-sheet .ax-step { width: 44px; height: 44px; font-size: 30px; }
+html.ax-mobile #ui-root .ax-sheet .ax-step-wide { width: 56px; font-size: 28px; }
 html.ax-mobile #ui-root .ax-sheet .ax-step-val { min-width: 36px; }
 html.ax-mobile #ui-root .ax-sheet .ax-shop-row > .ax-btn { min-width: 84px; }
 .ax-m-shop-tip { padding: 8px 12px; border: 2px solid transparent; border-image: url("/assets/ui/golden/tooltip.png") 4 fill / 8px / 0; }
@@ -1306,10 +1306,10 @@ html.ax-mobile #ui-root .ax-sheet .ax-stats-top { flex-direction: row; gap: 10px
 html.ax-mobile #ui-root .ax-sheet .ax-stats-left { flex: 1 1 50%; }
 html.ax-mobile #ui-root .ax-sheet .ax-equip { flex: 1 1 50%; width: auto; }
 html.ax-mobile #ui-root .ax-sheet .ax-base-row { min-height: 52px; gap: 12px; }
-html.ax-mobile #ui-root .ax-sheet .ax-base-label { width: 56px; font-size: 18px; }
+html.ax-mobile #ui-root .ax-sheet .ax-base-label { width: 56px; font-size: 20px; }
 html.ax-mobile #ui-root .ax-sheet .ax-base-row .ax-plus { width: 52px; height: 46px; font-size: 32px; padding: 0 0 4px; }
 html.ax-mobile #ui-root .ax-sheet .ax-panel-head { flex-wrap: wrap; }
-html.ax-mobile #ui-root .ax-sheet .ax-panel-head .ax-pill { font-size: 24px; padding: 3px 8px; }
+html.ax-mobile #ui-root .ax-sheet .ax-panel-head .ax-pill { font-size: 28px; padding: 3px 8px; }
 html.ax-mobile #ui-root .ax-sheet .ax-derived { margin-top: 10px; }
 html.ax-mobile #ui-root .ax-sheet .ax-derived-grid { column-gap: 24px; }
 html.ax-mobile #ui-root .ax-sheet .ax-derived-row { padding: 3px 0 4px; }
@@ -1317,7 +1317,7 @@ html.ax-mobile #ui-root .ax-sheet .ax-derived-row { padding: 3px 0 4px; }
 .ax-m-eq { min-height: 56px; }
 .ax-m-eq .ax-equip-slot { width: 44px; height: 44px; flex: none; }
 .ax-m-eq.ax-empty { cursor: default; opacity: 0.7; }
-html.ax-mobile #ui-root .ax-sheet .ax-m-eq-slot { font-size: 18px; color: var(--ax-ink-faint); text-transform: uppercase; letter-spacing: 1px; }
+html.ax-mobile #ui-root .ax-sheet .ax-m-eq-slot { font-size: 20px; color: var(--ax-ink-faint); text-transform: uppercase; letter-spacing: 1px; }
 html.ax-mobile #ui-root .ax-sheet .ax-m-eq .ax-m-btn { flex: none; min-height: 44px; padding: 6px 12px; }
 
 /* M2 · Assignments / Honors */
@@ -1325,8 +1325,8 @@ html.ax-mobile #ui-root .ax-sheet .ax-quest-head { min-height: 56px; padding: 8p
 html.ax-mobile #ui-root .ax-sheet .ax-quest-giver, html.ax-mobile #ui-root .ax-sheet .ax-quest-desc { line-height: 1.2; }
 html.ax-mobile #ui-root .ax-sheet .ax-quest-body { padding: 0 10px 10px; }
 html.ax-mobile #ui-root .ax-sheet .ax-obj-line { margin-bottom: 4px; }
-html.ax-mobile #ui-root .ax-sheet .ax-badge { font-size: 22px; padding: 3px 8px; }
-html.ax-mobile #ui-root .ax-sheet .ax-quest-name { font-size: 26px; }
+html.ax-mobile #ui-root .ax-sheet .ax-badge { font-size: 26px; padding: 3px 8px; }
+html.ax-mobile #ui-root .ax-sheet .ax-quest-name { font-size: 30px; }
 html.ax-mobile #ui-root .ax-sheet .ax-hon-list { max-height: none; overflow: visible; }
 html.ax-mobile #ui-root .ax-sheet .ax-hon-head { flex-wrap: wrap; gap: 8px 14px; }
 html.ax-mobile #ui-root .ax-sheet .ax-hon-title-btn { min-height: 44px; }
@@ -1340,12 +1340,12 @@ html.ax-mobile #ui-root .ax-sheet.ax-menu-win .ax-win-body > :is(.ax-tabs, .ax-c
 html.ax-mobile #ui-root .ax-sheet.ax-menu-win .ax-tabs { padding-bottom: 0; }
 html.ax-mobile #ui-root .ax-sheet .ax-confirm { display: flex; flex-direction: column; gap: 8px; }
 html.ax-mobile #ui-root .ax-sheet .ax-menu-btn { min-height: 52px; }
-html.ax-mobile #ui-root .ax-sheet .ax-slider-row { grid-template-columns: 100px 1fr 64px; min-height: 48px; }
+html.ax-mobile #ui-root .ax-sheet .ax-slider-row { grid-template-columns: 120px 1fr 72px; min-height: 52px; }
 html.ax-mobile #ui-root .ax-sheet .ax-slider { height: 12px; }
 html.ax-mobile #ui-root .ax-sheet .ax-slider::-webkit-slider-thumb { width: 24px; height: 36px; }
 html.ax-mobile #ui-root .ax-sheet .ax-slider::-moz-range-thumb { width: 24px; height: 36px; }
-html.ax-mobile #ui-root .ax-sheet .ax-set-row { grid-template-columns: 120px 1fr; min-height: 52px; }
-html.ax-mobile #ui-root .ax-sheet .ax-seg-btn { flex: 1; min-height: 44px; font-size: 26px; }
+html.ax-mobile #ui-root .ax-sheet .ax-set-row { grid-template-columns: 150px 1fr; min-height: 56px; }
+html.ax-mobile #ui-root .ax-sheet .ax-seg-btn { flex: 1; min-height: 44px; font-size: 30px; }
 html.ax-mobile #ui-root .ax-sheet .ax-help-cols { grid-template-columns: 1fr; gap: 4px; }
 html.ax-mobile #ui-root .ax-sheet .ax-help-tip { line-height: 1.25; margin: 4px 0; }
 html.ax-mobile #ui-root .ax-sheet .ax-help-head { margin: 12px 0 4px; }
@@ -1614,3 +1614,228 @@ html.ax-mobile #ui-root .ax-cc-bar {
   position: sticky; bottom: 0; padding: 6px 0 8px; width: 100%; justify-content: center; background: var(--ax-indigo);
   box-shadow: 0 -2px 0 var(--ax-k);
 }
+
+
+/* ===== Large text ===== */
+/* Accessibility > Text size: Large (class set on <html> by core/settings.ts). Bumps every 14-28px UI font ~20%. */
+html.ax-large-text #ui-root { font-size: 19px; }
+html.ax-large-text #ui-root button,
+html.ax-large-text #ui-root input { font-size: 19px; }
+html.ax-large-text .ax-btn { font-size: 19px; }
+html.ax-large-text .ax-btn-small { font-size: 19px; }
+html.ax-large-text .ax-plus { font-size: 19px; }
+html.ax-large-text .ax-tab { font-size: 19px; }
+html.ax-large-text .ax-pill { font-size: 19px; }
+html.ax-large-text .ax-badge { font-size: 19px; }
+html.ax-large-text .ax-mesos { font-size: 19px; }
+html.ax-large-text .ax-win-title-text { font-size: 19px; }
+html.ax-large-text .ax-win-footer { font-size: 19px; }
+html.ax-large-text .ax-panel-head { font-size: 19px; }
+html.ax-large-text .ax-tooltip { font-size: 19px; }
+html.ax-large-text .ax-tt-name { font-size: 19px; }
+html.ax-large-text .ax-tt-sub { font-size: 19px; }
+html.ax-large-text .ax-tt-section { font-size: 19px; }
+html.ax-large-text .ax-tt-req { font-size: 19px; }
+html.ax-large-text .ax-tt-foot { font-size: 19px; }
+html.ax-large-text .ax-lv-tag { font-size: 19px; }
+html.ax-large-text .ax-lv-num { font-size: 19px; }
+html.ax-large-text .ax-id-name { font-size: 19px; }
+html.ax-large-text .ax-id-job { font-size: 19px; }
+html.ax-large-text .ax-gauge-label { font-size: 19px; }
+html.ax-large-text .ax-gauge-text { font-size: 19px; }
+html.ax-large-text .ax-expbar .ax-gauge-label { font-size: 19px; }
+html.ax-large-text .ax-expbar .ax-gauge-text { font-size: 19px; }
+html.ax-large-text .ax-quick-label { font-size: 19px; }
+html.ax-large-text .ax-quick-key { font-size: 19px; }
+html.ax-large-text .ax-qi-help::after { font-size: 19px; }
+html.ax-large-text .ax-page-btn { font-size: 19px; }
+html.ax-large-text .ax-page-key { font-size: 19px; }
+html.ax-large-text .ax-slot-cdtext { font-size: 19px; }
+html.ax-large-text .ax-slot-key { font-size: 19px; }
+html.ax-large-text .ax-slot.ax-empty .ax-slot-key { font-size: 19px; }
+html.ax-large-text .ax-slot-badge { font-size: 19px; }
+html.ax-large-text .ax-buff-time { font-size: 19px; }
+html.ax-large-text .ax-mm-name { font-size: 19px; }
+html.ax-large-text .ax-mm-sub { font-size: 19px; }
+html.ax-large-text .ax-mm-toggle { font-size: 19px; }
+html.ax-large-text .ax-line { font-size: 19px; }
+html.ax-large-text .ax-area-sub { font-size: 19px; }
+html.ax-large-text .ax-job .ax-big-title { font-size: 29px; }
+html.ax-large-text .ax-big-sub { font-size: 19px; }
+html.ax-large-text .ax-year-tab-year { font-size: 19px; }
+html.ax-large-text .ax-book-sp b { font-size: 19px; }
+html.ax-large-text .ax-chip { font-size: 19px; }
+html.ax-large-text .ax-locked-note { font-size: 19px; }
+html.ax-large-text .ax-skill-group { font-size: 19px; }
+html.ax-large-text .ax-skill-group b { font-size: 19px; }
+html.ax-large-text .ax-skill-group-desc { font-size: 19px; }
+html.ax-large-text .ax-skill-name { font-size: 19px; }
+html.ax-large-text .ax-kind { font-size: 19px; }
+html.ax-large-text .ax-skill-lv { font-size: 19px; }
+html.ax-large-text .ax-skill-req { font-size: 19px; }
+html.ax-large-text .ax-skills-win .ax-win-footer .ax-dim { font-size: 19px; }
+html.ax-large-text .ax-sp b { font-size: 19px; }
+html.ax-large-text .ax-qty { font-size: 19px; }
+html.ax-large-text .ax-inv-hint { font-size: 19px; }
+html.ax-large-text .ax-char-name { font-size: 19px; }
+html.ax-large-text .ax-char-job { font-size: 19px; }
+html.ax-large-text .ax-char-lv { font-size: 19px; }
+html.ax-large-text .ax-base-label { font-size: 19px; }
+html.ax-large-text .ax-base-val { font-size: 19px; }
+html.ax-large-text .ax-slot-label { font-size: 19px; }
+html.ax-large-text .ax-derived-row { font-size: 19px; }
+html.ax-large-text .ax-quest-name { font-size: 19px; }
+html.ax-large-text .ax-quest-giver { font-size: 19px; }
+html.ax-large-text .ax-quest-desc { font-size: 19px; }
+html.ax-large-text .ax-obj-line { font-size: 19px; }
+html.ax-large-text .ax-quest-rewards { font-size: 19px; }
+html.ax-large-text .ax-slider-row { font-size: 19px; }
+html.ax-large-text .ax-confirm { font-size: 19px; }
+html.ax-large-text .ax-help-intro { font-size: 19px; }
+html.ax-large-text .ax-help-head { font-size: 19px; }
+html.ax-large-text .ax-help-row { font-size: 19px; }
+html.ax-large-text .ax-help-tip { font-size: 19px; }
+html.ax-large-text #ui-root kbd { font-size: 19px; }
+html.ax-large-text .ax-job-name { font-size: 19px; }
+html.ax-large-text .ax-job-branch { font-size: 19px; }
+html.ax-large-text .ax-job-desc { font-size: 19px; }
+html.ax-large-text .ax-dlg-name { font-size: 19px; }
+html.ax-large-text .ax-dlg-title { font-size: 19px; }
+html.ax-large-text .ax-dlg-text { font-size: 19px; }
+html.ax-large-text .ax-dlg-opt { font-size: 19px; }
+html.ax-large-text .ax-dlg-num { font-size: 19px; }
+html.ax-large-text .ax-shop-name { font-size: 19px; }
+html.ax-large-text .ax-shop-price { font-size: 19px; }
+html.ax-large-text .ax-step { font-size: 19px; }
+html.ax-large-text .ax-step-wide { font-size: 19px; }
+html.ax-large-text .ax-death-title { font-size: 29px; }
+html.ax-large-text .ax-death-text { font-size: 19px; }
+html.ax-large-text .ax-logo-sub { font-size: 19px; }
+html.ax-large-text .ax-tb-label { font-size: 19px; }
+html.ax-large-text .ax-tb-sub { font-size: 19px; }
+html.ax-large-text .ax-title-link { font-size: 19px; }
+html.ax-large-text .ax-title-h { font-size: 29px; }
+html.ax-large-text .ax-title-text { font-size: 19px; }
+html.ax-large-text .ax-input { font-size: 19px; }
+html.ax-large-text .ax-counter { font-size: 19px; }
+html.ax-large-text .ax-title-error { font-size: 19px; }
+html.ax-large-text .ax-title-warn { font-size: 19px; }
+html.ax-large-text .ax-title-foot { font-size: 19px; }
+html.ax-large-text .ax-arena-title { font-size: 19px; }
+html.ax-large-text .ax-arena-best { font-size: 19px; }
+html.ax-large-text .ax-arena-text { font-size: 19px; }
+html.ax-large-text .ax-arena-stat { font-size: 19px; }
+html.ax-large-text .ax-arena-wave-num { font-size: 29px; }
+html.ax-large-text .ax-arena-tag { font-size: 19px; }
+html.ax-large-text .ax-arena-card-title { font-size: 19px; }
+html.ax-large-text .ax-arena-big-lbl { font-size: 19px; }
+html.ax-large-text .ax-arena-newbest { font-size: 19px; }
+html.ax-large-text .ax-arena-count-sub { font-size: 19px; }
+html.ax-large-text .ax-cs-sub { font-size: 19px; }
+html.ax-large-text .ax-cs-no { font-size: 19px; }
+html.ax-large-text .ax-cs-school { font-size: 19px; }
+html.ax-large-text .ax-cs-last { font-size: 19px; }
+html.ax-large-text .ax-cs-name { font-size: 19px; }
+html.ax-large-text .ax-cs-line { font-size: 19px; }
+html.ax-large-text .ax-cs-meta { font-size: 19px; }
+html.ax-large-text .ax-cs-enrol { font-size: 19px; }
+html.ax-large-text .ax-ctl-row { font-size: 19px; }
+html.ax-large-text .ax-ctl-msg { font-size: 19px; }
+html.ax-large-text .ax-pad-status { font-size: 19px; }
+html.ax-large-text .ax-pad-row { font-size: 19px; }
+html.ax-large-text .ax-set-row { font-size: 19px; }
+html.ax-large-text .ax-seg-btn { font-size: 19px; }
+html.ax-large-text .ax-cr-kicker { font-size: 19px; }
+html.ax-large-text .ax-cr-line { font-size: 29px; }
+html.ax-large-text .ax-cr-stats { font-size: 29px; }
+html.ax-large-text .ax-cr-quote { font-size: 29px; }
+html.ax-large-text .ax-cr-sign { font-size: 19px; }
+html.ax-large-text .ax-cr-h { font-size: 29px; }
+html.ax-large-text .ax-cr-credit { font-size: 19px; }
+html.ax-large-text .ax-cr-hint { font-size: 19px; }
+html.ax-large-text .ax-bag-badge { font-size: 19px; }
+html.ax-large-text .ax-tc-label { font-size: 19px; }
+html.ax-large-text .ax-tc-slot-cdtext { font-size: 29px; }
+html.ax-large-text .ax-tc-slot-badge { font-size: 19px; }
+html.ax-large-text .ax-tc-flip-num { font-size: 29px; }
+html.ax-large-text .ax-hon-head { font-size: 19px; }
+html.ax-large-text .ax-hon-title-btn { font-size: 19px; }
+html.ax-large-text .ax-hon-secret-ico { font-size: 19px; }
+html.ax-large-text .ax-hon-name { font-size: 19px; }
+html.ax-large-text .ax-hon-reward { font-size: 19px; }
+html.ax-large-text .ax-hon-desc { font-size: 19px; }
+html.ax-large-text .ax-hon-titletag { font-size: 19px; }
+html.ax-large-text .ax-hon-earned { font-size: 19px; }
+html.ax-large-text .ax-hon-count { font-size: 19px; }
+html.ax-large-text .ax-hon-note { font-size: 19px; }
+html.ax-large-text .ax-hon-titleopt { font-size: 19px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet .ax-win-title-text { font-size: 29px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet .ax-win-title-extra { font-size: 31px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet .ax-win-title-extra .ax-pill { font-size: 31px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet :is(.ax-tt-name,
+html.ax-large-text .ax-book-title b,
+html.ax-large-text .ax-m-group,
+html.ax-large-text .ax-book-sp b) { font-size: 24px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet :is(.ax-qty,
+html.ax-large-text .ax-slot-label) { font-size: 31px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet .ax-win-footer { font-size: 34px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet .ax-chip { font-size: 34px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet .ax-m-yeartab-year { font-size: 24px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet .ax-m-pick-half { font-size: 19px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet .ax-dlg-title { font-size: 24px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet .ax-step-wide { font-size: 34px; }
+html.ax-large-text.ax-mobile #ui-root .ax-death-text { font-size: 34px; }
+html.ax-large-text.ax-mobile #ui-root .ax-death .ax-btn { font-size: 34px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet .ax-base-label { font-size: 24px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet .ax-panel-head .ax-pill { font-size: 34px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet .ax-m-eq-slot { font-size: 24px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet .ax-badge { font-size: 31px; }
+html.ax-large-text.ax-mobile #ui-root .ax-sheet kbd { font-size: 22px; }
+html.ax-large-text.ax-mobile #ui-root .ax-cr-job { font-size: 34px; }
+html.ax-large-text.ax-mobile #ui-root .ax-cr-kicker,
+html.ax-large-text.ax-mobile #ui-root .ax-cr-sign { font-size: 19px; }
+html.ax-large-text.ax-mobile #ui-root :is(.ax-cr-line,
+html.ax-large-text .ax-cr-quote) { font-size: 34px; }
+html.ax-large-text.ax-mobile #ui-root .ax-cr-credit { font-size: 31px; }
+html.ax-large-text.ax-mobile #ui-root .ax-cr-h { font-size: 29px; }
+html.ax-large-text.ax-mobile #ui-root .ax-cr-end .ax-btn { font-size: 34px; }
+html.ax-large-text.ax-mobile #ui-root .ax-cr-hint { font-size: 29px; }
+html.ax-large-text.ax-mobile #ui-root .ax-logo-the { font-size: 34px; }
+html.ax-large-text.ax-mobile #ui-root .ax-logo-sub { font-size: 19px; }
+html.ax-large-text.ax-mobile #ui-root .ax-tb-label { font-size: 31px; }
+html.ax-large-text.ax-mobile #ui-root .ax-tb-sub { font-size: 31px; }
+html.ax-large-text.ax-mobile #ui-root .ax-title-h { font-size: 29px; }
+html.ax-large-text.ax-mobile #ui-root :is(.ax-title-text,
+html.ax-large-text .ax-cs-sub) { font-size: 31px; }
+html.ax-large-text.ax-mobile #ui-root .ax-input { font-size: 34px; }
+html.ax-large-text.ax-mobile #ui-root .ax-counter { font-size: 29px; }
+html.ax-large-text.ax-mobile #ui-root .ax-title-panel .ax-btn,
+html.ax-large-text.ax-mobile #ui-root .ax-cs .ax-btn { font-size: 31px; }
+html.ax-large-text.ax-mobile #ui-root .ax-cs-name { font-size: 22px; }
+html.ax-large-text.ax-mobile #ui-root :is(.ax-cs-line,
+html.ax-large-text .ax-cs-last) { font-size: 29px; }
+html.ax-large-text.ax-mobile #ui-root .ax-cs-dialog :is(div,
+html.ax-large-text span) { font-size: 31px; }
+html.ax-large-text.ax-mobile #ui-root .ax-lv-num { font-size: 24px; }
+html.ax-large-text .ax-mob-menu-title { font-size: 24px; }
+html.ax-large-text .ax-mob-menu-label { font-size: 22px; }
+html.ax-large-text.ax-mobile #ui-root .ax-minimap.ax-mm-overlay .ax-mm-name { font-size: 24px; }
+html.ax-large-text.ax-mobile #ui-root .ax-area-text { font-size: 31px; }
+html.ax-large-text.ax-mobile #ui-root .ax-job .ax-big-title { font-size: 24px; }
+html.ax-large-text.ax-mobile #ui-root .ax-big-text { font-size: 31px; }
+html.ax-large-text.ax-mobile #ui-root .ax-tc-slot-cdtext { font-size: 24px; }
+html.ax-large-text.ax-mobile #ui-root .ax-tc-flip-num { font-size: 24px; }
+html.ax-large-text.ax-mobile #ui-root .ax-statusbar .ax-gauge-text { font-size: 24px; }
+html.ax-large-text.ax-mobile #ui-root .ax-statusbar .ax-gauge-label { font-size: 22px; }
+html.ax-large-text.ax-mobile #ui-root .ax-lv-tag { font-size: 22px; }
+html.ax-large-text.ax-mobile #ui-root .ax-expbar .ax-gauge-label,
+html.ax-large-text.ax-mobile #ui-root .ax-expbar .ax-gauge-text { font-size: 24px; }
+html.ax-large-text.ax-mobile #ui-root .ax-line { font-size: 24px; }
+html.ax-large-text.ax-mobile #ui-root .ax-buff-time { font-size: 22px; }
+html.ax-large-text.ax-mobile #ui-root .ax-tc-label { font-size: 24px; }
+html.ax-large-text.ax-mobile #ui-root .ax-tc-slot-badge { font-size: 22px; }
+html.ax-large-text.ax-mobile #ui-root .ax-area-sub,
+html.ax-large-text.ax-mobile #ui-root .ax-big-sub { font-size: 24px; }
+html.ax-large-text.ax-mobile #ui-root .ax-minimap.ax-mm-overlay .ax-mm-sub { font-size: 22px; }
+html.ax-large-text .ax-cc-label { font-size: 19px; }
+html.ax-large-text .ax-cc-school { font-size: 17px; }

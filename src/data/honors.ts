@@ -75,6 +75,8 @@ export const COUNTER = {
 
 /** The three branch zones (being added by the world agent). Honors that need them stay hidden until they exist. */
 export const BRANCH_ZONES = ['moonlit_marsh', 'glacier_grotto', 'restricted_stacks'] as const;
+/** The three Year 5 endgame maps (Forbidden Wing, past the Arcane Sanctum). */
+export const ENDGAME_MAPS = ['astral_observatory', 'void_rift', 'archon_spire'] as const;
 export const LICH_ID = 'lich_archon';
 export const LICH_FAST_MS = 3 * 60 * 1000;
 
@@ -292,6 +294,25 @@ const SECRET: HonorDef[] = [
     hint: 'Never throw anything away.', icon: icon('paw', 0xd27d2c), reward: 15, target: fixed(48), measure: v => (v.state.inventory ?? []).length },
 ];
 
+const YEAR5: HonorDef[] = [
+  { id: 'y5_archon', name: 'Fellowship Granted', description: 'Pass the Fellowship Exam and become an Archon (Year 5).', category: 'schools',
+    icon: icon('arcane_star', 0xffd447, 0xb58cff), reward: 200, title: 'Archon', target: fixed(1), measure: v => (tier(v.state) >= 5 ? 1 : 0) },
+  { id: 'y5_spells_8', name: 'Postgraduate Reading', description: 'Learn all 8 Year 5 spells of your School.', category: 'studies',
+    icon: icon('book', 0xffd447, 0xb58cff), reward: 150, title: 'Archivist',
+    target: fixed(8), measure: v => learnedSkills(v.state).filter(id => tierOfSkill(id) === 5).length },
+  { id: 'y5_level_60', name: 'Postdoctoral Fellow', description: 'Reach level 60.', category: 'studies',
+    icon: icon('hat', 0xb58cff, 0xffd447), reward: 100, target: fixed(60), measure: v => v.state.level },
+  { id: 'y5_endgame_maps', name: 'Beyond the Forbidden Wing', description: 'Visit the Astral Observatory, the Void Rift and the Archon Spire.', category: 'field',
+    icon: icon('teleport', 0xb58cff, 0x9be7ff), reward: 100, requiresMaps: [...ENDGAME_MAPS],
+    target: fixed(ENDGAME_MAPS.length), measure: v => countWhere([...ENDGAME_MAPS], v, COUNTER.visited) },
+  { id: 'y5_proofreader', name: 'Proofreader', description: 'Defeat 100 Unwritten Pages.', category: 'field',
+    icon: icon('scroll', 0xffffff, 0xb58cff), reward: 120, requiresMaps: ['archon_spire'],
+    target: fixed(100), measure: v => v.c(COUNTER.killsOf('unwritten_page')) },
+  { id: 'y5_unwritten', name: 'The Final Chapter', description: 'Defeat The Unwritten at the top of the Archon Spire.', category: 'field',
+    icon: icon('skull', 0xffffff, 0xffd447), reward: 500, title: 'Author of the End', requiresMaps: ['archon_spire'],
+    target: fixed(1), measure: v => Math.min(1, v.c(COUNTER.killsOf('the_unwritten'))) },
+];
+
 const META: HonorDef[] = [
   { id: 'meta_honor_20', name: 'Honor Student', description: 'Earn 20 other honors.', category: 'life',
     icon: icon('arcane_star', 0xdad45e, 0xb58cff), reward: 100, title: 'Honor Student', target: fixed(20),
@@ -303,7 +324,7 @@ const META: HonorDef[] = [
 ];
 
 /** Every honor, meta honors last (they read how many others are done). */
-export const HONORS: HonorDef[] = [...STUDIES, ...SCHOOLS_HONORS, ...FIELD, ...TRIAL, ...LIFE, ...SECRET, ...META];
+export const HONORS: HonorDef[] = [...STUDIES, ...SCHOOLS_HONORS, ...FIELD, ...YEAR5, ...TRIAL, ...LIFE, ...SECRET, ...META];
 
 const BY_ID = new Map(HONORS.map(h => [h.id, h]));
 export function honorDef(id: string): HonorDef | undefined { return BY_ID.get(id); }

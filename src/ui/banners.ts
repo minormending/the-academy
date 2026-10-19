@@ -3,6 +3,7 @@ import { append, clear, h } from './dom';
 import type { UICtx } from './context';
 import { getBinding, keyLabel } from '../core/bindings';
 import { isMobileLayout } from './mobile';
+import { FELLOWSHIP_YEAR } from '../data/jobs';
 
 interface BigSpec { kind: 'level' | 'job' | 'generic'; title: string; text: string; sub?: string; color?: string; durMs: number }
 
@@ -48,6 +49,10 @@ export class Banners {
   }
 
   jobAdvance(jobName: string, desc: string, color: string, year?: number) {
+    if (year === FELLOWSHIP_YEAR) {
+      this.enqueue({ kind: 'job', title: 'FELLOWSHIP GRANTED', text: jobName, sub: `You are now a ${jobName}`, color, durMs: 3400 });
+      return;
+    }
     const title = year === 4 ? 'EXAM PASSED — FINAL YEAR' : year ? `EXAM PASSED — YEAR ${year}` : 'EXAM PASSED';
     this.enqueue({ kind: 'job', title, text: jobName, sub: desc, color, durMs: 3400 });
   }

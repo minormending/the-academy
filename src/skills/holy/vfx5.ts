@@ -70,7 +70,9 @@ const sunfallArea: VfxFn = (scene, o) => {
         speed: { min: 140, max: 320 }, angle: { min: 200, max: 340 }, gravityY: 420, lifespan: { min: 450, max: 800 },
         scale: { start: 1.6, end: 0.5 }, alpha: { start: 1, end: 0 }, tint: GOLD_TINTS,
       }, DEPTH.VFX_TOP);
-      shake(scene, 150, 0.005);
+      screenFlash(scene, 0xfff3c0, 0.16, 160);
+      sparks(scene, x, gy - 30, 8, 230);
+      shake(scene, 170, 0.007);
     },
   });
 };
@@ -97,7 +99,8 @@ const empyreanArea: VfxFn = (scene, o) => {
     speed: { min: w * 0.6, max: w * 1.2 }, angle: { min: 0, max: 360 }, lifespan: { min: 400, max: 800 },
     scale: { start: 2, end: 0.5 }, alpha: { start: 1, end: 0 }, tint: [...GOLD_TINTS, C.cyan],
   }, DEPTH.VFX_TOP);
-  shake(scene, 180, 0.005);
+  screenFlash(scene, 0xfff3c0, 0.12, 200);
+  shake(scene, 200, 0.006);
 };
 
 // ───────────────────────────── Fellowship of Light ─────────────────────────────
@@ -114,6 +117,7 @@ const fellowshipCast: VfxFn = (scene, o) => {
   shaft(scene, x, gy + 2, 80, 300, C.pale, 0, 700);
   shock(scene, x, gy - 2, 240, 0.3);
   motes(scene, x, gy - 10, 22, 90, HEAL_TINTS);
+  shake(scene, 220, 0.004);
 };
 
 /** The whole screen is scoured: columns of dawn across the view, then a golden bloom on the ground. */

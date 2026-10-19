@@ -14,10 +14,20 @@
       <div id="ui-root"></div>
     </div>
     <!-- Shown on phones held upright (style.css); tap to play anyway. -->
-    <div id="rotate-hint" role="dialog" aria-label="Rotate your phone" onclick="this.classList.add('dismissed')">
-      <div class="rh-phone"><i></i></div>
+    <style>
+      /* Rotate prompt: an opaque full-screen takeover with a big phone icon and large, centred copy. */
+      #rotate-hint { width: 100vw; height: 100vh; height: 100dvh; box-sizing: border-box; gap: 18px; background-color: #0b0d16; touch-action: manipulation; }
+      #rotate-hint .rh-phone { transform-origin: 50% 50%; width: 72px; height: 120px; margin-bottom: 36px; }
+      #rotate-hint .rh-phone i { left: 12px; top: 12px; right: 12px; bottom: 24px; }
+      #rotate-hint .rh-phone::after { left: 30px; bottom: 6px; width: 12px; height: 12px; }
+      #rotate-hint .rh-title { font-size: clamp(28px, 9vw, 40px); line-height: 1.15; max-width: 90vw; }
+      #rotate-hint .rh-sub { font-size: clamp(20px, 6vw, 26px); max-width: 85vw; }
+      #rotate-hint .rh-tap { margin-top: 28px; padding: 10px 18px; font-size: 18px; color: #a3abd8; border: 2px solid #4b5294; }
+    </style>
+    <div id="rotate-hint" role="dialog" aria-modal="true" aria-label="Rotate your phone to landscape" onclick="this.classList.add('dismissed')">
+      <div class="rh-phone" aria-hidden="true"><i></i></div>
       <div class="rh-title">Rotate your phone</div>
-      <div class="rh-sub">The Academy plays in landscape.</div>
+      <div class="rh-sub">The Academy plays in landscape.<br />Turn your phone sideways to start.</div>
       <div class="rh-tap">Tap to play anyway</div>
     </div>
     <script type="module" src="/src/main.ts"></script>

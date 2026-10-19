@@ -110,6 +110,7 @@ export class MenuWindow extends UIWindow {
         seg('Shake', 'shake', [['on', 'On'], ['reduced', 'Less'], ['off', 'Off']], 'Camera shake and flashes from big spells and bosses'),
         seg('Damage #', 'damageSize', [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']], 'Size of floating damage numbers'),
         seg('Familiar', 'familiar', [[true, 'Show'], [false, 'Hide']], 'Show Pip, your familiar'),
+        seg('Text size', 'textSize', [['normal', 'Normal'], ['large', 'Large']], 'Make window, tooltip and HUD text about 20% larger'),
         seg('Touch', 'touch', [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']], 'On-screen touch controls (Auto: shown on phones and tablets, or after you touch the screen)')),
       this.btn('Back', () => { this.tab = 'game'; this.invalidate(); }, 'ax-btn-secondary'),
     ];

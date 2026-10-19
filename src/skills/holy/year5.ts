@@ -99,10 +99,10 @@ function persist5(ctx: SkillContext, slot: string, o: PersistOpts): Persisted {
 
 // ───────────────────────── specs ─────────────────────────
 
-/** Sunfall — the single-target smite (tier-5 ref 650% single target, Holy ~12% lower at max). */
+/** Sunfall — the single-target smite (tier-5 ref 650% single target; Holy keeps a mid-pack hit because it also stuns 35-55% of the time). */
 const SUN_MAX = 15;
 const SUNFALL: AttackSpec = {
-  pattern: 'aoe_target', damagePct: L(480, 650, SUN_MAX), hits: K(1), maxTargets: K(1), range: 520,
+  pattern: 'aoe_target', damagePct: L(520, 720, SUN_MAX), hits: K(1), maxTargets: K(1), range: 520,
   area: { w: 130, h: 300 }, delayMs: 380,
   status: stun(SUN_MAX, [0.35, 0.55], [1200, 1800]),
   vfx: { cast: 'holy_cast_big', area: 'holy_sunfall_area', hit: 'holy_hit_big' },
@@ -234,21 +234,21 @@ function castStride(ctx: SkillContext, lv: number): void {
 export const HOLY_Y5: SkillDef[] = [
   {
     id: 'holy_sunfall', name: 'Sunfall', job: 'light_archon', element: 'holy', kind: 'attack', maxLevel: SUN_MAX,
-    description: 'Call a sliver of the sun down on a single enemy: a devastating smite that very likely stuns it.',
+    description: 'Call a sliver of the sun down on one enemy: a single devastating smite with a good chance to stun it. Short cooldown.',
     icon: icon('sunburst', 0xffffff, 0xffd84a, 0x3a1a08), requires: [{ skillId: 'holy_angel_ray', level: 5 }],
     mpCost: Li(70, 95, SUN_MAX), cooldownMs: L(6000, 4500, SUN_MAX), castTimeMs: 560, sfx: 'cast_holy',
     attack: SUNFALL,
   },
   {
     id: 'holy_empyrean_nova', name: 'Empyrean Nova', job: 'light_archon', element: 'holy', kind: 'attack', maxLevel: NOVA_MAX,
-    description: 'A ring of heavenly fire rolls out from you twice, scorching, shoving and stunning every foe around.',
+    description: 'Two rings of heavenly fire roll out from you, scorching, shoving back and often stunning up to twelve foes around you.',
     icon: icon('halo', 0xffffff, 0xffe066, 0x4a3204), requires: [{ skillId: 'holy_halo_nova', level: 8 }],
     mpCost: Li(75, 100, NOVA_MAX), cooldownMs: L(9000, 6500, NOVA_MAX), castTimeMs: 560, sfx: 'cast_holy',
     attack: NOVA,
   },
   {
     id: 'holy_fellowship', name: 'Fellowship of Light', job: 'light_archon', element: 'holy', kind: 'attack', maxLevel: FELLOW_MAX,
-    description: 'Your whole fellowship answers: you are mended, the screen is scoured four times and most foes stunned, then spirits of light keep healing you and smiting nearby foes for six seconds.',
+    description: 'Your whole fellowship answers: you are mended, the screen is scoured four times and most foes stunned, then spirits of light heal you and smite nearby foes for six seconds.',
     icon: icon('wings', 0xffffff, 0xffe066, 0x4a3204),
     requires: [{ skillId: 'holy_genesis', level: 5 }, { skillId: 'holy_judgment', level: 5 }],
     mpCost: Li(100, 130, FELLOW_MAX), cooldownMs: L(120000, 90000, FELLOW_MAX), castTimeMs: 900, sfx: 'cast_holy',
@@ -257,7 +257,7 @@ export const HOLY_Y5: SkillDef[] = [
   },
   {
     id: 'holy_lantern', name: 'Lantern of Vigil', job: 'light_archon', element: 'holy', kind: 'summon', maxLevel: LANTERN_MAX,
-    description: 'Plant a tall lantern of light ahead of you; it pulses every second, searing and stunning anything in reach.',
+    description: 'Plant a lantern of light ahead of you; it pulses about once a second, searing and sometimes stunning up to eight foes in reach.',
     icon: iconLight('halo', 0xffffff, 0xffe066), requires: [{ skillId: 'holy_seraph', level: 3 }],
     mpCost: Li(55, 75, LANTERN_MAX), cooldownMs: L(40000, 30000, LANTERN_MAX), castTimeMs: 520, sfx: 'cast_holy',
     summon: {
@@ -272,16 +272,16 @@ export const HOLY_Y5: SkillDef[] = [
   },
   {
     id: 'holy_reckoning', name: 'Reckoning', job: 'light_archon', element: 'holy', kind: 'attack', maxLevel: RECK_MAX,
-    description: 'Cash in a stun: judgment falls twice on foes ahead, and any stunned foe takes double damage as the stun is spent.',
+    description: 'Cash in a stun: judgment falls twice on up to four foes ahead, and any stunned foe takes double damage as its stun is spent.',
     icon: icon('holy_cross', 0xffffff, 0xffd84a, 0x3a1a08), requires: [{ skillId: 'holy_halo_nova', level: 3 }],
     mpCost: Li(48, 68, RECK_MAX), cooldownMs: L(12000, 9000, RECK_MAX), castTimeMs: 500, sfx: 'cast_holy',
     attack: RECKONING,
   },
   {
     id: 'holy_covenant', name: 'Covenant of Mercy', job: 'light_archon', element: 'holy', kind: 'buff', maxLevel: COV_MAX,
-    description: 'A sacred vow: a huge instant mend, a surge of light that scorches foes beside you, and six seconds of strong regeneration.',
+    description: 'A sacred vow: a huge instant mend, a surge of light that scorches foes beside you, then six seconds of strong regeneration. The strongest heal in the book.',
     icon: iconHeal('heart', 0xffffff, 0xfff3b0), requires: [{ skillId: 'holy_divine_aegis', level: 5 }],
-    mpCost: Li(60, 80, COV_MAX), cooldownMs: L(40000, 28000, COV_MAX), castTimeMs: 650, sfx: 'heal',
+    mpCost: Li(60, 80, COV_MAX), cooldownMs: L(45000, 32000, COV_MAX), castTimeMs: 650, sfx: 'heal',
     attack: COV_BURST,
     onCast: (ctx, lv) => castCovenant(ctx, lv),
   },

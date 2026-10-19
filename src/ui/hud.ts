@@ -166,7 +166,7 @@ const MOBILE_MENU: readonly { label: string; win: WindowName | 'honors'; icon?: 
   { label: 'Character', win: 'stats', icon: 'C_Hat01' },
   { label: 'Assignments', win: 'quests', icon: 'I_Scroll' },
   { label: 'Honors', win: 'honors' },
-  { label: 'Settings', win: 'menu' },
+  { label: 'Menu & Settings', win: 'menu' },
 ];
 
 /** Phones: one top-right ☰ button opening a simple list of the game's windows (hidden by CSS on desktop). */

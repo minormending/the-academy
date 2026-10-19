@@ -36,6 +36,15 @@ export class TitleScene extends Phaser.Scene {
 
   create() {
     this.leaving = false;
+    // The art is authored at 1280×720; wide phone canvases (src/ui/mobile.ts gameLogicalWidth) zoom it to fill the width.
+    const fit = () => {
+      const cam = this.cameras.main;
+      cam.setZoom(Math.max(1, this.scale.width / W));
+      cam.centerOn(W / 2, H / 2);
+    };
+    fit();
+    this.scale.on(Phaser.Scale.Events.RESIZE, fit);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, fit));
     this.t = 0;
     this.drifts = [];
     this.pixelBackdrop = false;

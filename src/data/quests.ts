@@ -182,6 +182,25 @@ export const QUESTS: QuestDef[] = [
     objectives: [{ kind: 'kill', monsterId: 'void_wisp', count: 25 }, { kind: 'collect', itemId: 'void_crystal', count: 10 }],
     rewards: { exp: xp(46, 0.4), mesos: 25000, items: [{ itemId: 'power_elixir', qty: 5 }] },
   },
+  // ── New practicum zones: one Assignment each ──
+  {
+    id: 'q_finn_lanterns', name: 'Lanterns for the Night Walk', giver: 'scout_finn', minLevel: 14,
+    description: 'The second-years\' night practicum goes through the Moonlit Marsh, and the last group followed the wrong lights into the reeds. Will-o\'-Wisps leave their glowing husks behind — bring Prefect Finn 12 Wisp Lanterns to hang along the real path.',
+    objectives: [{ kind: 'collect', itemId: 'wisp_lantern', count: 12 }],
+    rewards: { exp: xp(15, 0.45), mesos: 1300, items: [{ itemId: 'orange_potion', qty: 15 }, { itemId: 'blue_potion', qty: 10 }] },
+  },
+  {
+    id: 'q_glacius_geodes', name: 'Geode Survey', giver: 'glacius', minLevel: 24,
+    description: 'Crystal Crabs in the Glacier Grotto grow their shells from the grotto\'s own ice, one ring a winter. Professor Glacius wants 15 Crab Shards to date the glacier. Lightning cracks them cleanly; frost only makes them proud.',
+    objectives: [{ kind: 'collect', itemId: 'crab_shard', count: 15 }],
+    rewards: { exp: xp(25, 0.4), mesos: 3200, items: [{ itemId: 'mana_elixir', qty: 10 }, { itemId: 'orange_potion', qty: 15 }] },
+  },
+  {
+    id: 'q_maelis_overdue', name: 'Overdue Books', giver: 'elder_maelis', minLevel: 34,
+    description: 'The Restricted Stacks have stopped waiting to be read. Animated Tomes are flying the aisles and biting anyone who reaches for a shelf. Return 25 of them to silence — firmly — so the Headmistress can count what is missing.',
+    objectives: [{ kind: 'kill', monsterId: 'animated_tome', count: 25 }],
+    rewards: { exp: xp(35, 0.35), mesos: 9000, items: [{ itemId: 'white_potion', qty: 20 }, { itemId: 'mana_elixir', qty: 10 }] },
+  },
   // ───────────── Field Bounties (Prefect Finn; repeatable — Finn re-posts a bounty after it is handed in) ─────────────
   ...FIELD_BOUNTIES.map(b => bountyQuest(b)),
   {

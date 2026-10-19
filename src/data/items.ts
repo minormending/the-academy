@@ -50,6 +50,12 @@ export const ITEMS: ItemDef[] = [
   etc('drake_scale', 'Drake Scale', 'Thunder Drake scale, blue as a lightning flash.', { glyph: 'scale', color: 0x4a7aff, color2: 0xfff9a8 }, 56),
   etc('seal_fragment', 'Seal Fragment', 'A shard of the Sanctum\'s ancient seal, still warm with holy light.', { glyph: 'holy_cross', color: 0xffe08a, color2: 0x6a2ac8 }, 60),
   etc('void_crystal', 'Void Crystal', 'It hums a note just below hearing.', { glyph: 'crystal', color: 0x6a2ac8, color2: 0xe0b0ff }, 70),
+  etc('toad_slime', 'Toad Slime', 'Bog Toad slime, green as pond water and twice as smelly. Potion-brewers swear by it; everyone else swears at it.', { glyph: 'gem', color: 0x6a9a3a, color2: 0xd4e890 }, 11),
+  etc('wisp_lantern', 'Wisp Lantern', 'The papery husk a Will-o\'-Wisp leaves behind. It still glows a little, and still points the wrong way home.', { glyph: 'spark', color: 0x5ae8a0, color2: 0xf4fff8 }, 15),
+  etc('crab_shard', 'Crab Shard', 'A chip of a Crystal Crab\'s geode shell. Professor Glacius reads them like tree rings.', { glyph: 'crystal', color: 0x8fd8f6, color2: 0xa898e0 }, 25),
+  etc('shade_veil', 'Shade Veil', 'A scrap of frozen mist that was once someone\'s cloak. Cold enough to keep a lunch fresh for a term.', { glyph: 'ghost', color: 0xbfe6ff, color2: 0x23407a }, 30),
+  etc('tome_page', 'Tome Page', 'A loose page from the Restricted Stacks, still trying to finish its sentence. Do not read it aloud.', { glyph: 'scroll', color: 0xe8d8b0, color2: 0x6a3ac8 }, 38),
+  etc('ink_vial', 'Ink Vial', 'Ink wrung from an Ink Golem. It writes on its own if you leave the cap off, mostly complaints.', { glyph: 'poison', color: 0x2a2456, color2: 0x8a7ad8 }, 48),
   etc('archon_sigil', 'Archon Sigil', 'The seal of the Lich Archon, still faintly warm with stolen power.', { glyph: 'arcane_star', color: 0xc89bff, color2: 0xffd447 }, 5000, 10),
 
   // ───────────── Weapons ─────────────

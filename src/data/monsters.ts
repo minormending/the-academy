@@ -283,6 +283,21 @@ export const MONSTERS: MonsterDef[] = [
   mk({ id: 'thunder_drake', name: 'Thunder Drake', level: 43, behavior: 'flyer', speed: 100, size: { w: 70, h: 50 },
     hpMul: 0.95, expMul: 1.1, touchMul: 1.1, weak: ['ice', 'holy'], resist: ['lightning'], etc: 'drake_scale',
     extraDrops: [{ itemId: 'seal_fragment', chance: 0.3 }] }),
+  // ── moonlit_marsh (between Shroom Hollow and Frostfang: lightning + holy shine) ──
+  mk({ id: 'bog_toad', name: 'Bog Toad', level: 12, behavior: 'hopper', speed: 100, size: { w: 40, h: 34 },
+    hpMul: 0.95, expMul: 1.0, touchMul: 0.95, weak: ['lightning'], immune: ['poison'], etc: 'toad_slime', etcChance: 0.5 }),
+  mk({ id: 'will_o_wisp', name: 'Will-o\'-Wisp', level: 15, behavior: 'flyer', speed: 84, size: { w: 30, h: 40 },
+    hpMul: 0.82, expMul: 0.95, touchMul: 1.0, weak: ['holy'], resist: ['fire'], immune: ['burn', 'poison'], etc: 'wisp_lantern' }),
+  // ── glacier_grotto (fire + lightning shine; Cryomancers bring a second spell) ──
+  mk({ id: 'crystal_crab', name: 'Crystal Crab', level: 24, behavior: 'walker', speed: 52, size: { w: 52, h: 38 },
+    hpMul: 1.15, expMul: 1.1, touchMul: 1.05, defMul: 1.5, weak: ['lightning'], resist: ['ice'], immune: ['chill'], etc: 'crab_shard', etcChance: 0.4 }),
+  mk({ id: 'frost_shade', name: 'Frost Shade', level: 28, behavior: 'flyer', speed: 90, size: { w: 36, h: 54 },
+    hpMul: 0.85, expMul: 0.95, touchMul: 1.1, weak: ['fire'], resist: ['ice'], immune: ['freeze', 'poison'], etc: 'shade_veil' }),
+  // ── restricted_stacks (fire + holy shine; Shadow brings curses for the tomes) ──
+  mk({ id: 'animated_tome', name: 'Animated Tome', level: 34, behavior: 'flyer', speed: 96, size: { w: 44, h: 38 },
+    hpMul: 0.85, expMul: 0.9, touchMul: 1.0, weak: ['fire'], immune: ['poison'], etc: 'tome_page', etcChance: 0.5 }),
+  mk({ id: 'ink_golem', name: 'Ink Golem', level: 40, behavior: 'walker', speed: 46, size: { w: 60, h: 84 },
+    hpMul: 1.25, expMul: 1.1, touchMul: 1.2, defMul: 1.5, weak: ['holy'], resist: ['shadow'], immune: ['poison'], etc: 'ink_vial', etcChance: 0.35 }),
   // ── arcane_sanctum ──
   mk({ id: 'void_wisp', name: 'Void Wisp', level: 46, behavior: 'flyer', speed: 92, size: { w: 36, h: 40 },
     hpMul: 0.85, expMul: 0.95, weak: ['holy'], resist: ['shadow'], etc: 'void_crystal',

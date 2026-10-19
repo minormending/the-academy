@@ -95,11 +95,28 @@ function questOptions(c: Ctx, back: () => void): DialogOption[] {
   return out;
 }
 
+/** Optional giver voice for an Assignment's accept / hand-in lines (falls back to the generic ones). */
+const ASSIGNMENT_LINES: Record<string, { accept: string; done: string }> = {
+  q_finn_lanterns: {
+    accept: 'Great! Follow the lights that run away from you, not the ones that wait. The waiting ones are hungry.',
+    done: 'Twelve lanterns! The night walk is back on — and nobody ends up in the reeds this year. Probably.',
+  },
+  q_glacius_geodes: {
+    accept: 'Good. Strike them with lightning. Frost only feeds them, and they will thank you for it by growing.',
+    done: 'Look at these rings... four hundred winters, give or take. The grotto is older than the Academy. Excellent fieldwork.',
+  },
+  q_maelis_overdue: {
+    accept: 'Thank you, {name}. Mind the ones with red ribbons. They were restricted for a reason.',
+    done: 'Twenty-five back on their shelves, and the aisles are quiet again. Now — let us find out which ones were not there to return.',
+  },
+};
+
 function offerQuest(c: Ctx, q: QuestDef, back: () => void) {
   say(c, `Assignment: ${q.name}\n\n${q.description}\n\n${objectivesText(c.p, q)}\n${rewardsText(q)}`, [
     go('Accept', () => {
       c.p.acceptQuest(q.id);
-      say(c, pick(['Wonderful! Off you go, then.', 'I knew I could count on you!', 'Splendid. Hand it in when it\'s done.']), [bye('Will do!')]);
+      const line = ASSIGNMENT_LINES[q.id]?.accept;
+      say(c, line ? fill(c, line) : pick(['Wonderful! Off you go, then.', 'I knew I could count on you!', 'Splendid. Hand it in when it\'s done.']), [bye('Will do!')]);
     }),
     go('Not right now.', back),
   ]);
@@ -107,7 +124,8 @@ function offerQuest(c: Ctx, q: QuestDef, back: () => void) {
 
 function turnIn(c: Ctx, q: QuestDef, back: () => void) {
   if (c.p.turnInQuest(q.id)) {
-    say(c, `Full marks! Thank you, truly.\n\n${rewardsText(q)}`, [go('Anything else?', back), bye('Happy to help.')]);
+    const line = ASSIGNMENT_LINES[q.id]?.done;
+    say(c, `${line ? fill(c, line) : 'Full marks! Thank you, truly.'}\n\n${rewardsText(q)}`, [go('Anything else?', back), bye('Happy to help.')]);
   } else {
     say(c, 'Hmm, your satchel is bursting at the seams. Make a little room and come back.', [bye('Okay.')]);
   }

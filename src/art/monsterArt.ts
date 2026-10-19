@@ -1818,13 +1818,14 @@ const lum = (r: number, g: number, b: number) => (0.299 * r + 0.587 * g + 0.114 
 function inHue(h: number, lo: number, hi: number): boolean {
   return lo <= hi ? h >= lo && h <= hi : h >= lo || h <= hi;
 }
-interface PixFilter { hue?: [number, number]; minSat?: number; minLum?: number; maxLum?: number }
+interface PixFilter { hue?: [number, number]; minSat?: number; maxSat?: number; minLum?: number; maxLum?: number }
 function passes(f: PixFilter | undefined, r: number, g: number, b: number): boolean {
   if (!f) return true;
   const [h, s] = rgbToHsl(r, g, b);
   const l = lum(r, g, b);
   if (f.hue && !inHue(h, f.hue[0], f.hue[1])) return false;
   if (f.minSat !== undefined && s < f.minSat) return false;
+  if (f.maxSat !== undefined && s > f.maxSat) return false;
   if (f.minLum !== undefined && l < f.minLum) return false;
   if (f.maxLum !== undefined && l > f.maxLum) return false;
   return true;
@@ -1862,6 +1863,37 @@ function hueShift(deg: number, satMul = 1, lightMul = 1, filter?: PixFilter): Re
     }
   };
 }
+/**
+ * Like gradientMap, but with fixed luminance bounds instead of the sheet's own range — for big shared sheets
+ * (the icon atlas) where the sheet-wide range says nothing about the few cells we cut.
+ */
+function rampMap(stops: number[], lo: number, hi: number, filter?: PixFilter): Recolor {
+  return d => {
+    const span = Math.max(0.05, hi - lo);
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 8 || !passes(filter, d[i], d[i + 1], d[i + 2])) continue;
+      const t = Math.min(1, Math.max(0, (lum(d[i], d[i + 1], d[i + 2]) - lo) / span)) * (stops.length - 1);
+      const k = Math.min(stops.length - 2, Math.floor(t)), f = t - k;
+      const c = mix(stops[k], stops[k + 1], f);
+      d[i] = (c >> 16) & 255; d[i + 1] = (c >> 8) & 255; d[i + 2] = c & 255;
+    }
+  };
+}
+/**
+ * Ghostly translucency for a uniform-grid sheet `sheetW` px wide with `cellH`-tall rows: every opaque pixel gets
+ * alpha `a`, and the bottom `fadeRows` rows of each cell fade out in hard 1px bands (no smooth gradient).
+ */
+function ghostly(sheetW: number, cellH: number, a: number, fadeRows: number): Recolor {
+  return d => {
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 8) continue;
+      const y = Math.floor(i / 4 / sheetW) % cellH;
+      const tail = y - (cellH - fadeRows);
+      const k = tail < 0 ? 1 : Math.max(0, 1 - (tail + 1) / (fadeRows + 1));
+      d[i + 3] = Math.round(Math.min(d[i + 3], a) * k);
+    }
+  };
+}
 const chain = (...fns: Recolor[]): Recolor => d => fns.forEach(f => f(d));
 
 /** Element / biome ramps (dark → light). */
@@ -1887,10 +1919,11 @@ interface PixelAnim { frames: FrameRef[]; rate: number; repeat?: number }
 /**
  * Hard-edged pixel overlay (crown, horns, glow) drawn at 1× onto every frame before scaling, so it shares the
  * sprite's pixel grid. Anchored per frame: 'peak' = centre of the topmost opaque row (sits on top of the head),
- * 'front' = topmost pixel of the rightmost opaque column (the snout, art faces right). Bottom-centre of the
- * overlay goes to anchor + (dx, dy).
+ * 'front' = topmost pixel of the rightmost opaque column (the snout, art faces right), 'anchor' = the frame's own
+ * feet anchor (ax, ay) — for features fixed on the body when the silhouette's edges flicker (flames, sparks).
+ * Bottom-centre of the overlay goes to anchor + (dx, dy).
  */
-interface Overlay { rows: string[]; pal: Record<string, number>; at: 'peak' | 'front'; dx?: number; dy?: number; skip?: MonsterAnim[] }
+interface Overlay { rows: string[]; pal: Record<string, number>; at: 'peak' | 'front' | 'anchor'; dx?: number; dy?: number; skip?: MonsterAnim[] }
 interface PixelSpec {
   /** Integer scale (defaults to PIXEL_SCALE). */
   scale?: number;
@@ -1933,6 +1966,15 @@ function buildPixelSpecs(): Record<string, PixelSpec> {
   const dragon = grid(MSRC.dragon, 144, 64, 6, 96, 64);
   const wizard = grid(MSRC.wizard, 81, 66, 15, 39, 66);
 
+  // Cross-domain sources (already preloaded by the vfx / ui manifests; read-only here, palette-swapped copies).
+  // Only the flickering top 26 rows of the fire: a round wisp head, its tail faded out by ghostly().
+  const flame = grid(XSRC.brightfire, 18, 26, 12, 9, 25);
+  const inkBody = grid(XSRC.icegolem, 36, 46, 4, 18, 46);
+  const icon = grid(XSRC.icons, 34, 34, 12, 17, 30);
+  const wizBob = (dys: number[]) => wizard(...range(0, dys.length - 1)).map((f, i) => ({ ...f, dy: dys[i] }));
+  const bob = (fs: FrameRef[], dys: number[]) => fs.map((f, i) => ({ ...f, dy: dys[i % dys.length] }));
+  const OPEN_BOOK = 10 * 12 + 9, SPELL_BOOK = 4 * 12 + 8;
+
   const thornCap = hueShift(36, 1.05, 1.05, { hue: [320, 25], minSat: 0.25 });
   const golemIdle = { frames: golem(0, 0, 2, 2), rate: 2 };
   const golemMove = { frames: golem(...range(6, 11)), rate: 7 };
@@ -1963,6 +2005,77 @@ function buildPixelSpecs(): Record<string, PixelSpec> {
     crag_golem: { flip: true, recolor: gradientMap(RAMP.crag), idle: golemIdle, move: golemMove },
     thunder_drake: { flip: true, recolor: chain(gradientMap([0x8a6a14, 0xd8a820, 0xfff27a, 0xfffbd8], { hue: [28, 58], minSat: 0.45, minLum: 0.4 }), gradientMap(RAMP.thunder, { hue: [62, 36] })),
       idle: { frames: dragon(...range(0, 5)), rate: 8 }, move: { frames: dragon(...range(0, 5)), rate: 11 } },
+    // ── moonlit_marsh ──
+    // Bog Toad: the side-view slime in bog greens, with bulging toad eyes stamped on top.
+    bog_toad: { recolor: gradientMap([0x10180a, 0x2a4214, 0x4e7024, 0x86a83e, 0xc8dc7a]),
+      idle: { frames: slime(3, 4, 5, 4), rate: 5 }, move: { frames: slime(3, 4, 5, 4), rate: 10 },
+      overlays: [
+        { at: 'peak', dx: 3, dy: 3, rows: [
+          '.ooo...ooo.',
+          'oGGGo.oGGGo',
+          'oGYWo.oGYWo',
+          'oYkko.oYkko',
+          '.ooo...ooo.',
+        ], pal: { o: 0x10180a, G: 0xa8cc54, Y: 0xf0d84a, W: 0xfffbe0, k: 0x10180a } },
+        { at: 'anchor', dx: 6, dy: -4, rows: ['kkkkkkk.', '.....kk'], pal: { k: 0x10180a } },
+      ] },
+    // Will-o'-Wisp: the flickering top of CodeManu's bright fire in pale marsh-ghost greens (outlined so it reads on
+    // dark water), its tail fading into mist, two coal eyes.
+    will_o_wisp: { recolor: chain(gradientMap([0x1f9a64, 0x46e098, 0x9cf8c8, 0xe0fff0, 0xffffff]), ghostly(216, 26, 240, 9)), outline: 0x0a3a2a,
+      idle: { frames: flame(...range(0, 11)), rate: 11 }, move: { frames: flame(...range(0, 11)), rate: 15 },
+      overlays: [{ at: 'anchor', dx: 0, dy: -7, rows: ['kk.kk', 'kk.kk'], pal: { k: 0x0a3a2a } }] },
+    // ── glacier_grotto ──
+    // Crystal Crab: a hermit in a geode — the snail's shell turned to grotto crystal, body to frost-lilac,
+    // with crystal spurs on the shell and a pincer stamped at the front.
+    crystal_crab: { recolor: chain(
+        gradientMap([0x0c2a48, 0x2a6aa8, 0x5ab8e8, 0xb0ecff, 0xffffff], { hue: [10, 45], minSat: 0.15 }),
+        gradientMap([0x1a1030, 0x3a2a6a, 0x6a5aa8, 0xa898e0, 0xe8e0ff], { hue: [60, 160], minSat: 0.2 })),
+      idle: { frames: snail(14, 15, 16, 15), rate: 3 }, move: { frames: snail(14, 15, 16, 15), rate: 8 },
+      overlays: [
+        { at: 'peak', dx: -2, dy: 3, rows: [
+          '...k.......',
+          '..kWk...k..',
+          '..kWck.kWk.',
+          '.kWcCk.kcCk',
+          'kkcCCkkkcCk',
+        ], pal: { k: 0x0c1838, W: 0xffffff, c: 0x8fd8f6, C: 0x3f93d6 } },
+        // raised pincer in front of the head
+        { at: 'anchor', dx: 16, dy: -2, rows: [
+          '..k.k..',
+          '.kWkPk.',
+          'kWk.kPk',
+          'kPk.kPk',
+          'kPPkPPk',
+          'kPPPPPk',
+          '.kPPPk.',
+          '..kPk..',
+          '.kPk...',
+          '.kPk...',
+        ], pal: { k: 0x1a1030, P: 0xb4a6ec, W: 0xffffff } },
+      ] },
+    // Frost Shade: the Gothicvania cultist as a frozen ghost — ice ramp, translucent, robe hem fading into mist.
+    frost_shade: { flip: true,
+      recolor: chain(gradientMap([0x1a3468, 0x3f7cc4, 0x86c4ee, 0xcdeefc, 0xffffff]), ghostly(1215, 66, 210, 9)),
+      idle: { frames: wizBob([0, 1, 2, 2, 1]), rate: 6 }, move: { frames: wizBob([0, 1, 2, 2, 1]), rate: 8 },
+      overlays: [{ at: 'peak', dx: 1, dy: 8, rows: ['W.W'], pal: { W: 0xf4ffff } }] },
+    // ── restricted_stacks ──
+    // Animated Tome: the icon atlas's open book and spell book, in old parchment and violet ink, snapping as it flies.
+    animated_tome: { recolor: chain(
+        rampMap([0x2a0a5a, 0x6a2ac8, 0xb46cff, 0xf0c8ff], 0.35, 0.9, { hue: [235, 320], minSat: 0.12 }),
+        rampMap([0x4a3018, 0x9a7444, 0xd8bc84, 0xf4e8c4], 0.3, 1, { maxSat: 0.42, minLum: 0.28 })),
+      idle: { frames: bob(icon(OPEN_BOOK, OPEN_BOOK, OPEN_BOOK, OPEN_BOOK), [0, 1, 2, 1]), rate: 5 },
+      move: { frames: bob(icon(OPEN_BOOK, SPELL_BOOK, OPEN_BOOK, SPELL_BOOK), [0, 2, 1, 3]), rate: 8 },
+      hit: icon(SPELL_BOOK)[0],
+      overlays: [{ at: 'anchor', dx: 1, dy: -11, rows: [
+        'k.......k',
+        '.kk...kk.',
+        '.kRk.kRk.',
+        '..k...k..',
+      ], pal: { k: 0x1a0a2a, R: 0xe8203a } }] },
+    // Ink Golem: tautomer's shard golem flooded with ink — near-black indigo with a wet violet sheen, candle eyes.
+    ink_golem: { recolor: gradientMap([0x06050e, 0x161334, 0x2c2668, 0x4f46b0, 0x9a8ef0, 0xe8e4ff]), outline: 0x05040a,
+      idle: { frames: inkBody(0, 1, 2, 3), rate: 4 }, move: { frames: inkBody(0, 1, 2, 3), rate: 8 },
+      overlays: [{ at: 'peak', dx: 1, dy: 14, rows: ['YY..YY', 'yy..yy'], pal: { Y: 0xfff4b0, y: 0xffc840 } }] },
     // ── arcane_sanctum ──
     void_wisp: { recolor: gradientMap(RAMP.void), idle: { frames: sparky(0, 1, 2, 3), rate: 9 }, move: { frames: sparky(0, 1, 2, 3), rate: 12 } },
     lich_archon: { scale: 4, flip: true, recolor: gradientMap(RAMP.arcaneFire, { hue: [10, 70], minSat: 0.45, minLum: 0.3 }),
@@ -2046,7 +2159,9 @@ function withOverlays(k: Cut, overlays: Overlay[]): Cut {
   c.drawImage(src, PAD, PAD);
   for (const ov of overlays) {
     let ax = -1, ay = -1;
-    if (ov.at === 'peak') {
+    if (ov.at === 'anchor') {
+      ax = k.ax; ay = k.ay;
+    } else if (ov.at === 'peak') {
       for (let y = 0; y < src.height && ay < 0; y++) {
         let sx = 0, n = 0;
         for (let x = 0; x < src.width; x++) if (solid(x, y)) { sx += x; n++; }
@@ -2070,6 +2185,13 @@ function withOverlays(k: Cut, overlays: Overlay[]): Cut {
   return { ...k, cv, ax: k.ax + PAD, ay: k.ay + PAD, box: alphaBox(cv) };
 }
 let PIXEL_SPECS: Record<string, PixelSpec> | null = null;
+
+/** Source sheets owned by other art domains (loaded by their manifests), reused here as palette-swap bases. */
+const XSRC = {
+  brightfire: 'src_vfx_cm_brightfire',
+  icegolem: 'src_vfx_icegolem',
+  icons: 'src_ui_icons_7soul1',
+} as const;
 
 /** Source image → (recoloured) canvas, cached per sheet + recolor. */
 function srcCanvas(scene: Phaser.Scene, key: string, recolor: Recolor | undefined, cache: Map<string, HTMLCanvasElement | null>, tag: string): HTMLCanvasElement | null {

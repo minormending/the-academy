@@ -1,9 +1,10 @@
 // OWNER: A9 (progression); save slots by P7a. New character + localStorage persistence (versioned, defensive, 6 slots).
-import type { BaseStats, EquipSlot, HonorsState, ItemStack, JobId, PlayerState, QuestProgress } from '../core/types';
+import type { Appearance, BaseStats, EquipSlot, HonorsState, ItemStack, JobId, PlayerState, QuestProgress } from '../core/types';
 import { HOTBAR_PAGE_SIZE, HOTBAR_SIZE } from '../core/types';
 import { MAX_LEVEL, SAVE_KEY, START_MAP, TOWN_MAP } from '../core/constants';
 import { Registry } from '../core/registry';
 import { computeDerived, deathExpLoss } from './progression/stats';
+import { repairAppearance } from '../data/appearance';
 import { isSchool, SCHOOL_NAME, yearOfTier, type School } from '../data/jobs';
 
 const SAVE_FORMAT = 1;
@@ -16,7 +17,7 @@ export function newUid(): string {
   return `i${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}${uidCounter.toString(36)}`;
 }
 
-export function newPlayerState(name: string): PlayerState {
+export function newPlayerState(name: string, appearance?: Appearance): PlayerState {
   const hotbar: (string | null)[] = new Array(HOTBAR_SIZE).fill(null);
   hotbar[0] = 'app_arcane_bolt';
   // Potions on the 1 / 2 keys of every page, so they still work after flipping hotbar pages.
@@ -46,6 +47,7 @@ export function newPlayerState(name: string): PlayerState {
       robe: { uid: newUid(), itemId: 'apprentice_robe', qty: 1 },
     },
     mesos: 50,
+    ...(appearance ? { appearance: { ...appearance } } : {}),
     mapId: START_MAP,
     quests: {},
     playTimeMs: 0,
@@ -416,6 +418,7 @@ export function repairState(input: unknown): PlayerState {
     out.mesos = Math.floor(num(s.mesos, 0, 0));
     out.playTimeMs = num(s.playTimeMs, 0, 0);
     out.merits = Math.floor(num(s.merits, 0, 0));
+    { const ap = repairAppearance(s.appearance); if (ap) out.appearance = ap; else delete out.appearance; }
     out.arenaBest = Math.floor(num(s.arenaBest, 0, 0));
     const honors = repairHonors(s.honors);
     if (honors) out.honors = honors; else delete out.honors;

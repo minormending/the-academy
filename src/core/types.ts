@@ -34,6 +34,9 @@ export interface JobDef {
   look: CharacterLook;
 }
 
+/** The student's own colours, chosen at character creation (see src/data/appearance.ts). */
+export interface Appearance { skin: number; hair: number; accent: number; }
+
 export interface CharacterLook {
   robe: number;      // 0xRRGGBB
   robeTrim: number;
@@ -452,6 +455,8 @@ export interface PlayerState {
   playTimeMs: number;
   /** Academy Merits — earned in the Trial Hall, spent at the Academy (optional for old saves). */
   merits?: number;
+  /** Chosen at character creation; absent on old saves (they use the job's default look). */
+  appearance?: Appearance;
   /** Best Trial Hall wave reached. */
   arenaBest?: number;
   /** Academy Honors (achievements + chosen title); absent on saves from before honors existed. */

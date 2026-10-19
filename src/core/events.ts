@@ -20,6 +20,12 @@ export interface GameEvents {
   'mesos:gained': { amount: number };
   'map:changed': { mapId: string };
   'quest:updated': { questId: string };
+  /** Talked to an NPC (counts `talk` objectives). */
+  'npc:talked': { npcId: string };
+  'course:updated': { courseId: string };
+  'course:passed': { courseId: string; badgeId: string };
+  /** Promoted to a new Year (2..5), or graduated (year 6). */
+  'year:promoted': { year: number };
   'ui:dialog': DialogSpec;
   'ui:shop': ShopSpec;
   'ui:closeDialog': {};
@@ -30,7 +36,7 @@ export interface GameEvents {
   /** Ask UI to show the death prompt. */
   'ui:death': {};
   /** Ask UI to open a window by name. */
-  'ui:open': { window: 'skills' | 'inventory' | 'stats' | 'quests' | 'jobs' | 'menu' };
+  'ui:open': { window: 'skills' | 'inventory' | 'stats' | 'quests' | 'jobs' | 'menu' | 'courses' };
 }
 
 type Handler<T> = (payload: T) => void;

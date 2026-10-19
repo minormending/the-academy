@@ -120,6 +120,8 @@ export class UIRoot implements IUI {
       inventory: new InventoryWindow(this.ctx),
       stats: new StatsWindow(this.ctx),
       quests: new QuestsWindow(this.ctx),
+      // TEMP until the Classes window lands (src/ui/coursesWindow.ts): show assignments.
+      courses: new QuestsWindow(this.ctx),
       jobs: new JobsWindow(this.ctx),
       menu: new MenuWindow(this.ctx),
       help: new HelpWindow(this.ctx),

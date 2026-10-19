@@ -10,6 +10,7 @@ import { bus } from '../core/events';
 import { AP_PER_LEVEL, SP_PER_LEVEL, expToNext } from '../core/balance';
 import { MAX_LEVEL, TOWN_MAP } from '../core/constants';
 import { JOB_ADVANCEMENT_QUESTS } from '../data/quests';
+import { objectiveGoal } from '../core/quest';
 import { FELLOWSHIP_YEAR, FINAL_YEAR, SCHOOL_NAME, SCHOOL_PROFESSOR, isSchool, yearOfTier } from '../data/jobs';
 import { computeDerived, deathExpLoss } from './progression/stats';
 import { newUid, repairState, writeSave } from './SaveSystem';
@@ -696,10 +697,10 @@ export class Progression implements IProgression {
       let v = prog.counts[i] ?? 0;
       if (o.kind === 'collect') v = Math.min(o.count, this.countItem(o.itemId));
       else if (o.kind === 'level') v = Math.min(o.level, this.state.level);
-      else v = Math.min(o.count, v);
+      else v = Math.min(objectiveGoal(o), v);
       if (v !== prog.counts[i]) { prog.counts[i] = v; changed = true; }
     });
-    const done = q.objectives.every((o, i) => (prog.counts[i] ?? 0) >= (o.kind === 'level' ? o.level : o.count));
+    const done = q.objectives.every((o, i) => (prog.counts[i] ?? 0) >= objectiveGoal(o));
     const status = done ? 'complete' : 'active';
     if (status !== prog.status) {
       prog.status = status;

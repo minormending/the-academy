@@ -5,7 +5,7 @@ import type { UIScaler } from './scaler';
 import type { Tooltip } from './tooltip';
 import { loadJson, saveJson } from './dom';
 
-export type WindowName = 'skills' | 'inventory' | 'stats' | 'quests' | 'jobs' | 'menu' | 'help';
+export type WindowName = 'skills' | 'inventory' | 'stats' | 'quests' | 'jobs' | 'menu' | 'help' | 'courses';
 
 export interface UICtx {
   root: HTMLElement;

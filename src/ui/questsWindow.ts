@@ -77,7 +77,9 @@ export class QuestsWindow extends UIWindow {
       let have = 0, need = 1, label = '';
       if (o.kind === 'kill') { need = o.count; have = pr?.counts?.[i] ?? 0; label = `Defeat ${Registry.monster(o.monsterId)?.name ?? o.monsterId}`; }
       else if (o.kind === 'collect') { need = o.count; have = Math.max(pr?.counts?.[i] ?? 0, safe(() => p.countItem(o.itemId), 0)); label = `Collect ${Registry.item(o.itemId)?.name ?? o.itemId}`; }
-      else { need = o.level; have = p.state.level; label = `Reach level ${o.level}`; }
+      else if (o.kind === 'level') { need = o.level; have = p.state.level; label = `Reach level ${o.level}`; }
+      else if (o.kind === 'visit') { have = pr?.counts?.[i] ?? 0; label = `Travel to ${Registry.map(o.mapId)?.name ?? o.mapId}`; }
+      else { have = pr?.counts?.[i] ?? 0; label = `Talk to ${Registry.npc(o.npcId)?.name ?? o.npcId}`; }
       if (status === 'turned_in') have = need;
       have = Math.min(have, need);
       const pct = Math.round((have / Math.max(1, need)) * 100);

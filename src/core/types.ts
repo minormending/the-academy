@@ -423,9 +423,87 @@ export interface QuestDef {
   description: string;
   minLevel: number;
   requiredJobBranch?: Branch;
-  objectives: ({ kind: 'kill'; monsterId: string; count: number } | { kind: 'collect'; itemId: string; count: number } | { kind: 'level'; level: number })[];
+  objectives: QuestObjective[];
   rewards: { exp?: number; mesos?: number; items?: { itemId: string; qty: number }[] };
 }
+/** Mission/quest goals. `visit` = enter a map; `talk` = talk to an NPC (both count once). */
+export type QuestObjective =
+  | { kind: 'kill'; monsterId: string; count: number }
+  | { kind: 'collect'; itemId: string; count: number }
+  | { kind: 'level'; level: number }
+  | { kind: 'visit'; mapId: string; count?: 1 }
+  | { kind: 'talk'; npcId: string; count?: 1 };
+
+// ───────────────────────────── Courses (story mode) ─────────────────────────────
+// Each Year is a term of classes. A class (CourseDef) is taught by a teacher NPC and is a chain of missions
+// (ordinary QuestDefs, given and handed in by NPCs). Handing in the last mission passes the class: the teacher pays
+// the course rewards and awards its badge. Enough badges (including the required kinds) pass the Year; Headmistress
+// Maelis promotes you. At the end of Year 1 you declare your major (your School = skill tree).
+
+export type YearNo = 1 | 2 | 3 | 4 | 5;
+export type CourseKind = 'core' | 'major' | 'elective';
+export type BadgeShape = 'shield' | 'star' | 'circle' | 'diamond' | 'crest';
+export interface BadgeDef { id: string; name: string; color: number; shape: BadgeShape }
+export interface CourseDef {
+  /** `c<year>_<slug>`, e.g. `c1_spellcraft`. */
+  id: string;
+  year: YearNo;
+  /** Course title, e.g. "Foundations of Spellcraft". */
+  name: string;
+  /** Catalogue code, e.g. "SPL 101". */
+  code: string;
+  /** NPC id of the teacher (awards the badge). */
+  teacher: string;
+  kind: CourseKind;
+  /** Set for major courses: only students majoring in this School take it ('fire' | 'ice' | 'lightning' | 'holy' | 'shadow'). */
+  school?: 'fire' | 'ice' | 'lightning' | 'holy' | 'shadow';
+  /** One or two sentences for the class schedule. */
+  blurb: string;
+  /** Quest ids in order; each becomes available when the previous one is handed in. */
+  missions: string[];
+  badge: BadgeDef;
+  rewards: { exp?: number; mesos?: number; sp?: number; items?: { itemId: string; qty: number }[] };
+  /** What the teacher says when awarding the badge. */
+  passLine: string;
+}
+export interface YearPlan {
+  year: YearNo;
+  /** e.g. "Year 1 · The Apprentice Term". */
+  title: string;
+  /** Shown when the Year begins (Maelis's welcome). */
+  intro: string;
+  /** Badges needed to pass the Year (counting only this Year's classes). */
+  badgesToPass: number;
+  /** Course kinds that must be among the passed classes (e.g. ['core', 'major']). */
+  required: CourseKind[];
+  /** Shown at the promotion ceremony. */
+  outro: string;
+}
+export interface CourseProgress { status: 'enrolled' | 'passed'; passedAt?: number; /** granted for Years completed before story mode existed */ credit?: boolean }
+
+/** Story-mode service (src/systems/CourseSystem.ts). */
+export interface ICourses {
+  /** The player's current Year (= job tier). */
+  year(): YearNo;
+  plan(year?: YearNo): YearPlan;
+  /** Classes the player can take in a Year (major courses filtered to the player's School). */
+  catalogue(year?: YearNo): CourseDef[];
+  status(courseId: string): 'locked' | 'open' | 'enrolled' | 'passed';
+  /** Next mission of a class the player hasn't handed in yet (null if passed / none). */
+  currentMission(courseId: string): QuestDef | null;
+  /** Active missions across all classes, for the HUD tracker. */
+  activeMissions(): { course: CourseDef; mission: QuestDef }[];
+  badges(year?: YearNo): CourseDef[];
+  /** Badge count vs. requirement for the current Year, plus which required kinds are still missing. */
+  yearProgress(): { have: number; need: number; missing: CourseKind[]; ready: boolean };
+  /** Called by the teacher's dialog when the last mission is handed in: pays rewards and awards the badge. */
+  passCourse(courseId: string): boolean;
+  /** Year 1 → Year 2 only: declare a major and advance to that School's Year 2 job. */
+  declareMajor(school: 'fire' | 'ice' | 'lightning' | 'holy' | 'shadow'): boolean;
+  /** Years 2–4 (and 5 graduation): promote to the next Year when yearProgress().ready. */
+  promote(): boolean;
+}
+
 export interface QuestProgress { status: 'active' | 'complete' | 'turned_in'; counts: number[]; }
 
 // ───────────────────────────── Player state (persisted) ─────────────────────────────
@@ -461,6 +539,8 @@ export interface PlayerState {
   arenaBest?: number;
   /** Academy Honors (achievements + chosen title); absent on saves from before honors existed. */
   honors?: HonorsState;
+  /** Story mode: class progress by course id (absent on old saves; CourseSystem grants credit for finished Years). */
+  courses?: Record<string, CourseProgress>;
 }
 
 /** Persisted Academy Honors state (see src/data/honors.ts, src/systems/HonorsSystem.ts). */
@@ -641,4 +721,6 @@ export interface GameServices {
   npcs: INpcManager;
   audio: IAudio;
   ui: IUI;
+  /** Story mode (classes, badges, promotion). Optional so older test harnesses still build. */
+  courses?: ICourses;
 }

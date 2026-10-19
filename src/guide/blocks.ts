@@ -211,6 +211,8 @@ const KIND_LABEL: Record<QuestKind, string> = { story: 'Main story', exam: 'Year
 export function objectiveLine(o: QuestDef['objectives'][number]): Child {
   if (o.kind === 'kill') return ['Defeat ', h('strong', num(o.count)), ' ', monsterLink(o.monsterId, true)];
   if (o.kind === 'collect') return ['Bring ', h('strong', num(o.count)), ' ', itemLink(o.itemId)];
+  if (o.kind === 'visit') return ['Travel to ', h('strong', Registry.map(o.mapId)?.name ?? o.mapId)];
+  if (o.kind === 'talk') return ['Talk to ', h('strong', Registry.npc(o.npcId)?.name ?? o.npcId)];
   return ['Reach ', h('strong', `level ${o.level}`)];
 }
 

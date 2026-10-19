@@ -67,6 +67,8 @@ function objectivesText(p: Progression, q: QuestDef): string {
       const n = have !== null ? have : Math.min(o.count, p.countItem(o.itemId));
       return `• Collect ${o.count} ${itemName(o.itemId)} (${n}/${o.count})`;
     }
+    if (o.kind === 'visit') return `• Travel to ${Registry.map(o.mapId)?.name ?? pretty(o.mapId)}`;
+    if (o.kind === 'talk') return `• Talk to ${Registry.npc(o.npcId)?.name ?? pretty(o.npcId)}`;
     return `• Reach level ${o.level}`;
   }).join('\n');
 }

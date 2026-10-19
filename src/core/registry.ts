@@ -1,5 +1,5 @@
 /** Data registry. Owned by the lead — do not edit. Agents export arrays from their data modules. */
-import type { ItemDef, JobDef, JobId, MapDef, MonsterDef, NpcDef, QuestDef, SkillDef } from './types';
+import type { CourseDef, ItemDef, JobDef, JobId, MapDef, MonsterDef, NpcDef, QuestDef, SkillDef, YearNo, YearPlan } from './types';
 import { ALL_SKILLS } from '../skills';
 import { MONSTERS } from '../data/monsters';
 import { RAID_BOSSES } from '../data/raidBosses';
@@ -10,6 +10,7 @@ import { JOBS } from '../data/jobs';
 import { NPCS } from '../data/npcs';
 import { QUESTS } from '../data/quests';
 import { STORY_QUESTS } from '../data/storyQuests';
+import { COURSES, MISSIONS, YEAR_PLANS } from '../data/courses';
 
 function index<T extends { id: string }>(arr: T[], what: string): Map<string, T> {
   const m = new Map<string, T>();
@@ -18,11 +19,12 @@ function index<T extends { id: string }>(arr: T[], what: string): Map<string, T>
 }
 
 let _skills: Map<string, SkillDef>, _monsters: Map<string, MonsterDef>, _maps: Map<string, MapDef>,
-  _items: Map<string, ItemDef>, _jobs: Map<string, JobDef>, _npcs: Map<string, NpcDef>, _quests: Map<string, QuestDef>;
+  _items: Map<string, ItemDef>, _jobs: Map<string, JobDef>, _npcs: Map<string, NpcDef>, _quests: Map<string, QuestDef>, _courses: Map<string, CourseDef>;
 function ensure() {
   if (_skills) return;
   _skills = index(ALL_SKILLS, 'skill'); _monsters = index([...MONSTERS, ...RAID_BOSSES], 'monster'); _maps = index(MAPS, 'map');
-  _items = index([...ITEMS, ...ITEMS5], 'item'); _jobs = index(JOBS, 'job'); _npcs = index(NPCS, 'npc'); _quests = index([...QUESTS, ...STORY_QUESTS], 'quest');
+  _items = index([...ITEMS, ...ITEMS5], 'item'); _jobs = index(JOBS, 'job'); _npcs = index(NPCS, 'npc'); _quests = index([...QUESTS, ...STORY_QUESTS, ...MISSIONS], 'quest');
+  _courses = index(COURSES, 'course');
 }
 
 export const Registry = {
@@ -46,4 +48,9 @@ export const Registry = {
   npc(id: string) { ensure(); return _npcs.get(id); },
   quest(id: string) { ensure(); return _quests.get(id); },
   quests() { ensure(); return [..._quests.values()]; },
+  course(id: string) { ensure(); return _courses.get(id); },
+  courses() { ensure(); return [..._courses.values()]; },
+  yearPlan(year: YearNo): YearPlan { return YEAR_PLANS[year]; },
+  /** The class a mission belongs to (missions belong to at most one class). */
+  courseOfMission(questId: string) { ensure(); return [..._courses.values()].find(c => c.missions.includes(questId)); },
 };

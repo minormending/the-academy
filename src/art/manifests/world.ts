@@ -7,6 +7,15 @@ import type { MapTheme } from '../../core/types';
 
 export const PIXEL_THEMES: MapTheme[] = ['town', 'forest', 'mushroom', 'snow', 'volcano', 'storm', 'sanctum'];
 
+/**
+ * Per-map "looks": a variant of a base theme with its own terrain kit + parallax stack (branch zones).
+ * A map opts in via MAP_EXTRAS[id].look; anything that fails to load falls back to the base theme's art.
+ *  marsh   — forest at night (Moonlit Marsh) · grotto — snow inside an ice cave (Glacier Grotto)
+ *  library — sanctum as a magical library (The Restricted Stacks)
+ */
+export type WorldLook = 'marsh' | 'grotto' | 'library';
+export const PIXEL_LOOKS: WorldLook[] = ['marsh', 'grotto', 'library'];
+
 export const PIXEL_DECOR_KEYS = [
   'd_oak', 'd_oak_dark', 'd_tree_round', 'd_tree_blossom', 'd_bush', 'd_bush_berry', 'd_bush_flower', 'd_flowers', 'd_tuft',
   'd_tuft_moss', 'd_tuft_storm', 'd_rock', 'd_rock_big', 'd_stump', 'd_log', 'd_fence', 'd_signpost', 'd_lamp', 'd_mush_small',
@@ -15,6 +24,8 @@ export const PIXEL_DECOR_KEYS = [
   'd_lava_spire', 'd_obsidian', 'd_brazier', 'd_burnt_tree',
   'd_dead_tree', 'd_wind_pine', 'd_runestone', 'd_broken_pillar', 'd_banner_storm',
   'd_pillar', 'd_pillar_broken', 'd_banner_arcane', 'd_arcane_circle', 'd_brazier_arcane', 'd_crystal_float',
+  // branch zones (hand-pixelled to the packs' palettes): marsh reeds + bog pool, ice spire, library props
+  'd_reeds', 'd_bog_pool', 'd_ice_spire', 'd_bookshelf', 'd_candles', 'd_book_float', 'd_book_pile',
 ] as const;
 
 export const PIXEL_TOWN_KEYS = [
@@ -88,13 +99,36 @@ export const PIXEL_BG: Record<MapTheme, PixelBgLayer[]> = {
   ],
 };
 
-export const kitSrcKey = (t: MapTheme) => `src_w_kit_${t}`;
-export const bgSrcKey = (t: MapTheme, name: string) => `src_w_bg_${t}_${name}`;
+/** Parallax stacks per look (files: world/bg/<look>_<name>.png). 'top' layers after the first are pinned overlays (cave roof). */
+export const PIXEL_BG_LOOK: Record<WorldLook, PixelBgLayer[]> = {
+  marsh: [
+    { name: 'sky', w: 384, h: 224, k: 3, y: 'top', fx: 0.02, fy: 0.02, top: 0x0a0f23, bottom: 0x080c1e },
+    { name: 'far', w: 160, h: 224, k: 2, y: 630, fx: 0.07, fy: 0.06, bottom: 0x0a121e },
+    { name: 'mid', w: 160, h: 208, k: 2, y: 700, fx: 0.16, fy: 0.12, bottom: 0x040a0e },
+    { name: 'mist', w: 256, h: 40, k: 2, y: 612, fx: 0.24, fy: 0.18, alpha: 0.85, drift: 0.008 },
+  ],
+  grotto: [
+    { name: 'sky', w: 64, h: 272, k: 3, y: 'top', fx: 0.02, fy: 0.02, top: 0x040816, bottom: 0x0c1e38 },
+    { name: 'far', w: 272, h: 176, k: 3, y: 700, fx: 0.06, fy: 0.05, top: 0x040a18, bottom: 0x040a18 },
+    { name: 'ceiling', w: 256, h: 90, k: 2, y: 'top', fx: 0.1, fy: 0.02, top: 0x0a1628 },
+    { name: 'mid', w: 320, h: 130, k: 2, y: 730, fx: 0.15, fy: 0.12, bottom: 0x0f213c },
+  ],
+  library: [
+    { name: 'sky', w: 64, h: 272, k: 3, y: 'top', fx: 0.02, fy: 0.02, top: 0x0a060e, bottom: 0x22141e },
+    { name: 'far', w: 256, h: 200, k: 2, y: 660, fx: 0.06, fy: 0.05, bottom: 0x100909 },
+    { name: 'mid', w: 320, h: 150, k: 2, y: 740, fx: 0.15, fy: 0.12, bottom: 0x2b1a15 },
+  ],
+};
+
+export const kitSrcKey = (t: MapTheme | WorldLook) => `src_w_kit_${t}`;
+export const bgSrcKey = (t: MapTheme | WorldLook, name: string) => `src_w_bg_${t}_${name}`;
 export const pixSrcKey = (key: string) => `src_${key}`;
 
 export const WORLD_ASSETS: AssetEntry[] = [
   ...PIXEL_THEMES.map((t): AssetEntry => ({ key: kitSrcKey(t), path: `world/terrain/${t}.png`, type: 'image' })),
   ...PIXEL_THEMES.flatMap(t => PIXEL_BG[t].map((l): AssetEntry => ({ key: bgSrcKey(t, l.name), path: `world/bg/${t}_${l.name}.png`, type: 'image' }))),
+  ...PIXEL_LOOKS.map((t): AssetEntry => ({ key: kitSrcKey(t), path: `world/terrain/${t}.png`, type: 'image' })),
+  ...PIXEL_LOOKS.flatMap(t => PIXEL_BG_LOOK[t].map((l): AssetEntry => ({ key: bgSrcKey(t, l.name), path: `world/bg/${t}_${l.name}.png`, type: 'image' }))),
   ...PIXEL_DECOR_KEYS.map((k): AssetEntry => ({ key: pixSrcKey(k), path: `world/decor/${k}.png`, type: 'image' })),
   ...PIXEL_TOWN_KEYS.map((k): AssetEntry => ({ key: pixSrcKey(k), path: `world/town/${k}.png`, type: 'image' })),
   ...PIXEL_FX_KEYS.map((k): AssetEntry => ({ key: pixSrcKey(k), path: `world/fx/${k}.png`, type: 'image' })),

@@ -10,7 +10,7 @@ import { PIXEL_SCALE } from '../../core/constants';
 import type { MapTheme } from '../../core/types';
 import { sourceImage } from '../assets';
 import {
-  PIXEL_DECOR_KEYS, PIXEL_FX_KEYS, PIXEL_THEMES, PIXEL_TOWN_KEYS, kitSrcKey, pixSrcKey,
+  PIXEL_DECOR_KEYS, PIXEL_FX_KEYS, PIXEL_LOOKS, PIXEL_THEMES, PIXEL_TOWN_KEYS, kitSrcKey, pixSrcKey, type WorldLook,
 } from '../manifests/world';
 import { TK } from './palettes';
 
@@ -18,8 +18,8 @@ const S = PIXEL_SCALE;
 
 /** Keys that were produced from pixel sources (the map loader keeps these at integer scale). */
 export const PIXEL_KEYS = new Set<string>();
-/** Themes whose terrain kit was built from pixel sources. */
-export const PIXEL_TERRAIN_THEMES = new Set<MapTheme>();
+/** Themes (and WorldLooks) whose terrain kit was built from pixel sources. */
+export const PIXEL_TERRAIN_THEMES = new Set<MapTheme | WorldLook>();
 
 /** Screen-space geometry of the pixel terrain kit (source rows × PIXEL_SCALE). */
 export const PIX_TERRAIN = {
@@ -38,7 +38,7 @@ const KIT = {
 } as const;
 
 /** Per-theme ladder key (palette-swapped); the loader prefers it over the shared one. */
-export const ladderKeyFor = (t: MapTheme) => `w_ladder_${t}`;
+export const ladderKeyFor = (t: MapTheme | WorldLook) => `w_ladder_${t}`;
 
 /** Integer-upscale (nearest) a region of a source image into a new canvas texture. */
 function bake(scene: Phaser.Scene, key: string, img: CanvasImageSource, sx: number, sy: number, sw: number, sh: number, k = S): boolean {
@@ -64,7 +64,7 @@ function bakeWhole(scene: Phaser.Scene, key: string, srcKey: string): boolean {
   return bake(scene, key, img, 0, 0, img.width, img.height);
 }
 
-function buildTerrain(scene: Phaser.Scene, t: MapTheme) {
+function buildTerrain(scene: Phaser.Scene, t: MapTheme | WorldLook) {
   const img = sourceImage(scene, kitSrcKey(t));
   if (!img || img.width < 128) return;
   const r = (k: keyof typeof KIT) => KIT[k];
@@ -90,7 +90,7 @@ function buildPortalAnim(scene: Phaser.Scene) {
 
 /** Builds every pixel-art world texture whose source loaded. Never throws. */
 export function generatePixelWorldTextures(scene: Phaser.Scene) {
-  for (const t of PIXEL_THEMES) {
+  for (const t of [...PIXEL_THEMES, ...PIXEL_LOOKS]) {
     try { buildTerrain(scene, t); } catch (e) { console.warn('[pixelWorld] terrain', t, e); }
   }
   for (const k of [...PIXEL_DECOR_KEYS, ...PIXEL_TOWN_KEYS]) {

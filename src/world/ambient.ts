@@ -141,6 +141,38 @@ export class Ambient {
       case 'lightning':
         this.setupLightning();
         break;
+      // ── branch-zone looks ──
+      case 'glints':
+        // ice crystals catching light: brief cyan/white twinkles all over the view
+        this.emitter('w_spark', 'view', D_BACK, {
+          lifespan: { min: 500, max: 1100 }, frequency: 110, quantity: 1, maxAliveParticles: 30,
+          speedX: 0, speedY: 0, scale: { min: 0.6, max: 1.1 },
+          alpha: fadeInOut(1), tint: [0xbff4ff, 0xffffff, 0x8fe0ff], blendMode: 'ADD',
+        }, 1500);
+        break;
+      case 'icedust':
+        this.emitter('w_dot', 'top', D_BACK, {
+          lifespan: 16000, frequency: 170, quantity: 1, maxAliveParticles: 60,
+          speedX: { min: -10, max: 10 }, speedY: { min: 14, max: 30 }, scale: { min: 0.4, max: 0.8 },
+          alpha: { min: 0.3, max: 0.65 }, tint: [0xd8f6ff, 0x9fe0ff, 0xffffff],
+        }, 12000);
+        break;
+      case 'dust':
+        // warm candle-lit dust motes hanging in the air
+        this.emitter('w_dot', 'view', D_BACK, {
+          lifespan: { min: 6000, max: 10000 }, frequency: 200, quantity: 1, maxAliveParticles: 40,
+          speedX: { min: -6, max: 6 }, speedY: { min: -10, max: 4 }, scale: { min: 0.4, max: 0.7 },
+          alpha: fadeInOut(0.55), tint: [0xffe0a0, 0xffd080, 0xfff0d0], blendMode: 'ADD',
+        }, 7000);
+        break;
+      case 'pages':
+        // loose pages fluttering down through the stacks
+        this.emitter('w_petal', 'top', D_FRONT, {
+          lifespan: 15000, frequency: 1500, quantity: 1, maxAliveParticles: 8,
+          speedX: { min: 10, max: 40 }, speedY: { min: 18, max: 36 }, scale: { min: 1, max: 1.3 },
+          alpha: { min: 0.75, max: 0.95 }, tint: [0xf4ead0, 0xe8dcc0, 0xfff8e8],
+        }, 12000);
+        break;
     }
   }
 

@@ -1,4 +1,5 @@
-// OWNER: A7 (world). The eight maps of The Academy (seven chained world maps + the Trial Hall) (map ids are save data — never rename them).
+// OWNER: A7 (world). The maps of The Academy: seven chained world maps, the Trial Hall and three branch zones
+// (Moonlit Marsh, Glacier Grotto, The Restricted Stacks). Map ids are save data — never rename them.
 //
 // Conventions (see ARCHITECTURE.md "Coordinates & conventions"):
 //  - platform `y` is the walking surface; the ground floor is a oneWay=false platform spanning the map
@@ -51,6 +52,8 @@ const mistvale: MapDef = (() => {
       portal('east', 3720, G, 'whisperwood', 'west'),
       // Trial Hall door on the Headmistress tower's balcony (ladder at x 1392 from the ground).
       portal('trial', 1480, tower1.y, 'trial_hall', 'entry'),
+      // Branch zone: the Restricted Stacks, reached from the top of the Headmistress tower (rope at x 1560 from the balcony).
+      portal('stacks', 1440, towerTop.y, 'restricted_stacks', 'entry'),
     ],
     spawns: [],
     npcs: [
@@ -113,7 +116,11 @@ const shroom_hollow: MapDef = (() => {
     platforms: [ground(0, W, G), A, B, C, D, E, F, Gp, Hh, I, J, K, L, M, N, O, P, Q, R, S, T, U, V],
     walls: [wall(1100, 1210, 160, 70), wall(2500, 1200, 200, 80)],
     ropes: [ladder(560, J.y, F.y), rope(1400, K.y, Gp.y), rope(2100, L.y, Hh.y), ladder(2900, M.y, I.y), rope(1000, Q.y, N.y), rope(2600, R.y, P.y)],
-    portals: [portal('west', 70, G, 'whisperwood', 'east'), portal('east', 3530, G, 'frostfang_cliffs', 'west')],
+    portals: [
+      portal('west', 70, G, 'whisperwood', 'east'), portal('east', 3530, G, 'frostfang_cliffs', 'west'),
+      // Branch zone: Moonlit Marsh, on the high ledge T (jump up from R; rope at x 2600 from P to R).
+      portal('marsh', 2175, T.y, 'moonlit_marsh', 'entry'),
+    ],
     spawns: [
       span('cap_shroom', 300, 1060, G, 3), on('cap_shroom', A, 1), on('cap_shroom', B, 1), on('cap_shroom', F, 1),
       span('thorn_shroom', 1300, 2460, G, 3), on('thorn_shroom', Hh, 1), on('thorn_shroom', K, 1), on('thorn_shroom', L, 1),
@@ -146,7 +153,11 @@ const frostfang_cliffs: MapDef = (() => {
       rope(600, Gp.y, D.y), ladder(1400, Hh.y, step2.y), rope(2300, I.y, E.y), rope(3000, J.y, F.y),
       rope(1000, N.y, K.y), rope(2000, O.y, L.y), rope(3300, P.y, J.y), rope(1420, S.y, Q.y),
     ],
-    portals: [portal('west', 70, G, 'shroom_hollow', 'east'), portal('east', 3730, G, 'cinder_caverns', 'west')],
+    portals: [
+      portal('west', 70, G, 'shroom_hollow', 'east'), portal('east', 3730, G, 'cinder_caverns', 'west'),
+      // Branch zone: Glacier Grotto, a cave mouth on the ice step step3 (hop up from the ground, west of ledge F).
+      portal('grotto', 2680, step3.y, 'glacier_grotto', 'entry'),
+    ],
     spawns: [
       span('snow_yeti', 950, 1230, 1300, 2), span('snow_yeti', 1600, 2560, G, 3), span('snow_yeti', 2950, 3600, G, 2),
       on('frost_bat', A, 1), on('frost_bat', D, 1), on('frost_bat', Gp, 2), on('frost_bat', K, 1), on('frost_bat', B, 1),
@@ -265,4 +276,106 @@ const trial_hall: MapDef = (() => {
   };
 })();
 
-export const MAPS: MapDef[] = [mistvale, whisperwood, shroom_hollow, frostfang_cliffs, cinder_caverns, stormspire_peak, arcane_sanctum, trial_hall];
+// ───────────────────────────── Branch zones ─────────────────────────────
+//
+// Optional side maps off the main chain, each entered by an extra portal on its parent map and left by the same
+// `entry` portal. Presentation is a "look" over the base theme (MAP_EXTRAS[id].look → themes.ts LOOK_RUNTIME).
+
+// Moonlit Marsh (12–18): Shroom Hollow's night-time bog. Low hummocks and reed beds on the ground, willow-ledge tiers
+// above, two rope climbs per side and a moonlit crown ledge. Toads hop the low ground, wisps drift on the high ledges.
+const moonlit_marsh: MapDef = (() => {
+  const W = 3200, H = 1400, G = 1280;
+  const hummockA = wall(1180, 1235, 220, 45), hummockB = wall(2560, 1230, 180, 50);
+  const A = plat(220, 580, 1195), B = plat(760, 1100, 1195), C = plat(1480, 1880, 1195), D = plat(2200, 2520, 1195), E = plat(2860, 3120, 1195);
+  const F = plat(420, 820, 1110), Gp = plat(1150, 1500, 1110), Hh = plat(1900, 2300, 1110), I = plat(2550, 2950, 1110);
+  const J = plat(260, 700, 930), K = plat(1000, 1500, 930), L = plat(1700, 2200, 930), M = plat(2450, 3000, 930);
+  const N = plat(620, 1100, 845), O = plat(1450, 1850, 845), P = plat(2200, 2600, 845);
+  const Q = plat(850, 1400, 660), R = plat(1900, 2500, 660);
+  const S = plat(1350, 1700, 575), T = plat(2560, 2820, 575);
+  return {
+    id: 'moonlit_marsh', name: 'Moonlit Marsh', region: 'Herbology Field Site · Night Study', theme: 'forest', music: 'marsh',
+    width: W, height: H, levelRange: [12, 18],
+    platforms: [ground(0, W, G), A, B, C, D, E, F, Gp, Hh, I, J, K, L, M, N, O, P, Q, R, S, T],
+    walls: [hummockA, hummockB],
+    ropes: [
+      rope(600, J.y, F.y), ladder(1300, K.y, Gp.y), rope(2050, L.y, Hh.y), rope(2700, M.y, I.y),
+      rope(1000, Q.y, N.y), rope(2400, R.y, P.y),
+    ],
+    portals: [portal('entry', 90, G, 'shroom_hollow', 'marsh')],
+    spawns: [
+      span('bog_toad', 300, 1140, G, 3), span('bog_toad', 1440, 2520, G, 2), on('bog_toad', A, 1), on('bog_toad', B, 1), on('bog_toad', F, 1), on('bog_toad', C, 1),
+      span('thorn_shroom', 2780, 3120, G, 2), on('thorn_shroom', D, 1), on('thorn_shroom', Hh, 1),
+      on('will_o_wisp', J, 1), on('will_o_wisp', K, 1), on('will_o_wisp', L, 1), on('will_o_wisp', M, 1), on('will_o_wisp', O, 1),
+      on('will_o_wisp', Q, 1), on('will_o_wisp', R, 1),
+    ],
+    npcs: [],
+  };
+})();
+
+// Glacier Grotto (22–30): a cave of blue ice under Frostfang. Ice steps break up the floor, ledges climb in two
+// rope-linked bands to a crystal gallery under the roof. Crabs scuttle the floor and steps, shades haunt the upper bands.
+const glacier_grotto: MapDef = (() => {
+  const W = 3400, H = 1500, G = 1380;
+  const stepA = wall(700, 1300, 300, 80), stepB = wall(2300, 1290, 260, 90);
+  const A = plat(150, 500, 1295), B = plat(1150, 1550, 1295), C = plat(1800, 2200, 1295), D = plat(2750, 3150, 1295);
+  const E = plat(450, 900, 1210), F = plat(1400, 1800, 1210), Gp = plat(2100, 2500, 1210), Hh = plat(2850, 3250, 1210);
+  const I = plat(250, 750, 1040), J = plat(1100, 1600, 1040), K = plat(1900, 2400, 1040), L = plat(2700, 3200, 1040);
+  const M = plat(700, 1150, 955), N = plat(1550, 2000, 955), O = plat(2400, 2800, 955);
+  const P = plat(400, 950, 780), Q = plat(1300, 1900, 780), R = plat(2300, 2900, 780);
+  const S = plat(950, 1250, 695), T = plat(1950, 2300, 695);
+  const U = plat(1350, 1850, 520);
+  return {
+    id: 'glacier_grotto', name: 'Glacier Grotto', region: 'Frostfang Range · Deep Ice', theme: 'snow', music: 'grotto',
+    width: W, height: H, levelRange: [22, 30],
+    platforms: [ground(0, W, G), A, B, C, D, E, F, Gp, Hh, I, J, K, L, M, N, O, P, Q, R, S, T, U],
+    walls: [stepA, stepB],
+    ropes: [
+      rope(600, I.y, E.y), rope(1500, J.y, F.y), rope(2200, K.y, Gp.y), ladder(3000, L.y, Hh.y),
+      rope(800, P.y, M.y), rope(1700, Q.y, N.y), rope(2500, R.y, O.y), rope(1600, U.y, Q.y),
+    ],
+    portals: [portal('entry', 90, G, 'frostfang_cliffs', 'grotto')],
+    spawns: [
+      span('crystal_crab', 1060, 2240, G, 3), span('crystal_crab', 2620, 3320, G, 2), span('crystal_crab', 740, 960, stepA.y, 1),
+      on('crystal_crab', B, 1), on('crystal_crab', C, 1),
+      on('ice_wisp', E, 1), on('ice_wisp', Gp, 1), on('ice_wisp', M, 1), on('ice_wisp', O, 1),
+      on('frost_shade', J, 1), on('frost_shade', K, 1), on('frost_shade', L, 1), on('frost_shade', P, 1), on('frost_shade', Q, 1),
+      on('frost_shade', R, 1), on('frost_shade', U, 1),
+    ],
+    npcs: [],
+  };
+})();
+
+// The Restricted Stacks (32–42): the Academy's forbidden library. Floor aisles around a central reading dais,
+// bookshelf galleries stacked above it joined by library ladders, and the top gallery under the vaults.
+const restricted_stacks: MapDef = (() => {
+  const W = 3000, H = 1500, G = 1380;
+  const dais = wall(1300, 1290, 400, 90);
+  const A = plat(200, 600, 1295), B = plat(850, 1200, 1295), C = plat(1800, 2150, 1295), D = plat(2450, 2850, 1295);
+  const E = plat(450, 900, 1205), F = plat(1350, 1650, 1205), Gp = plat(2100, 2550, 1205);
+  const Hh = plat(200, 750, 1030), I = plat(950, 1450, 1030), J = plat(1550, 2050, 1030), K = plat(2300, 2850, 1030);
+  const L = plat(600, 1050, 945), M = plat(1900, 2350, 945);
+  const N = plat(300, 850, 770), O = plat(1150, 1850, 770), P = plat(2200, 2750, 770);
+  const Q = plat(850, 1150, 685), R = plat(1850, 2200, 685);
+  const S = plat(1100, 1900, 510);
+  return {
+    id: 'restricted_stacks', name: 'The Restricted Stacks', region: 'The Academy · Forbidden Library', theme: 'sanctum', music: 'library',
+    width: W, height: H, levelRange: [32, 42],
+    platforms: [ground(0, W, G), A, B, C, D, E, F, Gp, Hh, I, J, K, L, M, N, O, P, Q, R, S],
+    walls: [dais],
+    ropes: [
+      ladder(500, Hh.y, E.y), ladder(1400, I.y, F.y), ladder(2450, K.y, Gp.y),
+      ladder(700, N.y, L.y), ladder(1300, O.y, I.y), ladder(2300, P.y, M.y), ladder(1700, S.y, O.y),
+    ],
+    portals: [portal('entry', 90, G, 'mistvale', 'stacks')],
+    spawns: [
+      span('ink_golem', 300, 1260, G, 2), span('ink_golem', 1760, 2920, G, 2), span('ink_golem', 1340, 1660, dais.y, 1),
+      on('ink_golem', C, 1), on('ink_golem', O, 1),
+      on('animated_tome', E, 1), on('animated_tome', Gp, 1), on('animated_tome', I, 1), on('animated_tome', J, 1),
+      on('animated_tome', L, 1), on('animated_tome', M, 1), on('animated_tome', N, 1), on('animated_tome', P, 1),
+      on('void_wisp', Q, 1), on('void_wisp', R, 1), on('void_wisp', S, 1),
+    ],
+    npcs: [],
+  };
+})();
+
+export const MAPS: MapDef[] = [mistvale, whisperwood, shroom_hollow, frostfang_cliffs, cinder_caverns, stormspire_peak, arcane_sanctum, trial_hall, moonlit_marsh, glacier_grotto, restricted_stacks];

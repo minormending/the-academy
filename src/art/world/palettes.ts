@@ -80,19 +80,19 @@ export const PALETTES: Record<MapTheme, ThemePalette> = {
   },
 };
 
-/** Texture keys for a theme's terrain + backdrop. */
+/** Texture keys for a theme's (or a WorldLook's) terrain + backdrop. */
 export const TK = {
-  soil: (t: MapTheme) => `w_${t}_soil`,
-  lip: (t: MapTheme) => `w_${t}_lip`,
-  plat: (t: MapTheme) => `w_${t}_plat`,
-  platL: (t: MapTheme) => `w_${t}_platL`,
-  platR: (t: MapTheme) => `w_${t}_platR`,
-  wall: (t: MapTheme) => `w_${t}_wall`,
-  sky: (t: MapTheme) => `w_${t}_sky`,
-  far: (t: MapTheme) => `w_${t}_far`,
-  mid: (t: MapTheme) => `w_${t}_mid`,
-  near: (t: MapTheme) => `w_${t}_near`,
-  clouds: (t: MapTheme) => `w_${t}_clouds`,
+  soil: (t: string) => `w_${t}_soil`,
+  lip: (t: string) => `w_${t}_lip`,
+  plat: (t: string) => `w_${t}_plat`,
+  platL: (t: string) => `w_${t}_platL`,
+  platR: (t: string) => `w_${t}_platR`,
+  wall: (t: string) => `w_${t}_wall`,
+  sky: (t: string) => `w_${t}_sky`,
+  far: (t: string) => `w_${t}_far`,
+  mid: (t: string) => `w_${t}_mid`,
+  near: (t: string) => `w_${t}_near`,
+  clouds: (t: string) => `w_${t}_clouds`,
 } as const;
 
 /** Geometry of the terrain textures (shared by painter and loader). */

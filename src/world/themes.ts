@@ -1,7 +1,10 @@
 // OWNER: A7 (world). Runtime presentation config per map theme: parallax, ambient, decor scatter, glows.
 import type { MapTheme } from '../core/types';
+import type { WorldLook } from '../art/manifests/world';
 
-export type AmbientKind = 'fireflies' | 'leaves' | 'petals' | 'spores' | 'snow' | 'embers' | 'ash' | 'rain' | 'lightning' | 'motes';
+export type AmbientKind = 'fireflies' | 'leaves' | 'petals' | 'spores' | 'snow' | 'embers' | 'ash' | 'rain' | 'lightning' | 'motes'
+  // branch-zone looks
+  | 'glints' | 'icedust' | 'dust' | 'pages';
 
 export interface LayerCfg {
   key: 'far' | 'mid' | 'near';
@@ -151,6 +154,59 @@ export const THEME_RUNTIME: Record<MapTheme, ThemeRuntime> = {
   },
 };
 
+/**
+ * Presentation for the branch-zone looks (MAP_EXTRAS[id].look). Replaces the base theme's runtime for that map;
+ * terrain + parallax come from the look's own pixel kit (manifests/world.ts PIXEL_BG_LOOK).
+ */
+export const LOOK_RUNTIME: Record<WorldLook, ThemeRuntime> = {
+  // Moonlit Marsh: the forest kit at night — bog pools, reeds, dark willows, mist and a lot of fireflies.
+  marsh: {
+    layers: THEME_RUNTIME.forest.layers,
+    stars: 0.85,
+    celestial: { key: 'w_moon', x: 0.74, y: 96, alpha: 0.9, tint: 0xe8fff4 },
+    ambient: ['fireflies', 'fireflies'],
+    scatter: {
+      back: ['d_oak_dark', 'd_dead_tree', 'd_oak_dark'], between: ['d_reeds', 'd_stump', 'd_rock_big', 'd_log'],
+      front: ['d_reeds', 'd_tuft_moss', 'd_bog_pool', 'd_glow_shroom', 'd_reeds', 'd_mush_small'], onPlatforms: ['d_reeds', 'd_tuft_moss', 'd_reeds'], hanging: ['d_vine'],
+      backSpacing: [170, 300], frontSpacing: [60, 130],
+    },
+    backTint: 0x6a7c98,
+    tints: {
+      d_oak_dark: 0x8a9ab8, d_dead_tree: 0x7a8aa8, d_stump: 0x8a90a8, d_log: 0x8a90a8, d_rock_big: 0x8890a8,
+      d_tuft_moss: 0xa0c8c0, d_mush_small: 0xb0b8d0, d_vine: 0x88a8a8, d_signpost: 0x9aa0b8, d_lamp: 0xb8ffd8,
+    },
+    ladderKey: 'w_ladder',
+  },
+  // Glacier Grotto: the snow kit inside an ice cave — ice spires, icicles under every ledge, crystal glow, no sky.
+  grotto: {
+    layers: THEME_RUNTIME.snow.layers,
+    pixelCelestial: false,
+    ambient: ['glints', 'icedust'],
+    scatter: {
+      back: ['d_ice_spire', 'd_ice_spire', 'd_crystal_float'], between: ['d_ice_crystal', 'd_snow_rock', 'd_ice_spire'],
+      front: ['d_ice_crystal', 'd_snow_rock', 'd_ice_crystal'], onPlatforms: ['d_ice_crystal', 'd_snow_rock'], hanging: ['d_icicles', 'd_icicles'],
+      backSpacing: [180, 320], frontSpacing: [90, 190],
+    },
+    backTint: 0x8ab4d8,
+    tints: { d_crystal_float: 0x9fe6ff, d_snow_rock: 0x9cc0e4, d_ice_crystal: 0xd8f6ff, d_lamp: 0xcfe6ff },
+    ladderKey: 'w_ladder',
+  },
+  // The Restricted Stacks: the sanctum as a candle-lit library — shelf walls, book piles, floating tomes, dust and pages.
+  library: {
+    layers: THEME_RUNTIME.sanctum.layers,
+    pixelCelestial: false,
+    ambient: ['dust', 'pages', 'motes'],
+    scatter: {
+      back: ['d_bookshelf', 'd_bookshelf', 'd_pillar', 'd_bookshelf'], between: ['d_book_pile', 'd_candles', 'd_brazier_arcane'],
+      front: ['d_book_pile', 'd_candles', 'd_book_pile'], onPlatforms: ['d_book_pile', 'd_candles', 'd_book_pile'], hanging: [],
+      backSpacing: [150, 260], frontSpacing: [110, 220],
+    },
+    backTint: 0xb8a8b8,
+    tints: { d_pillar: 0xc8a8a0 },
+    ladderKey: 'w_ladder',
+  },
+};
+
 /** Light sources attached to decor (offsets in texture px from the bottom-center origin). */
 export const DECOR_GLOWS: Record<string, { dy: number; dx?: number; r: number; color: number; alpha: number; pulse?: number }> = {
   d_lamp: { dy: -134, r: 70, color: 0xffd27a, alpha: 0.55, pulse: 0.08 },
@@ -170,9 +226,13 @@ export const DECOR_GLOWS: Record<string, { dy: number; dx?: number; r: number; c
   t_hall_holy: { dy: -100, r: 64, color: 0xfff0b0, alpha: 0.4, pulse: 0.1 },
   t_hall_shadow: { dy: -100, r: 60, color: 0x7ee88c, alpha: 0.32, pulse: 0.2 },
   t_tower: { dy: -588, dx: 8, r: 70, color: 0x9fd8ff, alpha: 0.6, pulse: 0.2 },
+  d_candles: { dy: -30, r: 50, color: 0xffb860, alpha: 0.55, pulse: 0.3 },
+  d_ice_spire: { dy: -60, r: 64, color: 0x8fe0ff, alpha: 0.3, pulse: 0.15 },
+  d_book_float: { dy: -10, r: 40, color: 0xd8b0ff, alpha: 0.4, pulse: 0.25 },
+  d_bog_pool: { dy: -6, r: 44, color: 0x9fd8c8, alpha: 0.12, pulse: 0.3 },
 };
 /** Decor that gently bobs (floating things). */
-export const DECOR_BOB: Record<string, number> = { d_crystal_float: 7 };
+export const DECOR_BOB: Record<string, number> = { d_crystal_float: 7, d_book_float: 6 };
 
 /**
  * Glow anchor for the pixel versions of glowing decor (their sprites differ in size from the procedural ones).
@@ -196,4 +256,8 @@ export const PIXEL_GLOW_DY: Record<string, { dy: (h: number) => number; dx?: num
   t_hall_holy: { dy: () => -80, dx: -46 },
   t_hall_shadow: { dy: () => -80, dx: -46 },
   t_tower: { dy: h => -(h - 12) },
+  d_candles: { dy: h => -(h - 6) },
+  d_ice_spire: { dy: h => -h * 0.45 },
+  d_book_float: { dy: h => -h * 0.5 },
+  d_bog_pool: { dy: h => -h * 0.5 },
 };

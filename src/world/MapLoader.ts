@@ -4,17 +4,17 @@ import Phaser from 'phaser';
 import { DEPTH } from '../core/constants';
 import { Registry } from '../core/registry';
 import { maybeServices } from '../core/services';
-import type { IMapInstance, MapDef, PlatformDef, PortalDef, RopeDef } from '../core/types';
+import type { IMapInstance, MapDef, MapTheme, PlatformDef, PortalDef, RopeDef } from '../core/types';
 import { MAPS } from '../data/maps';
 import { generateTileTextures, WORLD_TEX_READY } from '../art/tileArt';
 import { TERRAIN, TK } from '../art/world/palettes';
 import { PIXEL_KEYS, PIXEL_TERRAIN_THEMES, PIX_TERRAIN, ladderKeyFor } from '../art/world/pixel';
-import { PIXEL_BG, bgSrcKey } from '../art/manifests/world';
+import { PIXEL_BG, PIXEL_BG_LOOK, bgSrcKey, type WorldLook } from '../art/manifests/world';
 import { hashStr, rng } from '../art/world/util';
 import { Ambient } from './ambient';
 import { MAP_EXTRAS, type DecorPlace } from './mapExtras';
 import { PortalVisual } from './portals';
-import { DECOR_BOB, DECOR_GLOWS, PIXEL_GLOW_DY, THEME_RUNTIME, type ThemeRuntime } from './themes';
+import { DECOR_BOB, DECOR_GLOWS, LOOK_RUNTIME, PIXEL_GLOW_DY, THEME_RUNTIME, type ThemeRuntime } from './themes';
 
 /** One-way platform body thickness (px) at the top surface. */
 export const ONE_WAY_BODY_H = 12;
@@ -64,13 +64,19 @@ export class MapInstance implements IMapInstance {
   /** Terrain texture geometry for this map's theme (pixel kit or procedural fallback). */
   private geom: TerrainGeom = TERRAIN;
   private pixelTerrain = false;
+  /** Branch-zone look (MAP_EXTRAS[id].look): its own runtime, parallax and terrain kit over the base theme. */
+  private look: WorldLook | undefined;
+  /** Terrain kit in use: the look's kit when it was built, else the base theme's. */
+  private kit: MapTheme | WorldLook;
 
   constructor(scene: Phaser.Scene, def: MapDef) {
     this.scene = scene;
     this.def = def;
     this.widthPx = def.width;
     this.heightPx = def.height;
-    this.theme = THEME_RUNTIME[def.theme] ?? THEME_RUNTIME.forest;
+    this.look = MAP_EXTRAS[def.id]?.look;
+    this.theme = (this.look && LOOK_RUNTIME[this.look]) || (THEME_RUNTIME[def.theme] ?? THEME_RUNTIME.forest);
+    this.kit = def.theme;
     this.solids = scene.physics.add.staticGroup();
     this.platforms = scene.physics.add.staticGroup();
     this.buildWalkables();
@@ -78,7 +84,8 @@ export class MapInstance implements IMapInstance {
     try {
       if (!scene.textures.exists(WORLD_TEX_READY)) generateTileTextures(scene);
     } catch (e) { console.warn('[map] texture generation failed', e); }
-    this.pixelTerrain = PIXEL_TERRAIN_THEMES.has(def.theme);
+    if (this.look && PIXEL_TERRAIN_THEMES.has(this.look)) this.kit = this.look;
+    this.pixelTerrain = PIXEL_TERRAIN_THEMES.has(this.kit);
     this.geom = this.pixelTerrain ? PIX_TERRAIN : TERRAIN;
     const steps: [string, () => void][] = [
       ['backdrop', () => this.buildBackdrop()],
@@ -256,8 +263,11 @@ export class MapInstance implements IMapInstance {
 
   /** 16-bit parallax: source strips at an integer scale, tiled horizontally, with solid fills above/below. */
   private buildPixelBackdrop(): boolean {
-    const s = this.scene, cam = s.cameras.main, t = this.def.theme, th = this.theme;
-    const cfg = PIXEL_BG[t];
+    const s = this.scene, cam = s.cameras.main, th = this.theme;
+    const lookCfg = this.look ? PIXEL_BG_LOOK[this.look] : undefined;
+    const useLook = !!(this.look && lookCfg?.length && this.has(bgSrcKey(this.look, lookCfg[0].name)));
+    const t: MapTheme | WorldLook = useLook && this.look ? this.look : this.def.theme;
+    const cfg = useLook ? lookCfg : PIXEL_BG[this.def.theme];
     if (!cfg?.length || !this.has(bgSrcKey(t, cfg[0].name))) return false;
     const cw = cam.width, ch = cam.height;
     const base = cfg[0].bottom ?? cfg[0].top ?? 0x000000;
@@ -266,7 +276,8 @@ export class MapInstance implements IMapInstance {
       const key = bgSrcKey(t, l.name);
       if (!this.has(key)) return;
       const isSky = l.y === 'top';
-      const depth = isSky ? DEPTH.SKY : DEPTH.PARALLAX_FAR + i * 40;
+      // the first 'top' layer is the sky; later 'top' layers (a cave roof) are pinned overlays in stack order
+      const depth = isSky && i === 0 ? DEPTH.SKY : DEPTH.PARALLAX_FAR + i * 40;
       const h = l.h * l.k;
       const top = isSky ? 0 : (l.y as number) - h;
       const ts = this.keep(s.add.tileSprite(0, top, Math.ceil(cw / l.k) + 2, l.h, key)
@@ -472,7 +483,7 @@ export class MapInstance implements IMapInstance {
   }
 
   private buildTerrain() {
-    const s = this.scene, t = this.def.theme, H = this.heightPx;
+    const s = this.scene, t = this.kit, H = this.heightPx;
     const G = this.geom, px = this.pixelTerrain;
     const soilK = TK.soil(t), lipK = TK.lip(t);
     // Pixel kit: the lip strip carries the grass edge + top dirt row, the soil continues right under it.
@@ -559,7 +570,7 @@ export class MapInstance implements IMapInstance {
     for (const r of this.def.ropes) {
       const len = Math.max(8, r.bottom - r.top);
       if (r.kind === 'ladder') {
-        const themed = ladderKeyFor(this.def.theme);
+        const themed = ladderKeyFor(this.kit);
         const key = this.has(themed) ? themed : this.has(this.theme.ladderKey) ? this.theme.ladderKey : 'w_ladder';
         if (this.has(key)) {
           const pixLadder = PIXEL_KEYS.has(key);

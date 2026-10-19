@@ -46,3 +46,16 @@ bunting, rope, portal swirl, particles, sun/moon/stars, waterfall/lava strips).
 (Sunny Land hall, Gothicvania Town hanging sign, Fort of Illusion banner — all CC0, Luis Zuno) with small
 hand-pixelled additions in the same palettes (Holy bell-cote + cross and sun emblem; Shadow gothic spires and
 skull emblem). The Shadow hall is flanked by the existing Gothicvania Church skull pillar (`d_pillar`).
+
+## Branch zones (derived + hand-pixelled, no new downloads)
+
+The three branch-zone looks reuse the packs above; nothing new was downloaded.
+- **Moonlit Marsh** (`terrain/marsh.png`, `bg/marsh_sky|far|mid.png`): night palette swaps of the forest kit and
+  the Country-side / Sunny Land Woods strips (CC0, Luis Zuno). `bg/marsh_mist.png` (dithered fog band),
+  `decor/d_reeds.png` and `decor/d_bog_pool.png` are hand-pixelled in the same palette.
+- **Glacier Grotto** (`terrain/grotto.png`, `bg/grotto_far.png`): ice palette swaps of the snow kit and the Warped
+  Caves cave layer (CC0, Luis Zuno). `bg/grotto_sky|ceiling|mid.png` (gradient, ice roof and ice spires) and
+  `decor/d_ice_spire.png` are hand-pixelled.
+- **The Restricted Stacks** (`terrain/library.png`): the sanctum kit layout with a hand-pixelled carpet/masonry
+  floor and bookshelf ledges, plus the Sunny Land ladder darkened. `bg/library_sky|far|mid.png` (shelf walls,
+  arched windows, pillars) and `decor/d_bookshelf|d_candles|d_book_float|d_book_pile.png` are hand-pixelled.

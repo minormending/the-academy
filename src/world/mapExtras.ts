@@ -1,4 +1,5 @@
 // OWNER: A7 (world). Hand-placed set dressing per map (on top of the seeded scatter), plus spawn overrides.
+import type { WorldLook } from '../art/manifests/world';
 
 export type DecorLayer = 'far' | 'back' | 'mid' | 'front';
 
@@ -28,6 +29,8 @@ export interface MapExtras {
   spawn?: { x: number; y: number };
   /** Multiplier for scatter density (1 = default). */
   density?: number;
+  /** Branch-zone look over the map's base theme (own terrain kit, parallax, ambient + scatter; see themes.ts LOOK_RUNTIME). */
+  look?: WorldLook;
 }
 
 const TG = 980; // Academy campus (map id `mistvale`) ground
@@ -139,6 +142,57 @@ export const MAP_EXTRAS: Record<string, MapExtras> = {
       { key: 'd_crystal_float', x: 1780, y: 760, layer: 'back' },
       { key: 'd_crystal_float', x: 420, y: 560, layer: 'back', scale: 0.8 },
       { key: 'd_crystal_float', x: 2180, y: 560, layer: 'back', scale: 0.8 },
+    ],
+  },
+  // ── branch zones (each has its own look: terrain kit, parallax, ambient and scatter) ──
+  // Moonlit Marsh: night bog — lantern-lit trailhead, bog pools with lily pads among the reeds, glowing fungus.
+  moonlit_marsh: {
+    look: 'marsh',
+    density: 1.1,
+    decor: [
+      { key: 'd_signpost', x: 175, layer: 'mid', tint: 0x9aa0b8 },
+      { key: 'd_lamp', x: 240, layer: 'mid' },
+      ...[640, 1640, 2330, 3000].map(x => ({ key: 'd_bog_pool', x, layer: 'front' as const })),
+      ...[590, 700, 1590, 1700, 2290, 2420, 2960].map((x, i) => ({ key: 'd_reeds', x, layer: 'mid' as const, flip: i % 2 === 1 })),
+      { key: 'd_dead_tree', x: 1290, y: 1235, layer: 'back', tint: 0x7a8aa8 },
+      { key: 'd_glow_shroom', x: 1220, y: 1235, layer: 'mid' },
+      { key: 'd_glow_shroom', x: 2650, y: 1230, layer: 'mid' },
+      { key: 'd_glow_shroom', x: 1500, y: 575, layer: 'mid' },
+      { key: 'd_glow_shroom', x: 2700, y: 575, layer: 'mid' },
+    ],
+  },
+  // Glacier Grotto: ice cave — a cold lamp at the cave mouth, big ice spires, floating crystals, a meltwater fall.
+  glacier_grotto: {
+    look: 'grotto',
+    decor: [
+      { key: 'd_lamp', x: 200, layer: 'mid', tint: 0xcfe6ff },
+      { key: 'd_ice_spire', x: 850, y: 1300, layer: 'back' },
+      { key: 'd_ice_spire', x: 2430, y: 1290, layer: 'back', flip: true },
+      { key: 'd_ice_crystal', x: 760, y: 1300, layer: 'mid' },
+      { key: 'd_ice_crystal', x: 2510, y: 1290, layer: 'mid' },
+      { key: 'd_crystal_float', x: 1600, y: 420, layer: 'back' },
+      { key: 'd_crystal_float', x: 650, y: 690, layer: 'back' },
+      { key: 'd_crystal_float', x: 2650, y: 690, layer: 'back' },
+      { key: 'd_crystal_float', x: 3250, y: 900, layer: 'back' },
+    ],
+    falls: [{ kind: 'water', x: 3330, top: 300, bottom: 1380, w: 40 }],
+  },
+  // The Restricted Stacks: forbidden library — arcane braziers at the door, a summoning circle on the reading dais,
+  // banners at the dais corners and tomes floating between the shelf galleries.
+  restricted_stacks: {
+    look: 'library',
+    decor: [
+      { key: 'd_brazier_arcane', x: 210, layer: 'mid' },
+      { key: 'd_pillar', x: 30, layer: 'back', tint: 0xc8a8a0 },
+      { key: 'd_pillar', x: 2970, layer: 'back', tint: 0xc8a8a0 },
+      { key: 'd_banner_arcane', x: 1320, y: 1290, layer: 'back' },
+      { key: 'd_banner_arcane', x: 1680, y: 1290, layer: 'back' },
+      { key: 'd_arcane_circle', x: 1500, y: 1322, layer: 'front', alpha: 0.6 },
+      { key: 'd_candles', x: 1420, y: 1290, layer: 'mid' },
+      { key: 'd_candles', x: 1580, y: 1290, layer: 'mid' },
+      // drifting tomes in the background (dimmed so they never read as the animated_tome monsters)
+      ...([[330, 1150], [2700, 1130], [560, 870], [1980, 860], [1500, 400], [2480, 650]] as const)
+        .map(([x, y]) => ({ key: 'd_book_float', x, y, layer: 'far' as const, alpha: 0.6, tint: 0x9888b0 })),
     ],
   },
   // Trial Hall: an intact, well-lit Academy hall (the same sanctum kit, no broken pillars).

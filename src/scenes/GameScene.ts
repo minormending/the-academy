@@ -299,7 +299,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
       const pressed = JustDown(key);
       if (!key?.isDown && !pressed) continue;
       const r = s.skills.tryCast(entry);
-      if (pressed && r === 'busy' && !key?.isDown) this.castBuffer = { skillId: entry, until: time + 350 };
+      if (pressed && r === 'busy') this.castBuffer = { skillId: entry, until: time + 350 };
       if (pressed && r !== 'ok' && r !== 'busy') {
         const msg = r === 'no_mp' ? 'Not enough MP.' : r === 'cooldown' ? 'That skill is still cooling down.'
           : r === 'not_learned' ? 'You have not learned that skill.' : r === 'passive' ? 'Passive skills are always active.' : '';

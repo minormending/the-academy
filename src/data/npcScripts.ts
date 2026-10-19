@@ -6,6 +6,7 @@ import { bus } from '../core/events';
 import { Registry } from '../core/registry';
 import { BRANCH_ROOT_JOB, SCHOOLS, SCHOOL_NAME, SCHOOL_PROFESSOR, isSchool, yearOfTier, type School } from './jobs';
 import { FIELD_BOUNTY_QUEST_IDS, JOB_ADVANCEMENT_QUESTS, JOB_QUEST_IDS } from './quests';
+import { GRADUATION_QUEST_ID, STORY_FLOW, STORY_QUESTS, STORY_QUEST_IDS, storyStepUnlocked, type StoryStateView } from './storyQuests';
 import type { Progression } from '../systems/Progression';
 
 interface Ctx {
@@ -77,13 +78,15 @@ function rewardsText(q: QuestDef): string {
 }
 
 function sideQuestsFor(npcId: string): QuestDef[] {
-  return Registry.quests().filter(q => q.giver === npcId && !JOB_QUEST_IDS.has(q.id));
+  // Story quests (main line + orientation) have their own dialog and gating — see the Story section.
+  return Registry.quests().filter(q => q.giver === npcId && !JOB_QUEST_IDS.has(q.id) && !STORY_QUEST_IDS.has(q.id));
 }
 
 /** Dialog options for this NPC's Assignments (available / in progress / ready). */
 function questOptions(c: Ctx, back: () => void): DialogOption[] {
   const out: DialogOption[] = [];
   for (const q of sideQuestsFor(c.npcId)) {
+    if (supersededByStory(c.p, q.id)) continue;
     const st = c.p.questStatus(q.id);
     if (st === 'available') out.push(go(`[Assignment] ${q.name}`, () => offerQuest(c, q, back)));
     else if (st === 'complete') out.push(go(`[Hand in] ${q.name}`, () => turnIn(c, q, back)));
@@ -110,6 +113,368 @@ function turnIn(c: Ctx, q: QuestDef, back: () => void) {
   }
 }
 
+// ─────────────────────────── Story: main questline + Year 1 orientation ───────────────────────────
+// Quest data + chain rules live in storyQuests.ts. Each step's offer / progress / hand-in lines live here.
+
+type StoryStatus = 'locked' | 'soon' | 'available' | 'active' | 'complete' | 'turned_in';
+
+function storyView(p: Progression): StoryStateView {
+  return { level: p.state.level, tier: p.jobDef().tier, quests: p.state.quests };
+}
+
+function storyStatus(p: Progression, q: QuestDef): StoryStatus {
+  const pr = p.state.quests[q.id];
+  if (pr) return pr.status;
+  if (!storyStepUnlocked(storyView(p), q.id)) return 'locked';
+  return p.questStatus(q.id) === 'available' ? 'available' : 'soon';
+}
+
+/** Does this NPC run (offer + hand in) this story step? */
+function storyHandles(npcId: string, q: QuestDef): boolean {
+  return q.giver === npcId || (!!STORY_FLOW[q.id]?.anyProfessor && !!PROFESSOR_SCHOOL[npcId]);
+}
+
+function storyNotice(p: Progression, npcId: string): NpcNotice {
+  let notice: NpcNotice = null;
+  for (const q of STORY_QUESTS) {
+    if (!storyHandles(npcId, q)) continue;
+    const st = storyStatus(p, q);
+    if (st === 'complete') return 'turnin';
+    if (st === 'available') notice = 'new';
+  }
+  return notice;
+}
+
+/** The student's School (null for Year 1 apprentices). */
+function schoolOf(p: Progression): School | null {
+  const b = p.jobDef().branch;
+  return isSchool(b) ? b : null;
+}
+
+/** A professor's reaction to the student's School; `none` covers undeclared students. */
+type SchoolReact = Record<School | 'none', string>;
+function react(c: Ctx, r: SchoolReact): string {
+  return r[schoolOf(c.p) ?? 'none'];
+}
+
+/** Template fill: {name} {job} {aJob} {school} {professor}. */
+function fill(c: Ctx, text: string): string {
+  const sc = schoolOf(c.p);
+  const job = c.p.jobDef().name;
+  return text
+    .replace(/\{name\}/g, c.p.state.name)
+    .replace(/\{job\}/g, job)
+    .replace(/\{aJob\}/g, aJob(job))
+    .replace(/\{school\}/g, sc ? SCHOOL_NAME[sc] : 'Arcane')
+    .replace(/\{professor\}/g, sc ? professorName(sc) : 'your Professor');
+}
+
+interface StoryLines {
+  offer: (c: Ctx) => string;
+  /** Accept button label. */
+  accept?: string;
+  /** Said right after accepting (non-talk steps). */
+  accepted?: (c: Ctx) => string;
+  progress: (c: Ctx) => string;
+  done: (c: Ctx) => string;
+  /** Extra options offered alongside "accepted" / "in progress" (e.g. open the shop). */
+  extra?: (c: Ctx) => DialogOption[];
+  /** Runs once after a successful hand-in. */
+  after?: (c: Ctx) => void;
+  /** Options after the hand-in text (default: "Anything else?" + goodbye). */
+  next?: (c: Ctx, back: () => void) => DialogOption[];
+}
+
+const bramShop = (c: Ctx): DialogOption =>
+  ({ label: 'Let me see the counter.', closes: true, action: () => bus.emit('ui:shop', { npcId: c.npcId, npcName: c.npcName, items: shopEntries(POTION_SHOP) }) });
+
+/** Your own Professor's farewell after office hours (by the professor's School, not the student's). */
+const OFFICE_HOURS: Record<School, { offer: string; done: string }> = {
+  fire: {
+    offer: 'A first-year at office hours! Keen — I like that. Professor Pyra, Head of Pyromancy. At level 10 you\'ll declare a School with the Headmistress. Pick fire. Or don\'t! But pick fire.\n\nStudy tip: every level gives you 3 SP. Press K to open your spellbook and spend them — Arcane Bolt gets hotter with every point.',
+    done: 'There. Now you know where the warm office is.',
+  },
+  ice: {
+    offer: 'Professor Glacius, Cryomancy. Sit. Breathe. Good — most first-years forget the second part.\n\nStudy tip: each level also gives you AP. Press P for your stats and put them into INT, which strengthens every spell. The Auto button will do it for you, if you trust it.',
+    done: 'Calm, attentive, punctual. You will do well here.',
+  },
+  lightning: {
+    offer: 'Professor Voltis, Storm Magic! You\'re here! You\'re early! I LOVE early!\n\nStudy tip: your hotbar has two pages — press Tab to flip between them. More slots for spells, more slots for ZAP.',
+    done: 'Great chat! Quick chat! Best kind of chat!',
+  },
+  holy: {
+    offer: 'Professor Seraphine, Holy Magic. Welcome, little lamp — have a biscuit.\n\nStudy tip: rest on campus between practicums. Your HP and MP recover three times faster here than out in the field.',
+    done: 'Come by any time. The biscuits are a permanent fixture.',
+  },
+  shadow: {
+    offer: 'Professor Morvane, Shadow Magic. You found my office. Most first-years get lost on the way. Some on purpose.\n\nStudy tip: fall in the field and you wake up back on campus, a little poorer in EXP. Keep potions on your hotbar and you need never find out.',
+    done: 'You may go. Don\'t touch the jars on the way out.',
+  },
+};
+
+/** The professor for an `anyProfessor` step is whoever you are talking to. */
+function npcSchool(c: Ctx): School { return PROFESSOR_SCHOOL[c.npcId] ?? 'fire'; }
+
+const STORY_SCRIPT: Record<string, StoryLines> = {
+  // ───── Year 1 · Orientation ─────
+  story_orientation: {
+    offer: c => fill(c, 'Welcome, welcome! I am Headmistress Maelis, and this is the Academy. Before your first lesson, {name}, the basics:\n\n• Arrow keys walk. Space (or Alt) jumps — hold Down and jump to drop through a ledge.\n• Press Up to talk to people, climb ropes and ladders, and step through glowing portals.\n• Press H any time for the full list of controls.'),
+    accept: 'Walk, jump, Up to talk. Got it!',
+    progress: () => 'Arrow keys, Space to jump, Up to talk.',
+    done: () => 'Splendid! Here is a little pocket money — every first-year needs it.\n\nOur Professors keep office hours along the east hall. Walk over, pick any one of them, and say hello.',
+  },
+  story_office_hours: {
+    offer: c => OFFICE_HOURS[npcSchool(c)].offer,
+    accept: 'Pleased to meet you, Professor!',
+    progress: () => 'Say hello to any Professor.',
+    done: c => `${OFFICE_HOURS[npcSchool(c)].done}\n\nNext, see Bram, our quartermaster, at the west end of campus. Nobody leaves for a practicum without supplies.`,
+  },
+  story_supplies: {
+    offer: () => 'First trip off campus, eh? Rule one: always carry a Return Scroll. Buy one from my counter — 150 mesos — and show it to me.\n\nRule two, free of charge: your Red Potions sit on key 1 and Blue on key 2. Open your bag (I) and drag any potion onto a hotbar slot to keep it handy. Low on HP? Tap the key and drink.',
+    accepted: () => 'Return Scrolls are on the counter. Go on, have a look.',
+    progress: () => 'One Return Scroll, 150 mesos. Got the coin? The Headmistress gave every first-year a little.',
+    extra: c => [bramShop(c)],
+    done: c => {
+      const potionOnBar = c.p.state.hotbar.some(e => !!e && e.startsWith('item:'));
+      return `That's the one! Here it is back, with two more on the house and a stack of Red Potions.${potionOnBar ? '' : '\n\nOh, and your hotbar has no potions on it! Open your bag (I), go to the Use tab and drag a potion onto a slot.'}\n\nPrefect Finn is waiting just past the east gate, in Whisperwood, for your first practicum.`;
+    },
+  },
+  story_first_practicum: {
+    offer: () => 'Prefect Finn, field practicums! Lesson one: Moss Snails.\n\nFace one and press Q to cast Arcane Bolt. Defeat 3 of them, then hold Z near what they drop to scoop it up. I need 2 Snail Shells.',
+    accepted: () => 'Q to cast, Z to loot. The snails are the slow green ones. Go!',
+    progress: () => 'Q to cast, hold Z to loot! Snails won\'t bite. Much.',
+    done: () => 'Textbook! Take these sandals — the trail gets muddy.\n\nFrom here, Year 1 is about practice: my field practicums, assignments from the staff, and levels. The Headmistress has your next assignment — head back to campus and see her.',
+  },
+  story_declaration: {
+    offer: c => fill(c, 'You survived orientation, {name}! Now the real work begins. Study, practise, and reach level 10. Then come back to me and declare your School.\n\nPrefect Finn\'s practicums in Whisperwood will get you there, and Bram, Tilda and the Professors always need a hand.'),
+    accepted: () => 'Off you go. And do talk to the Professors before you choose.',
+    progress: c => `Level ${c.p.state.level} of 10. Keep at it — Finn always has work for willing hands.`,
+    done: c => c.p.jobDef().tier === 1
+      ? fill(c, 'Level 10. Your Year 1 studies are complete, {name}. This cap marks you as an upperclassman.\n\nNow, the declaration.')
+      : fill(c, 'Declared already, I see! Eager. Take your upperclassman\'s cap all the same, {job}.'),
+    next: (c, back) => c.p.jobDef().tier === 1
+      ? [go('I am ready to declare.', () => chooseSchool(c)), go('Tell me about the Schools.', () => explainSchools(c, back)), bye('I need a moment.')]
+      : [go('Anything else?', back), bye('Thank you, Headmistress!')],
+  },
+
+  // ───── Year 2 ─────
+  story_violet_thorns: {
+    offer: c => fill(c, '{aJob}! Look at you. Listen — the Thorn Shrooms in Shroom Hollow are growing thorns of violet light. I\'ve only seen that colour in one other place: under the doors of the Forbidden Wing.\n\nThin out 15 and bring me 6 Thorn Spores. Shroom Hollow is east of here.'),
+    accepted: () => 'The violet ones glow. You can\'t miss them.',
+    progress: () => 'The violet ones glow in the dark. Not that you want to be in there after dark.',
+    done: () => 'These spores are humming. Spores don\'t hum.\n\nI\'ll send samples to the faculty. Professor Glacius knows old magic. When you reach level 21, go and see him on campus.',
+  },
+  story_pages_in_snow: {
+    offer: c => `${react(c, {
+      ice: 'A word of warning, my student: Ice Wisps are made of what we wield. They resist our frost. Chill them, be patient, and strike while they slow.',
+      fire: 'Pyra\'s student. Your fire will melt them beautifully. Try not to enjoy it more than is seemly.',
+      lightning: 'Voltis\'s students are quick. The wisps are quicker. Prove me wrong.',
+      holy: 'Seraphine says lost lights go home when they are shown the way. Show them, kindly.',
+      shadow: 'Morvane\'s pupil. There is little life in a wisp for your curses to feed on, but they will still feel it.',
+      none: 'You are early for this.',
+    })}\n\nThe faculty keep sealed notes on the Forbidden Wing. Pages are missing from all five Schools' copies, mine included. Their ink-magic drifted to Frostfang Cliffs, and the Ice Wisps there drank it. Bring me 10 Wisp Essences and I will read what they remember.`,
+    accepted: () => 'Frostfang Cliffs, past Shroom Hollow. Dress warmly.',
+    progress: () => 'The essences are cold and patient. Be the same.',
+    done: () => '...I see a hall of violet glass. Wisps carrying pages, one by one, into the dark. And a voice, counting them.\n\nThe Headmistress must hear this. Pass your Year 3 Exam first — at level 25 — so she can seat you at the faculty table.',
+  },
+
+  // ───── Year 3 ─────
+  story_faculty_meeting: {
+    offer: c => fill(c, 'Sit, {name}. You have earned a seat at this table.\n\nForty years ago the Academy\'s Archmage, Valdris, wanted magic that never forgets. He bound himself to the ley-heart beneath the east wing, and what came back was a Lich. We sealed the Forbidden Wing with five verses, one from each School, and every Professor has kept their verse ever since.\n\nSomeone is stealing those verses, page by page. The Archon is reading his way out.'),
+    accept: 'Then we stop him.',
+    progress: () => 'The faculty is waiting.',
+    done: () => 'We will. Professor Pyra has a lead in the Cinder Caverns. Speak with her when you reach level 27.',
+  },
+  story_ash_and_ink: {
+    offer: c => `${react(c, {
+      fire: 'Fair warning, kid: imps drink fire. Hit them hotter than they can swallow.',
+      ice: 'An ice student! Oh, the imps are going to HATE you. Go be hated.',
+      lightning: 'Imps hop, you zap. Simple. I like simple.',
+      holy: 'Light scrubs ash clean. Seraphine\'s kids always leave a place tidier.',
+      shadow: 'Poison works on imps. Gross. Effective. Morvane would be proud — don\'t tell them I said that.',
+      none: 'You\'re early for this one.',
+    })}\n\nThe stolen pages are being burned in the Cinder Caverns. The Ember Imps come home with parchment ash caked on their horns. Defeat 20 imps and bring me 8 horns. I can read smoke. Comes with the job.`,
+    accepted: () => 'Cinder Caverns, east of Frostfang. Bring potions. Lots.',
+    progress: () => 'Twenty imps, eight horns. Don\'t let them hop off with my homework!',
+    done: () => '...The smoke spells out the seal\'s verses. Someone is reading them to the wind, and the wind carries them north to Stormspire.\n\nSeraphine will know what that does to the seal. See her at level 38.',
+  },
+  story_crack_in_seal: {
+    offer: c => `${react(c, {
+      holy: 'Our light holds the seal together. You will feel the fragments warm in your hand, like a candle that remembers you.',
+      shadow: 'Harpies wither beautifully under your curses, Morvane tells me. They sounded proud. Don\'t tell them I said so.',
+      lightning: 'Harpies ride the storm. And you ARE the storm now, aren\'t you?',
+      fire: 'Pyra\'s student! Please try not to singe the fragments.',
+      ice: 'Clip their wings with frost, and catch the fragments as they fall.',
+      none: 'You are early, dear.',
+    })}\n\nEvery verse he reads loosens the seal, and the pieces blow out over Stormspire Peak. The harpies carry them to the Thunder Drakes' nests. Ground 20 Storm Harpies and bring me 4 Seal Fragments. I'll mend what I can.`,
+    accepted: () => 'Seal Fragments glow gold. You will know them.',
+    progress: () => 'Drakes hoard shiny things, and the fragments are very shiny. Check the nests.',
+    done: () => 'Four pieces... I can mend a crack, not a ruin. Time is short.\n\nOnce you are a Year 4 student and level 45, Professor Morvane will open the Forbidden Wing for you. Yes — Morvane has the key. Don\'t ask why.',
+  },
+
+  // ───── Year 4 ─────
+  story_forbidden_wing: {
+    offer: c => `${react(c, {
+      shadow: 'A warning, my student. The void is already empty, so your curses will find little to feed on. Bring patience and a great many potions.',
+      holy: 'Ah. Seraphine\'s little lamp. The wisps will hate you. Good.',
+      fire: 'Burn them. The Sanctum hasn\'t been warm in forty years.',
+      ice: 'Freeze the whispers mid-sentence. I would pay to see it.',
+      lightning: 'Fast hands. You will need them. Wisps don\'t fly in straight lines.',
+      none: 'Not yet, child.',
+    })}\n\nYes, I have the key. It's a long story, and it ends in detention. The Forbidden Wing is the Arcane Sanctum, past Stormspire Peak. The Void Wisps inside are his whispers; every page that left this Academy went in on their backs. Silence 15 of them.`,
+    accepted: () => 'The door is unlocked. Mind the draught.',
+    progress: () => 'Fifteen whispers. Count them. He certainly does.',
+    done: () => 'Quieter. You can hear him now, can\'t you? Breathing in the dark.\n\nGo and tell the Headmistress you are ready for your Final Thesis.',
+  },
+  story_final_thesis: {
+    offer: c => `${fill(c, 'Every graduate writes a thesis, {name}. Yours is one line long: the Lich Archon falls.\n\nHe waits at the heart of the Arcane Sanctum. Defeat him and bring me his Archon Sigil, the seal that holds every spell he stole.')}\n\n${react(c, {
+      holy: 'Your light is the one thing he truly fears. Shine.',
+      shadow: 'Your shadow only feeds him. Lean on poison and patience, not curses, and keep your potions close.',
+      fire: 'Burn bright, and burn long. He has had forty years to grow cold.',
+      ice: 'Slow him, still him, and let him feel time pass again.',
+      lightning: 'Strike fast and keep moving. He is old; you are quick.',
+      none: '',
+    })}`,
+    accepted: () => 'Go with potions, go with friends, and go with my blessing.',
+    progress: () => 'The Sanctum lies past Stormspire Peak. He will be waiting. He always is.',
+    done: c => fill(c, 'The Sigil... it is warm. All those spells, all those students — coming home at last.\n\nYou did it, {name}. Come. There is one more thing to do, and it involves a very large hat.'),
+    after: c => retireSideArchon(c.p),
+    next: (c, back) => [go('One more thing?', back), bye('Later, Headmistress.')],
+  },
+  [GRADUATION_QUEST_ID]: {
+    offer: c => fill(c, 'Students! Professors! Prefect Finn, put down the snail.\n\nToday we graduate {aJob} of the {school} School, who walked into this Academy smelling of kiln smoke and walked out of the Forbidden Wing carrying forty years of stolen magic.\n\n{name}, step forward.'),
+    accept: 'Step forward.',
+    progress: () => 'The ceremony awaits.',
+    done: c => fill(c, 'By the authority of the Academy, I name you {job}, graduate of the {school} School.\n\nThis amulet is the Academy\'s star; wear it everywhere. And the faculty has voted you 1,000 Academy Merits. Spend them at Bram\'s Merit Exchange.\n\nCongratulations, graduate.'),
+    after: c => {
+      c.p.addMerits(GRADUATION_MERITS);
+      bus.emit('ui:banner', { text: 'Graduation Day!', sub: `${c.p.jobDef().name} of the Academy`, color: '#ffd76a' });
+    },
+    next: () => [bye('Thank you — for everything.')],
+  },
+};
+
+/**
+ * The old side quest "Final Thesis: The Lich Archon" is the same deed as the main line's Final Thesis.
+ * While the main-line step is open, the untouched side quest is hidden; handing in the main line retires it.
+ */
+const SIDE_ARCHON_QUEST = 'q_maelis_archon';
+function supersededByStory(p: Progression, questId: string): boolean {
+  if (questId !== SIDE_ARCHON_QUEST || p.state.quests[questId]) return false;
+  const q = Registry.quest('story_final_thesis');
+  if (!q) return false;
+  const st = storyStatus(p, q);
+  return st === 'available' || st === 'active' || st === 'complete' || st === 'turned_in';
+}
+function retireSideArchon(p: Progression) {
+  if (!Registry.quest(SIDE_ARCHON_QUEST) || p.state.quests[SIDE_ARCHON_QUEST]) return;
+  p.state.quests[SIDE_ARCHON_QUEST] = { status: 'turned_in', counts: [1] };
+  bus.emit('quest:updated', { questId: SIDE_ARCHON_QUEST });
+}
+
+/** Merits the faculty awards at graduation. */
+export const GRADUATION_MERITS = 1000;
+
+function storyOffer(c: Ctx, q: QuestDef, back: () => void) {
+  const L = STORY_SCRIPT[q.id];
+  const talk = !!STORY_FLOW[q.id]?.talk;
+  const text = [L ? L.offer(c) : q.description, talk ? '' : objectivesText(c.p, q), rewardsText(q)].filter(Boolean).join('\n\n');
+  say(c, text, [
+    go(L?.accept ?? 'Accept', () => {
+      c.p.acceptQuest(q.id);
+      const st = c.p.questStatus(q.id);
+      if (st === 'complete') { storyTurnIn(c, q, back); return; }
+      if (st !== 'active') { say(c, 'Hmm, not quite yet. Come back a little later.', [go('Back', back), bye()]); return; }
+      say(c, L?.accepted?.(c) ?? pick(['Wonderful! Off you go, then.', 'I knew I could count on you!']), [...(L?.extra?.(c) ?? []), bye('On my way!')]);
+    }),
+    go('Not right now.', back),
+  ]);
+}
+
+function storyProgress(c: Ctx, q: QuestDef, back: () => void) {
+  const L = STORY_SCRIPT[q.id];
+  say(c, `${q.name}\n\n${L ? L.progress(c) : q.description}\n\n${objectivesText(c.p, q)}`, [...(L?.extra?.(c) ?? []), go('Back', back), bye('I\'m on it.')]);
+}
+
+function storyTurnIn(c: Ctx, q: QuestDef, back: () => void) {
+  if (!c.p.turnInQuest(q.id)) {
+    say(c, 'Your satchel is bursting at the seams. Make a little room and come back.', [bye('Okay.')]);
+    return;
+  }
+  const L = STORY_SCRIPT[q.id];
+  try { L?.after?.(c); } catch (e) { console.warn('[story] after-hook failed', e); }
+  const rewards = rewardsText(q);
+  say(c, `${L ? L.done(c) : 'Well done!'}${rewards ? `\n\n${rewards}` : ''}`,
+    L?.next?.(c, back) ?? [go('Anything else?', back), bye('Thank you!')]);
+}
+
+/** Story options for this NPC: available / in progress / ready to hand in, plus a level-gated teaser. */
+function storyOptions(c: Ctx, back: () => void): DialogOption[] {
+  const out: DialogOption[] = [];
+  for (const q of STORY_QUESTS) {
+    if (!storyHandles(c.npcId, q)) continue;
+    const st = storyStatus(c.p, q);
+    const tag = STORY_FLOW[q.id]?.tag ?? 'Story';
+    if (st === 'available') out.push(go(`[${tag}] ${q.name}`, () => storyOffer(c, q, back)));
+    else if (st === 'complete') out.push(go(`[Hand in] ${q.name}`, () => storyTurnIn(c, q, back)));
+    else if (st === 'active') out.push(go(`[In progress] ${q.name}`, () => storyProgress(c, q, back)));
+    else if (st === 'soon') {
+      out.push(go(`[${tag}] ${q.name} (Lv ${q.minLevel})`, () => say(c,
+        `${q.name}\n\n${q.description}\n\nCome back at level ${q.minLevel} — you are level ${c.p.state.level}.`, [go('Back', back), bye()])));
+    }
+  }
+  return out;
+}
+
+/** Where the main line stands, for Professors' Forbidden Wing small talk. */
+function storyPhase(p: Progression): 'y2' | 'y3' | 'y4' | 'grad' | null {
+  const done = (id: string) => p.state.quests[id]?.status === 'turned_in';
+  if (done(GRADUATION_QUEST_ID)) return 'grad';
+  if (done('story_crack_in_seal')) return 'y4';
+  if (done('story_faculty_meeting')) return 'y3';
+  if (p.state.quests['story_violet_thorns']) return 'y2';
+  return null;
+}
+
+const FORBIDDEN_WING_CHAT: Record<School, Record<'y2' | 'y3' | 'y4' | 'grad', string>> = {
+  fire: {
+    y2: 'Violet light? In MY Academy? Fire doesn\'t burn violet, kid. Something old is awake down there.',
+    y3: 'Valdris. I was a first-year when they sealed him in. Maelis carried me out of that hall on her back. I can still smell the smoke.',
+    y4: 'Go and burn the dust off that Lich. Bring back the Academy\'s stolen magic — and my notes. I want my notes.',
+    grad: 'You did it. The east wing is warm again. Honestly? Best student I ever had. Don\'t let it go to your head. Okay, a little.',
+  },
+  ice: {
+    y2: 'The cold carries rumours. Lately it whispers of a wing that should be silent.',
+    y3: 'Each School keeps one verse of the seal. Mine was the verse of stillness. Someone has been reading it aloud.',
+    y4: 'The Archon fears nothing, except an ending. Be his ending.',
+    grad: 'The Forbidden Wing is quiet. Truly quiet, for the first time in forty years. Thank you, my student.',
+  },
+  lightning: {
+    y2: 'The observatory picked up weird readings. Violet static! Static should NOT be violet.',
+    y3: 'Storm\'s verse of the seal is "quickness". Guess whose pages went first. ...Okay, I may have left my office unlocked.',
+    y4: 'Go! Zap the Lich! I\'ll be watching from the observatory. With snacks.',
+    grad: 'You zapped a LICH. A whole one! I\'m putting it in the brochure.',
+  },
+  holy: {
+    y2: 'The chapel candles keep leaning toward the Forbidden Wing. Light leans toward whatever needs healing.',
+    y3: 'Archmage Valdris wanted magic that never forgets. He forgot the one thing that matters most: how to let go.',
+    y4: 'Bring him rest, not just ruin. Even a Lich was a student once.',
+    grad: 'He is at rest now. You gave him that. I will light a candle for you both.',
+  },
+  shadow: {
+    y2: 'Do not go near the Forbidden Wing. I say this as someone who very much went near the Forbidden Wing.',
+    y3: 'Yes, I studied Valdris\'s work. Everyone in my School does. The difference is, we stopped reading before the last chapter.',
+    y4: 'When the Archon offers you forever, decline politely. Then curse him.',
+    grad: 'The dark is quieter without him. I find I almost miss the company. Almost.',
+  },
+};
+
+function forbiddenWingOption(c: Ctx, sc: School, back: () => void): DialogOption[] {
+  const phase = storyPhase(c.p);
+  if (!phase || schoolOf(c.p) !== sc) return [];
+  return [go('What do you make of the Forbidden Wing?', () => say(c, FORBIDDEN_WING_CHAT[sc][phase], [go('Back', back), bye()]))];
+}
+
 // ─────────────────────────── Year-end Exam logic ───────────────────────────
 
 /** The next job in this School the player is level-eligible for, and its Year-end Exam quest. */
@@ -126,8 +491,10 @@ function pendingExam(p: Progression, school: School): { job: JobId; questId: str
 export function npcNotice(s: GameServices, npcId: string): NpcNotice {
   const p = prog(s);
   if (!p?.state) return null;
-  let notice: NpcNotice = null;
+  let notice: NpcNotice = storyNotice(p, npcId);
+  if (notice === 'turnin') return notice;
   for (const q of sideQuestsFor(npcId)) {
+    if (supersededByStory(p, q.id)) continue;
     const st = p.questStatus(q.id);
     if (st === 'complete') return 'turnin';
     if (st === 'available') notice = 'new';
@@ -155,51 +522,76 @@ const SCHOOL_INFO: Record<School, string> = {
   shadow: 'SHADOW — the School of Shadow Magic, under Professor Morvane. Poisons, curses, life drain, and skeletal servants who never skip class.\n\nPlaystyle: attrition — curse a foe so everything hurts more, let poison tick, and let your minions share the work. For patient, cunning students.',
 };
 
+function explainSchools(c: Ctx, back: () => void) {
+  const again = () => explainSchools(c, back);
+  say(c,
+    'Every student begins Year 1 on the same core curriculum. At level 10 you declare a School, and it shapes the rest of your studies.\nWhich would you like to hear about?',
+    [
+      ...SCHOOLS.map(sc => go(`The ${SCHOOL_NAME[sc]} School.`, () => say(c, SCHOOL_INFO[sc], [go('And the others?', again), bye('Thank you, Headmistress.')]))),
+      go('Back', back),
+    ]);
+}
+
+/** The School declaration (Year 1 → Year 2 advancement). Also the hand-off from the "Declaration Day" story step. */
+function chooseSchool(c: Ctx) {
+  const p = c.p;
+  const choose = () => chooseSchool(c);
+  const confirmSchool = (sc: School) => {
+    const target = BRANCH_ROOT_JOB[sc];
+    say(c, `${SCHOOL_INFO[sc]}\n\nA declaration is for life — there are no transfers at this Academy. Will you begin Year 2 as ${aJob(jobName(target))}?`, [
+      go(`Yes — I declare ${SCHOOL_NAME[sc]}!`, () => {
+        if (p.advanceJob(target)) {
+          // Declaring straight from the old flow still hands in "Declaration Day" (cap + mesos).
+          let extra = '';
+          const decl = Registry.quest('story_declaration');
+          if (decl && p.questStatus(decl.id) === 'complete' && p.turnInQuest(decl.id)) extra = `\n\nAnd your upperclassman's cap — Declaration Day is complete. ${rewardsText(decl)}`;
+          say(c, `It is done. Welcome to Year 2 and the ${SCHOOL_NAME[sc]} School, ${jobName(target)}.\n\n${professorName(sc)} will guide you from here and set your Year 3 Exam at level 25. You also have 3 bonus SP — open your spellbook with K.${extra}\n\nOne more thing. Prefect Finn sent word of strange violet light in Shroom Hollow. At level 11, would you look into it for me?`, [bye('Thank you, Headmistress!')]);
+        } else {
+          say(c, 'Hmm. The registrar\'s ledger will not take the ink yet. Come back when you are ready.', [bye()]);
+        }
+      }),
+      go('Let me reconsider.', choose),
+    ]);
+  };
+  if (p.jobDef().tier !== 1 || p.state.level < 10) {
+    say(c, 'You are not ready to declare just now.', [bye()]);
+    return;
+  }
+  say(c, 'Five Schools, one declaration. Which will you study?', [
+    ...SCHOOLS.map(sc => go(`The ${SCHOOL_NAME[sc]} School.`, () => confirmSchool(sc))),
+    go('Tell me about them again.', () => explainSchools(c, choose)),
+    bye('I need more time.'),
+  ]);
+}
+
 function elderMaelis(c: Ctx) {
   const p = c.p;
   const job = p.jobDef();
   const lv = p.state.level;
   const home = () => elderMaelis(c);
+  const schools = () => explainSchools(c, home);
 
-  const explainSchools = () => say(c,
-    'Every student begins Year 1 on the same core curriculum. At level 10 you declare a School, and it shapes the rest of your studies.\nWhich would you like to hear about?',
-    [
-      ...SCHOOLS.map(sc => go(`The ${SCHOOL_NAME[sc]} School.`, () => say(c, SCHOOL_INFO[sc], [go('And the others?', explainSchools), bye('Thank you, Headmistress.')]))),
-      go('Back', home),
-    ]);
-
-  const quests = questOptions(c, home);
+  const quests = [...storyOptions(c, home), ...questOptions(c, home)];
 
   if (job.tier === 1) {
     if (lv < 10) {
+      if (p.questStatus('story_orientation') === 'available') {
+        say(c, `A new face! Welcome to the Academy, ${p.state.name}. Classes start the moment you're ready — shall we begin with orientation?`,
+          [...quests, go('Tell me about the Schools.', schools), bye('In a moment.')]);
+        return;
+      }
       say(c, pick([
         `Ah, ${p.state.name}. Your staff still smells of the Academy kiln. Finish your Year 1 studies — reach level 10 — and you may declare a School.`,
         'Patience, little spark. Prefect Finn\'s field practicums in Whisperwood will sharpen you. At level 10, come and see me.',
-      ]), [go('Tell me about the Schools.', explainSchools), ...quests, bye()]);
+      ]), [...quests, go('Tell me about the Schools.', schools), bye()]);
       return;
     }
-    const choose = () => say(c, 'Five Schools, one declaration. Which will you study?', [
-      ...SCHOOLS.map(sc => go(`The ${SCHOOL_NAME[sc]} School.`, () => confirmSchool(sc))),
-      go('Tell me about them again.', explainSchools),
-      bye('I need more time.'),
-    ]);
-    const confirmSchool = (sc: School) => {
-      const target = BRANCH_ROOT_JOB[sc];
-      say(c, `${SCHOOL_INFO[sc]}\n\nA declaration is for life — there are no transfers at this Academy. Will you begin Year 2 as ${aJob(jobName(target))}?`, [
-        go(`Yes — I declare ${SCHOOL_NAME[sc]}!`, () => {
-          if (p.advanceJob(target)) {
-            say(c, `It is done. Welcome to Year 2 and the ${SCHOOL_NAME[sc]} School, ${jobName(target)}.\n\n${professorName(sc)} will guide you from here and set your Year 3 Exam at level 25. You also have 3 bonus SP — open your spellbook with K.`, [bye('Thank you, Headmistress!')]);
-          } else {
-            say(c, 'Hmm. The registrar\'s ledger will not take the ink yet. Come back when you are ready.', [bye()]);
-          }
-        }),
-        go('Let me reconsider.', choose),
-      ]);
-    };
+    // The story hand-in (if any) leads into the same declaration flow.
+    const declareReady = p.questStatus('story_declaration') === 'complete';
     say(c, `Level ${lv}... yes, your Year 1 studies are complete, ${p.state.name}. It is time to declare your School.`, [
-      go('I am ready to declare.', choose),
-      go('Tell me about the Schools.', explainSchools),
+      ...(declareReady ? [] : [go('I am ready to declare.', () => chooseSchool(c))]),
       ...quests,
+      go('Tell me about the Schools.', schools),
       bye('Not yet.'),
     ]);
     return;
@@ -208,7 +600,14 @@ function elderMaelis(c: Ctx) {
   const sc = isSchool(job.branch) ? job.branch : null;
   const professor = sc ? professorName(sc) : 'your Professor';
   if (job.tier >= 4) {
-    say(c, `${job.name}... I have watched many students graduate, ${p.state.name}, but few who shone like you. The Lich Archon still broods in the Arcane Sanctum. Consider it your final thesis.`, [...quests, bye('I will not fail.')]);
+    const graduated = p.state.quests[GRADUATION_QUEST_ID]?.status === 'turned_in';
+    say(c, graduated
+      ? pick([
+        `Our graduate returns! The Forbidden Wing sleeps soundly, ${p.state.name}, and so do I. The Trial Hall still has plenty to teach a ${job.name}, if you miss the excitement.`,
+        `${job.name}. I still have your thesis on my desk. It is one line long. It is my favourite.`,
+      ])
+      : `${job.name}... I have watched many students graduate, ${p.state.name}, but few who shone like you. The Lich Archon still broods in the Arcane Sanctum. Consider it your final thesis.`,
+    [...quests, bye(graduated ? 'Goodbye, Headmistress.' : 'I will not fail.')]);
     return;
   }
   const year = yearOfTier(job.tier);
@@ -347,7 +746,7 @@ function professor(c: Ctx) {
   const p = c.p;
   const job = p.jobDef();
   const home = () => professor(c);
-  const quests = questOptions(c, home);
+  const quests = [...storyOptions(c, home), ...questOptions(c, home), ...forbiddenWingOption(c, sc, home)];
 
   if (job.tier === 1) { say(c, pick(L.apprentice), [...quests, bye()]); return; }
 
@@ -431,9 +830,90 @@ function merchantBram(c: Ctx) {
     'Welcome, welcome! Every bottle brewed this morning. Well. This week. Ish. Don\'t tell the Headmistress.',
     'Heading out on a practicum? Never leave campus without a stack of potions. Trust old Bram.',
   ]), [
+    ...storyOptions(c, home),
     { label: 'Let me see the supplies.', closes: true, action: () => bus.emit('ui:shop', { npcId: c.npcId, npcName: c.npcName, items: shopEntries(POTION_SHOP) }) },
+    go('Merit Exchange', () => meritExchange(c, home)),
     ...questOptions(c, home),
     bye(),
+  ]);
+}
+
+// ─────────────────────────── Academy Merit Exchange (Bram) ───────────────────────────
+// The shop UI is mesos-only, so the exchange is a set of dialog pages: list → confirm → receipt.
+
+interface MeritOffer { itemId: string; qty: number; cost: number }
+
+/** Merit prices. Trial Hall pays 2 + 2×wave per wave cleared (boss waves double), so a solid run is ~100–200. */
+export const MERIT_SHOP: { study: MeritOffer[]; trophies: MeritOffer[] } = {
+  study: [
+    { itemId: 'return_scroll', qty: 5, cost: 20 },
+    { itemId: 'elixir', qty: 1, cost: 30 },
+    { itemId: 'elixir', qty: 5, cost: 140 },
+    { itemId: 'power_elixir', qty: 1, cost: 80 },
+    { itemId: 'power_elixir', qty: 5, cost: 380 },
+    { itemId: 'tome_of_unlearning', qty: 1, cost: 150 },
+  ],
+  // Field-boss uniques — normally rare drops, here for the dedicated.
+  trophies: [
+    { itemId: 'matriarch_ring', qty: 1, cost: 400 },
+    { itemId: 'monarch_signet', qty: 1, cost: 700 },
+    { itemId: 'alpha_fang_necklace', qty: 1, cost: 1200 },
+    { itemId: 'magmaw_gauntlets', qty: 1, cost: 2000 },
+    { itemId: 'wyrmheart_amulet', qty: 1, cost: 3000 },
+  ],
+};
+
+const merits = (c: Ctx) => c.p.state.merits ?? 0;
+const fmt = (n: number) => n.toLocaleString();
+
+function meritOfferLabel(o: MeritOffer): string {
+  const d = Registry.item(o.itemId);
+  const lvl = d?.equip ? ` (Lv ${d.equip.reqLevel})` : '';
+  return `${itemName(o.itemId)}${o.qty > 1 ? ` ×${o.qty}` : ''}${lvl} — ${fmt(o.cost)} Merits`;
+}
+
+function meritExchange(c: Ctx, back: () => void) {
+  const home = () => meritExchange(c, back);
+  say(c, `The Academy Merit Exchange! Earn Merits in the Trial Hall, spend them here. No mesos, no haggling, no refunds.\n\nYour Merits: ${fmt(merits(c))}`, [
+    go('Study Aids (scrolls, elixirs, tomes)', () => meritPage(c, 'study', home)),
+    go('Field Trophies (rare accessories)', () => meritPage(c, 'trophies', home)),
+    go('How do I earn Merits?', () => say(c, 'Step into the Trial Hall on campus and survive the waves. Every wave you clear pays Merits, boss waves pay double, and you keep what you earn even if you fall. Graduates also get a generous bonus from the faculty.', [go('Back', home), bye()])),
+    go('Back', back),
+  ]);
+}
+
+function meritPage(c: Ctx, page: keyof typeof MERIT_SHOP, back: () => void) {
+  const again = () => meritPage(c, page, back);
+  const offers = MERIT_SHOP[page].filter(o => !!Registry.item(o.itemId));
+  const intro = page === 'study'
+    ? 'Study aids, freshly stocked. The tome is from the library\'s restricted shelf, so do return the favour by not mentioning it.'
+    : 'Field trophies. Prefect Finn\'s field teams bring these back from the big troublemakers, and only Merits will buy them.';
+  say(c, `${intro}\n\nYour Merits: ${fmt(merits(c))}`, [
+    ...offers.map(o => go(meritOfferLabel(o), () => meritConfirm(c, o, again))),
+    go('Back', back),
+  ]);
+}
+
+function meritConfirm(c: Ctx, o: MeritOffer, back: () => void) {
+  const def = Registry.item(o.itemId);
+  if (!def) { back(); return; }
+  const have = merits(c);
+  const req = def.equip ? `\nRequires level ${def.equip.reqLevel}.` : '';
+  const head = `${def.name}${o.qty > 1 ? ` ×${o.qty}` : ''}\n${def.description}${req}\n\nCost: ${fmt(o.cost)} Merits. You have ${fmt(have)}.`;
+  if (have < o.cost) {
+    say(c, `${head}\n\nNot quite enough Merits yet, I'm afraid. The Trial Hall's open all hours.`, [go('Back', back), bye()]);
+    return;
+  }
+  say(c, `${head}\n\nShall I wrap it up?`, [
+    go(`Exchange ${fmt(o.cost)} Merits`, () => {
+      // Per-unit price; the bundle total is exact because every bundle cost divides by its qty.
+      const ok = c.p.buyWithMerits(o.itemId, o.cost / o.qty, o.qty);
+      if (ok) say(c, `${pick(['Pleasure doing business!', 'Spend it wisely. Or gloriously.', 'Earned, not bought. Well — both.'])}\n\nYou received ${def.name}${o.qty > 1 ? ` ×${o.qty}` : ''}. Merits left: ${fmt(merits(c))}`, [go('Keep browsing', back), bye('Thanks, Bram!')]);
+      else say(c, c.p.roomFor(o.itemId) < o.qty
+        ? 'Your bag\'s full to bursting. Make some room and come back.'
+        : 'Hmm, the ledger doesn\'t add up. Come back in a moment.', [go('Back', back), bye()]);
+    }),
+    go('Not right now.', back),
   ]);
 }
 
@@ -454,6 +934,7 @@ function smithTilda(c: Ctx) {
     'Your uniform\'s looking a bit singed. Practicum? Let\'s fix that.',
     'I don\'t do magic. I do the things magic needs to not explode in your hands.',
   ]), [
+    ...storyOptions(c, home),
     { label: 'Show me the armory.', closes: true, action: () => bus.emit('ui:shop', { npcId: c.npcId, npcName: c.npcName, items }) },
     ...questOptions(c, home),
     bye(),
@@ -506,7 +987,7 @@ function scoutFinn(c: Ctx) {
     lastFinnTip = i;
     say(c, FINN_TIPS[i], [go('Another tip?', tips), go('Back', home), bye('Thanks!')]);
   };
-  const quests = [...questOptions(c, home), ...bountyRenewOptions(c, home)];
+  const quests = [...storyOptions(c, home), ...questOptions(c, home), ...bountyRenewOptions(c, home)];
   say(c, pick([
     'Prefect Finn, field practicums. Whisperwood is our classroom — stay on the path, mind the slimes, and don\'t eat the mushrooms.',
     'Shh — you hear that? Snails. Hundreds of them. Okay, maybe twelve. Practicum credit if you help?',
@@ -534,7 +1015,8 @@ export function runNpcScript(s: GameServices, npcId: string, portraitKey?: strin
     const fn = SCRIPTS[npcId];
     if (fn) fn(c);
     else {
-      const quests = questOptions(c, () => runNpcScript(s, npcId, portraitKey));
+      const back = () => runNpcScript(s, npcId, portraitKey);
+      const quests = [...storyOptions(c, back), ...questOptions(c, back)];
       say(c, 'Lovely weather for spellcasting, isn\'t it? Shouldn\'t you be in class?', [...quests, bye()]);
     }
   } catch (e) {

@@ -752,5 +752,29 @@ export class Progression implements IProgression {
   private sfx(key: SfxKey) {
     try { this.services.audio?.play(key); } catch { /* ignore */ }
   }
+
+  // ─────────────────────────── Academy Merit Exchange (story agent) ───────────────────────────
+
+  /** Buy `qty` of `itemId` for `cost` Academy Merits EACH (mirrors `buy`'s per-unit price). */
+  buyWithMerits(itemId: string, cost: number, qty: number): boolean {
+    const def = Registry.item(itemId);
+    qty = Math.floor(qty);
+    if (!def || !(qty > 0)) return false;
+    const total = Math.max(0, Math.floor(cost)) * qty;
+    const have = this.state.merits ?? 0;
+    if (have < total) {
+      bus.emit('ui:log', { text: `You need ${total.toLocaleString()} Academy Merits (you have ${have.toLocaleString()}).`, color: LOG.warn });
+      return false;
+    }
+    if (this.roomFor(itemId) < qty || !this.addItem(itemId, qty)) {
+      bus.emit('ui:log', { text: 'Your inventory is full.', color: LOG.warn });
+      return false;
+    }
+    this.state.merits = have - total;
+    bus.emit('ui:log', { text: `Exchanged ${total.toLocaleString()} Academy Merits for ${def.name}${qty > 1 ? ` ×${qty}` : ''}.`, color: '#ffd76a' });
+    this.changed();
+    this.save();
+    return true;
+  }
 }
 

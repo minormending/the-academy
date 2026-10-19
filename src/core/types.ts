@@ -422,7 +422,9 @@ export interface QuestProgress { status: 'active' | 'complete' | 'turned_in'; co
 
 // ───────────────────────────── Player state (persisted) ─────────────────────────────
 
-export const HOTBAR_SIZE = 12;
+/** Two pages of 12 slots; keys (HOTBAR_KEYS) act on the current page; Tab flips pages. */
+export const HOTBAR_SIZE = 24;
+export const HOTBAR_PAGE_SIZE = 12;
 
 export interface PlayerState {
   version: 1;
@@ -588,6 +590,9 @@ export interface IGameApi {
   /** True while a UI window that should block gameplay keys is focused (typing etc.). */
   setInputBlocked(blocked: boolean): void;
   isInputBlocked(): boolean;
+  /** Current hotbar page (0 or 1); HOTBAR_KEYS map to slots page*HOTBAR_PAGE_SIZE + i. */
+  hotbarPage(): number;
+  setHotbarPage(page: number): void;
 }
 
 export interface IUI {

@@ -27,7 +27,7 @@ export const HOTBAR_LABELS = ['Q', 'W', 'E', 'R', 'T', 'A', 'S', 'D', 'F', 'G', 
 export const UI_KEYS = { skills: 'K', inventory: 'I', stats: 'P', quests: 'J', minimap: 'M', menu: 'ESC' } as const;
 
 /** Gameplay keys (A1 player + GameScene). */
-export const CONTROL_KEYS = { jump: ['SPACE', 'ALT'], pickup: 'Z', interact: 'UP' } as const;
+export const CONTROL_KEYS = { jump: ['SPACE', 'ALT'], pickup: 'Z', interact: 'UP', hotbarPage: 'TAB' } as const;
 
 export const SAVE_KEY = 'arcana-story-save-v1';
 export const START_MAP = 'mistvale';

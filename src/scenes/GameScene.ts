@@ -9,7 +9,7 @@ import { setServices } from '../core/services';
 import { Registry } from '../core/registry';
 import { playVfx } from '../core/vfx';
 import { expToNext } from '../core/balance';
-import type { GameServices, IGameApi, IMapInstance, JobId, PlayerState } from '../core/types';
+import { HOTBAR_PAGE_SIZE, HOTBAR_SIZE, type GameServices, type IGameApi, type IMapInstance, type JobId, type PlayerState } from '../core/types';
 import { Player } from '../entities/Player';
 import { SkillSystem } from '../systems/SkillSystem';
 import { CombatSystem } from '../systems/CombatSystem';
@@ -32,6 +32,8 @@ export class GameScene extends Phaser.Scene implements IGameApi {
   private hotkeys: Phaser.Input.Keyboard.Key[] = [];
   private keyUp!: Phaser.Input.Keyboard.Key;
   private keyPickup!: Phaser.Input.Keyboard.Key;
+  private keyPage!: Phaser.Input.Keyboard.Key;
+  private page = 0;
   private nextPickupAt = 0;
   /** Presses latched from key 'down' events so sub-frame taps are never lost (Phaser clears _justDown on keyup). */
   private pendingDest: { mapId: string; portalId?: string } | null = null;
@@ -46,6 +48,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     this.transitioning = false;
     this.pendingDest = null;
     this.latched.clear();
+    this.page = 0;
   }
 
   create() {
@@ -109,6 +112,16 @@ export class GameScene extends Phaser.Scene implements IGameApi {
   }
 
   isInputBlocked() { return this.inputBlocked; }
+
+  hotbarPage() { return this.page; }
+
+  setHotbarPage(page: number) {
+    const pages = Math.max(1, Math.floor(HOTBAR_SIZE / HOTBAR_PAGE_SIZE));
+    const p = ((Math.floor(page) % pages) + pages) % pages;
+    if (p === this.page) return;
+    this.page = p;
+    bus.emit('hotbar:page', { page: p });
+  }
 
   // ─────────────────────────── Internals ───────────────────────────
 
@@ -174,7 +187,8 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     this.hotkeys = HOTBAR_KEYS.map(k => kb.addKey(Phaser.Input.Keyboard.KeyCodes[k]));
     this.keyUp = kb.addKey(Phaser.Input.Keyboard.KeyCodes[CONTROL_KEYS.interact]);
     this.keyPickup = kb.addKey(Phaser.Input.Keyboard.KeyCodes[CONTROL_KEYS.pickup]);
-    for (const k of [...this.hotkeys, this.keyUp, this.keyPickup]) k.on('down', () => this.latched.add(k));
+    this.keyPage = kb.addKey(Phaser.Input.Keyboard.KeyCodes[CONTROL_KEYS.hotbarPage]);
+    for (const k of [...this.hotkeys, this.keyUp, this.keyPickup, this.keyPage]) k.on('down', () => this.latched.add(k));
   }
 
   /** True once per physical press, even if the key was released before this frame. */
@@ -191,10 +205,12 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     const JustDown = (k: Phaser.Input.Keyboard.Key) => this.consumePress(k);
 
     // Hotbar: skills repeat while held (Maple-style), items fire once per press.
+    if (JustDown(this.keyPage)) this.setHotbarPage(this.page + 1);
     const hotbar = s.progression.state.hotbar;
+    const offset = this.page * HOTBAR_PAGE_SIZE;
     for (let i = 0; i < this.hotkeys.length; i++) {
       const key = this.hotkeys[i];
-      const entry = hotbar[i];
+      const entry = hotbar[offset + i];
       if (!entry) { JustDown(key); continue; }
       if (entry.startsWith('item:')) {
         if (JustDown(key)) s.progression.useItem(entry.slice(5));

@@ -14,6 +14,7 @@ export interface GameEvents {
   /** Any change to PlayerState the UI should re-render (hp/mp/exp/inventory/skills/stats...). */
   'player:changed': {};
   'skill:cast': { skillId: string };
+  'hotbar:page': { page: number };
   'skill:fail': { skillId: string; reason: string };
   'item:gained': { itemId: string; qty: number };
   'mesos:gained': { amount: number };

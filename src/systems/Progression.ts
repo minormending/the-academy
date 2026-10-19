@@ -266,7 +266,8 @@ export class Progression implements IProgression {
     s.skills[skillId] = (s.skills[skillId] ?? 0) + 1;
     // Convenience: put a newly learned castable skill on the first free skill slot.
     if (wasNew && sk.kind !== 'passive' && !s.hotbar.includes(skillId)) {
-      const free = s.hotbar.findIndex((e, i) => e === null && i < 10);
+      // First free skill slot on either page (slots 10/11 of each page are the 1/2 potion keys).
+      const free = s.hotbar.findIndex((e, i) => e === null && i % 12 < 10);
       if (free >= 0) s.hotbar[free] = skillId;
     }
     this.invalidate();

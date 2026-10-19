@@ -63,16 +63,16 @@ errors; every asset credited; playable build published.
 - [x] Integrate: `npx tsc --noEmit`, `npm test`, `npm run build`, browser smoke (warp to the new maps, cast Year-5 spells),
       docs sync (README/handbook/devdocs: Year 5, cap 70, new zones), commit, push, verify the Pages deploy.
 
-## Phase 11: mobile redesign (in progress)
+## Phase 11: mobile redesign (done)
 
 The user: "not mobile friendly — text and screens too small, the map too large to see details. Rethink and simplify."
 Shared switch `src/ui/mobile.ts` (`isMobileLayout()`, `MOBILE_UI` 720×405, `MOBILE_CAMERA_ZOOM` 1.8, `html.ax-mobile`).
-- [ ] M1: zoomed camera on phones, `#ui-root` laid out at 720×405, simplified HUD (big bars, 2-line chat, minimap behind a
+- [x] M1: zoomed camera on phones, `#ui-root` laid out at 720×405, simplified HUD (big bars, 2-line chat, minimap behind a
       button, one ☰ menu), touch controls re-laid out, readable name tags/damage numbers/boss bars.
-- [ ] M2: every window/dialog/shop as a full-screen mobile sheet, tap-to-detail instead of tooltips, title/character select.
-- [ ] Integrate: tsc, `npm test`, build, phone-size browser check (812×375, 667×375, portrait hint), desktop unchanged,
+- [x] M2: every window/dialog/shop as a full-screen mobile sheet, tap-to-detail instead of tooltips, title/character select.
+- [x] Integrate: tsc, `npm test`, build, phone-size browser check (812×375, 667×375, portrait hint), desktop unchanged,
       docs mention of the mobile layout, push, verify the Pages deploy on a phone-sized viewport.
-- [ ] Leftovers from Year 5: handbook lists only Year 3/4 exams (`src/guide/context.ts`, `schools.ts`, `walkthrough.ts`);
+- [x] Leftovers from Year 5: handbook lists only Year 3/4 exams (`src/guide/context.ts`, `schools.ts`, `walkthrough.ts`);
       tier-5 character decoration (`src/art/characters.ts:84`); "EXAM PASSED — YEAR 5" banner wording; README/devdocs for Year 5 + cap 70.
 
 ### Phase 11b — 20-agent polish batch (2026-10-19, uncommitted until integrated)

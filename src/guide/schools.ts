@@ -85,7 +85,7 @@ function schoolSection(g: Guide, s: School): HTMLElement {
     h('div.school-hero',
       h('div.school-hero-text',
         h('p.lead', PLAYSTYLE[s]),
-        h('p', 'Head of School: ', npcLink(prof, true), `. Declare at level ${JOB_LEVELS[2]} with the Headmistress; your Professor sets the Year 3 Exam at level ${JOB_LEVELS[3]} and the Year 4 Exam at level ${JOB_LEVELS[4]}. After graduation, the Fellowship Exam at level ${JOB_LEVELS[FELLOWSHIP_YEAR]} makes you an Archon.`),
+        h('p', 'Head of School: ', npcLink(prof, true), `. Declare it as your major with the Headmistress at the end of Year 1 (level ${JOB_LEVELS[2]}+). Your Professor teaches your major class every Year after; its last mission is that Year's final, and the Year 4 final is the Fellowship Exam (level ${JOB_LEVELS[FELLOWSHIP_YEAR]}, graduates only) that leads to Archon.`),
         matchups(g, s),
         schoolGear(g, s),
       ),
@@ -129,7 +129,7 @@ export function coreSection(g: Guide): RefSection {
 export function schoolsSection(g: Guide): RefSection {
   const el = h('section.ref', { id: 'schools' },
     sectionHeading(2, 'schools-h', 'The Five Schools', 'Reference'),
-    h('p.lead', `At level ${JOB_LEVELS[2]} you declare one School for life. Each has ${schoolJobs('fire').reduce((n, j) => n + skillsOf(j.id).length, 0)} spells over Years 2–${FELLOWSHIP_YEAR}, its own statuses, and its own answers to the Academy's monsters. Spell damage is a % of your Magic ATK per hit, shown from level 1 to the spell's max level.`),
+    h('p.lead', `At the end of Year 1 (level ${JOB_LEVELS[2]}+) you declare one School as your major, for life. Each has ${schoolJobs('fire').reduce((n, j) => n + skillsOf(j.id).length, 0)} spells over Years 2–${FELLOWSHIP_YEAR}, its own statuses, and its own answers to the Academy's monsters. Spell damage is a % of your Magic ATK per hit, shown from level 1 to the spell's max level.`),
     h('div.schools-grid', SCHOOLS.map(s => h('a.school-tile', { href: `#${anchor.school(s)}`, class: `sc-${s}` },
       portraitImg(SCHOOL_PROFESSOR[s], 48), h('strong', schoolName(s)), h('small', schoolJobs(s).map(j => j.name).join(' → ')),
     ))),

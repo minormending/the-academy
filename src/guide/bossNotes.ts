@@ -90,4 +90,22 @@ export const BOSS_NOTES: Record<string, BossNote> = {
       'Holy students hit his weakness. Shadow students fight at half damage: lean on poison, summons and patience.',
     ],
   },
+  the_unwritten: {
+    tagline: 'The Archon\'s unfinished book, still writing itself at the top of the Spire. Your Fellowship\'s last page.',
+    attacks: [
+      { name: 'Ink Torrent', text: 'Three ink columns crash down, one on you and two to the sides. Each leaves an ink puddle that hurts while you stand in it.' },
+      { name: 'Paper Blades', text: 'A marked lane along the floor fills with paper blades that sweep the whole arena: jump them. In the last chapter a second wave follows from the other side.' },
+      { name: 'Margin Sweep', text: 'After a short wind-up it charges across the arena, more often when you keep your distance.' },
+      { name: 'Falling Sentences', text: 'From two-thirds HP: words fall across the floor in marked columns, with a safe gap between every two.' },
+      { name: 'Rewrite', text: 'From two-thirds HP: it re-inks the floor under the half of the arena you stand on, and the ink lingers. It also tears Unwritten Pages loose to fight beside it (up to four at once).' },
+      { name: 'The Final Chapter', text: 'Below a third of its HP it enrages and writes in your own School\'s element: burning pools, icicle rain, chained bolts, pillars of light or shadow clouds (plain ink before you have a School). It also attacks with shorter pauses.' },
+    ],
+    strategy: [
+      'Watch the HP bar: each third of it changes the fight, and the last third is the fastest.',
+      'Jump every paper-blade lane, and during Falling Sentences stand in a gap rather than trying to outrun the columns.',
+      'When the floor is re-inked, cross to the other half of the arena straight away; clear the Pages before they pin you in the ink.',
+      'The Final Chapter uses your own element\'s shapes, so you already know how far each one reaches. Save your ultimates for it.',
+      'It is weak to nothing and resists nothing: bring the build you hit hardest with.',
+    ],
+  },
 };

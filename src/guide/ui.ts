@@ -21,6 +21,7 @@ export const anchor = {
   npc: (id: string) => `npc-${id}`,
   school: (s: School) => `school-${s}`,
   boss: (id: string) => `boss-${id}`,
+  course: (id: string) => `class-${id}`,
 };
 
 // ─────────────────────────── formats ───────────────────────────
@@ -105,6 +106,11 @@ export function mapLink(id: string): HTMLElement {
 
 export function questLink(id: string): HTMLElement {
   return h('a.quest-link', { href: `#${anchor.quest(id)}` }, Registry.quest(id)?.name ?? id);
+}
+
+export function courseLink(id: string): HTMLElement {
+  const c = Registry.course(id);
+  return h('a.course-link', { href: `#${anchor.course(id)}`, title: c?.name }, c ? `${c.code} ${c.name}` : id);
 }
 
 export function npcLink(id: string, pic = false): HTMLElement {

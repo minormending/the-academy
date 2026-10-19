@@ -8,8 +8,9 @@
 //   exactly as `ensureMonsterTexture` does in the game.
 
 import type Phaser from 'phaser';
-import type { IconSpec, JobId } from '../core/types';
+import type { BadgeDef, IconSpec, JobId } from '../core/types';
 import { assetUrl } from '../art/assets';
+import { badgeDataUrl } from '../art/badges';
 import { iconDataUrl, onPixelIconsReady } from '../art/icons';
 import { characterDataUrl, jobPreviewDataUrl, portraitDataUrl } from '../art/characters';
 import { registerPixelSheetData, type BaseId } from '../art/char/pixel';
@@ -88,6 +89,13 @@ export function iconImg(spec: IconSpec | undefined, size = 32, alt = ''): HTMLEl
   const url = spec ? iconDataUrl(spec, 32) : '';
   if (!url) return h('span.icon.px-missing', { style: `width:${size}px;height:${size}px`, 'aria-hidden': 'true' });
   return h('img.icon.px', { src: url, width: size, height: size, alt, loading: 'lazy', decoding: 'async' });
+}
+
+/** A class badge, drawn by the game's own badge painter. */
+export function badgeImg(badge: BadgeDef, size = 32): HTMLElement {
+  const url = badgeDataUrl(badge, size);
+  if (!url) return h('span.icon.px-missing', { style: `width:${size}px;height:${size}px`, 'aria-hidden': 'true' });
+  return h('img.icon.px.badge-img', { src: url, width: size, height: size, alt: badge.name, title: badge.name });
 }
 
 // ─────────────────────────── characters ───────────────────────────

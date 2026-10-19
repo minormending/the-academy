@@ -339,12 +339,13 @@ function questRows(qs: QuestDef[]): HTMLElement {
 
 export function assignmentsSection(g: Guide): RefSection {
   const exams = g.quests.filter(q => questKind(q.id) === 'exam').sort((a, b) => a.minLevel - b.minLevel);
+  const missions = g.quests.filter(q => questKind(q.id) === 'mission');
   const el = h('section.ref', { id: 'assignments' },
     sectionHeading(2, 'assignments-h', 'Assignments', 'Reference'),
-    h('p.lead', `Every quest in the game: ${g.story.length} main story steps, ${exams.length} Year-end Exams, ${g.assignments.length} assignments and ${g.bounties.length} Field Bounties. Collection objectives count what is already in your bag.`),
-    h('h3', 'Main story'), questRows(g.story),
-    h('h3', 'Year-end Exams'), questRows(exams),
-    h('h3', 'Assignments'), questRows(g.assignments),
+    h('p.lead', `Every quest in the game: ${g.courses.length} classes with ${missions.length} class missions of their own, ${g.story.length} main story steps, ${exams.length} major finals, ${g.assignments.length} assignments outside the classes and ${g.bounties.length} Field Bounties. Story steps, finals and most bounties are missions of a class too; each Year's chapter of the walkthrough lists its classes mission by mission. Collection objectives count what is already in your bag.`),
+    h('h3', 'Main story'), h('p.small', 'Declaration Day is only for saves that started it before story mode; new students declare their major from the report card.'), questRows(g.story),
+    h('h3', 'Major finals'), h('p.small', 'The old Year-end and Fellowship Exams, now the last mission of each School\'s major class in Years 2, 3 and 4.'), questRows(exams),
+    h('h3', 'Assignments outside the classes'), h('p.small', 'They pay like any mission but earn no badge; the Classes window keeps them on its Assignments tab.'), questRows(g.assignments),
     h('h3', 'Field Bounties'), h('p.small', 'Prefect Finn re-posts a bounty after you hand it in, so each can be repeated.'), questRows(g.bounties),
   );
   return { id: 'assignments', title: 'Assignments', el };

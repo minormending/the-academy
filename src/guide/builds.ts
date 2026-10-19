@@ -1,5 +1,8 @@
 // Suggested builds. Writers pick the spells and levels; the page totals the SP, checks every prerequisite and
 // checks each Year fits the SP a student really has by then (3 to start, 3 per level, 3 per School Year).
+// Story mode: a Year opens when the Headmistress declares or promotes you, never before its level, and some
+// classes pay a little SP when you pass them. The budget leaves class SP out, so every build also fits a student
+// who skipped those classes.
 // A build that stops fitting after a balance change is flagged on the page and in the console (dev).
 
 import { SP_PER_LEVEL } from '../core/balance';
@@ -13,7 +16,7 @@ export type Alloc = Record<string, number>;
 export interface Build {
   name: string;
   style: string;
-  /** Year 2, Year 3, Year 4 allocations (Year 1 uses CORE_PLAN). */
+  /** Year 2, Year 3, Year 4 allocations (Year 1 uses CORE_PLAN; the Year 5 Archon page is left to the reader). */
   years: [Alloc, Alloc, Alloc];
   /** Rotation / play notes. */
   notes: string[];
@@ -174,7 +177,10 @@ export const BUILDS: Record<School, Build[]> = {
 
 // ─────────────────────────── SP budget ───────────────────────────
 
-/** Total SP a student has received by `level`, having passed every Year that has opened by then. */
+/**
+ * Total SP a student has received by `level` from levels and Year bonuses, having been promoted into every Year
+ * whose level they have reached (Years 2–4). Class rewards are not counted (see the note at the top).
+ */
 export function spAtLevel(level: number): number {
   const START_SP = 3; // newPlayerState: 3 SP at level 1
   const years = ([2, 3, 4] as const).filter(t => level >= JOB_LEVELS[t]).length;

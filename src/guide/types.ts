@@ -2,6 +2,7 @@
 // the page (src/guide/) renders them, expanding the data blocks (`zone`, `quest`, `boss`…) from the game's own
 // modules so tables, pictures and numbers never drift from the build. Never type a number a block can show.
 
+import type { YearNo } from '../core/types';
 import type { School } from '../data/jobs';
 
 /** One block of a walkthrough section, rendered in order. */
@@ -19,15 +20,22 @@ export type Block =
    * its level range, where its portals lead, and every monster with its level, HP, EXP and drops.
    */
   | { zone: string; note?: string }
-  /** A quest card: giver, level, prerequisite step, objectives and rewards (story steps, exams, assignments). */
+  /** A quest card: class, giver, level, prerequisite step, objectives and rewards (missions, story steps, finals, assignments). */
   | { quest: string; note?: string }
   /** A compact table of quests (assignments, bounties). */
   | { quests: string[]; title?: string }
   /** A boss card: sprite, stats, matchups, drops, its attacks and a strategy (field bosses and the Lich Archon). */
   | { boss: string; note?: string }
-  /** A Year-end Exam table for every School (Year 3 or Year 4). */
-  | { exams: 3 | 4 }
-  /** The five Schools side by side: Year 2–4 titles and portraits, Professor, identity. */
+  /** A Year's plan from its YearPlan: title, Maelis's welcome, badges to pass and the required kinds of class. */
+  | { year: YearNo }
+  /**
+   * A Year's classes from the course data: code, name, teacher, kind, missions, badge and rewards, then each
+   * class's missions (objectives and rewards) in a fold-out list. Major classes show one row per School.
+   */
+  | { classes: YearNo }
+  /** Every School's major-class final for a Year (the last mission of each major class) side by side. */
+  | { finals: YearNo }
+  /** The five Schools side by side: Year 2–5 titles and portraits, Professor, identity. */
   | { schools: true }
   /** One School's identity card (portraits per Year, Professor, link to its spell tables). */
   | { school: School }

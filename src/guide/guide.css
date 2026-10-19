@@ -344,6 +344,28 @@ tr.boss-row td { background: color-mix(in srgb, var(--bad) 10%, transparent); }
 .sep { color: var(--ink-soft); margin: 0 4px; }
 .wt > .scroll, .wt .exam-table .scroll, .wt .quest-table .scroll { background: var(--surface); border: 2px solid var(--k); }
 .quest-table { margin: 16px 0; }
+.quest-card.qk-mission { border-left-color: var(--link); }
+
+/* ---- Years and classes (story mode) ----------------------------------------------------- */
+.year-card { margin: 16px 0; padding: 12px 14px; max-width: 860px; background: var(--surface); border: 2px solid var(--k); border-top: 8px solid var(--arcane); box-shadow: var(--shadow); }
+.year-head { display: flex; gap: 12px; align-items: center; }
+.year-head .portrait { background: #2b2e66; border: 2px solid var(--k); flex: none; }
+.year-head h4 { font-size: 24px; margin: 0; text-transform: none; letter-spacing: 0.02em; color: inherit; }
+.year-intro { margin: 10px 0; padding: 4px 0 4px 12px; border-left: 4px solid var(--rule); font-style: italic; color: var(--ink-soft); }
+.pill.ck { background: var(--ink-soft); }
+.pill.ck-core { background: var(--arcane); }
+.pill.ck-major { background: var(--sc, var(--gold-2)); }
+.class-table { margin: 16px 0; }
+.wt .class-table > .scroll { background: var(--surface); border: 2px solid var(--k); }
+table.classes td:first-child { white-space: nowrap; }
+table.classes tr[class*="sc-"] td:first-child { box-shadow: inset 4px 0 0 var(--sc); }
+.badge-cell { display: flex; align-items: center; gap: 6px; min-width: 120px; }
+.badge-img { flex: none; image-rendering: pixelated; vertical-align: middle; }
+.class-missions { margin: 6px 0; padding: 6px 10px; background: var(--surface); border: 2px solid var(--k); border-left: 6px solid var(--sc, var(--arcane)); }
+.class-missions > summary { cursor: pointer; }
+.class-missions[open] > summary { margin-bottom: 6px; }
+.class-missions .scroll { margin: 6px 0; }
+.mission-desc { color: var(--ink-soft); margin-top: 2px; max-width: 44ch; }
 
 /* ---- bosses -------------------------------------------------------------------------- */
 .boss-card { margin: 24px 0; padding: 6px 10px; }

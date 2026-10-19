@@ -4,10 +4,12 @@
 // - every block names a map, quest, monster, NPC or School that exists
 // - section ids are unique and well formed, text blocks aren't empty
 // - every zone with monsters gets a zone panel, every field boss and the Lich a boss card, every story step a card
+// - every Year gets its plan and its class table, so every class mission is in the walkthrough
 // - every build fits its SP budget and respects every prerequisite
 
 import { Registry } from '../core/registry';
 import { isSchool } from '../data/jobs';
+import { YEARS } from './context';
 import { STORY_QUESTS } from '../data/storyQuests';
 import { BUILDS, checkBuild } from './builds';
 import type { Guide } from './context';
@@ -25,6 +27,9 @@ function blockProblems(b: Block): string[] {
   if ('npc' in b && !Registry.npc(b.npc)) p.push(`unknown NPC ${b.npc}`);
   if ('school' in b && !isSchool(b.school)) p.push(`unknown School ${b.school}`);
   if ('training' in b && !(b.training[0] <= b.training[1])) p.push('training range is backwards');
+  if ('year' in b && !Registry.yearPlan(b.year)) p.push(`no plan for Year ${b.year}`);
+  if ('classes' in b && !Registry.courses().some(c => c.year === b.classes)) p.push(`no classes in Year ${b.classes}`);
+  if ('finals' in b && !Registry.courses().some(c => c.year === b.finals && c.kind === 'major')) p.push(`no major classes in Year ${b.finals}`);
   return p;
 }
 
@@ -43,7 +48,14 @@ export function validate(g: Guide, sections: Section[]): string[] {
   const quests = new Set(all.flatMap(b => ('quest' in b ? [b.quest] : 'quests' in b ? b.quests : [])));
   for (const m of g.maps) if ((g.mapMonsters.get(m.id) ?? []).length && !zones.has(m.id)) out.push(`no zone panel for ${m.id}`);
   for (const m of g.monsters) if (m.boss && g.monsterHome.has(m.id) && !bosses.has(m.id)) out.push(`no boss card for ${m.id}`);
-  for (const q of STORY_QUESTS) if (!quests.has(q.id)) out.push(`story step ${q.id} has no quest card`);
+  // A story step in no class is retired in story mode (the old Declaration Day), so it needs no card.
+  for (const q of STORY_QUESTS) if (g.courseOf.has(q.id) && !quests.has(q.id)) out.push(`story step ${q.id} has no quest card`);
+  const plans = new Set(all.flatMap(b => ('year' in b ? [b.year] : [])));
+  const tables = new Set(all.flatMap(b => ('classes' in b ? [b.classes] : [])));
+  for (const y of YEARS) {
+    if (!plans.has(y)) out.push(`Year ${y} has no plan block`);
+    if (g.courses.some(c => c.year === y) && !tables.has(y)) out.push(`Year ${y} has no classes block`);
+  }
   for (const q of [...g.assignments, ...g.bounties]) if (!quests.has(q.id)) out.push(`quest ${q.id} is not in the walkthrough`);
   for (const [school, builds] of Object.entries(BUILDS)) {
     for (const b of builds) for (const p of checkBuild(b).problems) out.push(`build ${school}/${b.name}: ${p}`);

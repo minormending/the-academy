@@ -1,24 +1,25 @@
 // Walkthrough blocks: text, tips and lists, plus the data blocks expanded from the game's own modules (zone
-// panels with drawn maps, quest cards, boss cards, exam tables, School cards, training planners, shops).
+// panels with drawn maps, Year plans, class tables, quest cards, boss cards, major finals, School cards, training
+// planners, shops).
 
-import type { MapDef, MonsterDef, QuestDef } from '../core/types';
+import type { CourseDef, CourseKind, MapDef, MonsterDef, QuestDef, YearNo } from '../core/types';
 import { Registry } from '../core/registry';
 import { expToNext } from '../core/balance';
-import { JOB_LEVELS } from '../core/constants';
-import { SCHOOLS, SCHOOL_PROFESSOR, isSchool, type School } from '../data/jobs';
+import { JOB_LEVELS, MAX_LEVEL } from '../core/constants';
+import { FELLOWSHIP_YEAR, SCHOOLS, SCHOOL_PROFESSOR, isSchool, type School } from '../data/jobs';
 import { STORY_FLOW } from '../data/storyQuests';
 import { JOB_QUEST_IDS, FIELD_BOUNTY_QUEST_IDS } from '../data/quests';
 import { MonsterManager } from '../systems/MonsterManager';
 import { h, inline, type Child } from './dom';
-import { guideAsset, jobImg, monsterImg, npcImg as npcImgFor, portraitImg } from './art';
+import { badgeImg, guideAsset, jobImg, monsterImg, npcImg as npcImgFor, portraitImg } from './art';
 import { BOSS_NOTES } from './bossNotes';
 import type { Guide } from './context';
-import { isFieldBoss, schoolJobs } from './context';
+import { coursesOfYear, isFieldBoss, schoolJobs } from './context';
 import { mapCanvasSize, renderMap } from './mapRender';
 import type { Block } from './types';
 import {
-  anchor, chance, elemPills, expand, facts, itemLink, keyText, lvRange, mapLink, mesos, monsterLink, npcLink, num, questLink,
-  range, schoolName, secs, statusPill,
+  anchor, chance, courseLink, elemPills, expand, facts, itemLink, keyText, lvRange, mapLink, mesos, monsterLink, npcLink, num,
+  questLink, range, schoolName, secs, statusPill,
 } from './ui';
 
 // ─────────────────────────── ids ───────────────────────────
@@ -49,7 +50,9 @@ export function renderBlock(g: Guide, b: Block): HTMLElement {
   if ('quest' in b) return questCard(g, b.quest, b.note);
   if ('quests' in b) return questTable(g, b.quests, b.title);
   if ('boss' in b) return bossCard(g, b.boss, b.note);
-  if ('exams' in b) return examTable(g, b.exams);
+  if ('year' in b) return yearCard(g, b.year);
+  if ('classes' in b) return classTable(g, b.classes);
+  if ('finals' in b) return finalsTable(g, b.finals);
   if ('schools' in b) return schoolsOverview(g);
   if ('school' in b) return schoolCard(g, b.school);
   if ('training' in b) return trainingTable(g, b.training[0], b.training[1]);
@@ -199,14 +202,16 @@ export function zonePanel(g: Guide, id: string, noteText?: string): HTMLElement 
 
 // ─────────────────────────── quests ───────────────────────────
 
-export type QuestKind = 'story' | 'exam' | 'bounty' | 'assignment';
+/** Story step, major final (the old job exams, now the last mission of a major class), bounty, class mission, or a loose assignment. */
+export type QuestKind = 'story' | 'exam' | 'bounty' | 'mission' | 'assignment';
 export function questKind(id: string): QuestKind {
   if (STORY_FLOW[id]) return 'story';
   if (JOB_QUEST_IDS.has(id)) return 'exam';
   if (FIELD_BOUNTY_QUEST_IDS.includes(id)) return 'bounty';
+  if (Registry.courseOfMission(id)) return 'mission';
   return 'assignment';
 }
-const KIND_LABEL: Record<QuestKind, string> = { story: 'Main story', exam: 'Year-end Exam', bounty: 'Field Bounty', assignment: 'Assignment' };
+const KIND_LABEL: Record<QuestKind, string> = { story: 'Main story', exam: 'Major final', bounty: 'Field Bounty', mission: 'Class mission', assignment: 'Assignment' };
 
 export function objectiveLine(o: QuestDef['objectives'][number]): Child {
   if (o.kind === 'kill') return ['Defeat ', h('strong', num(o.count)), ' ', monsterLink(o.monsterId, true)];
@@ -253,13 +258,16 @@ export function questCard(g: Guide, id: string, noteText?: string, extraMerits =
   const kind = questKind(id);
   const flow = STORY_FLOW[id];
   const school = isSchool(q.requiredJobBranch) ? q.requiredJobBranch : null;
+  const course = g.courseOf.get(id);
+  const step = course ? course.missions.indexOf(id) + 1 : 0;
   return h('article.quest-card', { id: uniqueId(anchor.quest(id)), class: `qk-${kind}` },
     h('div.quest-head',
       portraitImg(q.giver, 56),
       h('div',
-        h('span.kicker', [KIND_LABEL[kind], flow?.tag && flow.tag !== KIND_LABEL[kind] ? ` · ${flow.tag}` : '', school ? ` · ${schoolName(school)} School` : '']),
+        h('span.kicker', [course ? `${course.code} · ` : '', KIND_LABEL[kind], flow?.tag && flow.tag !== KIND_LABEL[kind] ? ` · ${flow.tag}` : '', school ? ` · ${schoolName(school)} School` : '']),
         h('h4', q.name),
         h('div.quest-meta',
+          course ? h('span', `Mission ${step} of ${course.missions.length} of `, courseLink(course.id)) : null,
           h('span', 'From ', giverOf(q)),
           h('span', `Level ${q.minLevel}+`),
           flow?.minTier && flow.minTier > 1 ? h('span', `Year ${flow.minTier}+`) : null,
@@ -361,30 +369,137 @@ export function dropList(m: MonsterDef): HTMLElement {
   )));
 }
 
-// ─────────────────────────── exams ───────────────────────────
+// ─────────────────────────── Years and classes ───────────────────────────
 
-export function examTable(g: Guide, year: 3 | 4): HTMLElement {
-  const lv = JOB_LEVELS[year];
+const COURSE_KIND: Record<CourseKind, string> = { core: 'Core', major: 'Major', elective: 'Elective' };
+export const kindPill = (k: CourseKind, school?: School) =>
+  h('span.pill.ck', { class: `ck-${k}${school ? ` sc-${school}` : ''}` }, school ? `${COURSE_KIND[k]} · ${schoolName(school)}` : COURSE_KIND[k]);
+
+/** Level a Year opens at, and the level the registrar wants before the next one (the cap after Year 5). */
+const yearLevels = (year: YearNo): [number, number] => [JOB_LEVELS[year], year < FELLOWSHIP_YEAR ? JOB_LEVELS[(year + 1) as YearNo] : MAX_LEVEL];
+
+export function courseRewardLine(c: CourseDef): Child {
+  const r = c.rewards;
+  const parts: Child[] = [];
+  if (r.exp) parts.push(h('span.rw', `${num(r.exp)} EXP`));
+  if (r.mesos) parts.push(h('span.rw', mesos(r.mesos)));
+  if (r.sp) parts.push(h('span.rw', `${num(r.sp)} SP`));
+  for (const it of r.items ?? []) parts.push(h('span.rw', itemLink(it.itemId, true, it.qty)));
+  return parts.length ? parts.flatMap((p, i) => (i ? [h('span.sep', { 'aria-hidden': 'true' }, '·'), p] : [p])) : h('span.muted', '—');
+}
+
+/** The Year's plan: title, the Headmistress's welcome, badges to pass, the required kinds and what ends the Year. */
+export function yearCard(g: Guide, year: YearNo): HTMLElement {
+  const plan = Registry.yearPlan(year);
+  if (!plan) return h('p.error', `No plan for Year ${year}`);
+  const list = coursesOfYear(g, year);
+  const count = (k: CourseKind) => list.filter(c => c.kind === k).length;
+  const majors = count('major');
+  const [from, to] = yearLevels(year);
+  const ends = year === 1 ? ['Declare your major with ', npcLink('elder_maelis'), ` (level ${to} or higher)`]
+    : year < FELLOWSHIP_YEAR ? [npcLink('elder_maelis'), ` promotes you to Year ${year + 1} (level ${to} or higher)`]
+      : [npcLink('elder_maelis'), ' holds the Fellowship\'s last ceremony'];
+  return h('article.year-card', { id: uniqueId(`year-${year}`) },
+    h('div.year-head',
+      portraitImg('elder_maelis', 56),
+      h('div', h('span.kicker', `Year ${year} plan`), h('h4', plan.title))),
+    plan.intro ? h('blockquote.year-intro', keyText(plan.intro)) : null,
+    facts([
+      ['To pass', [h('strong', `${plan.badgesToPass} badges`), ' from this Year\'s classes']],
+      ['Required', plan.required.length ? h('span.pills', plan.required.map(k => kindPill(k))) : h('span.muted', 'any classes')],
+      ['On your schedule', `${count('core')} core, ${count('elective')} elective${count('elective') === 1 ? '' : 's'}`
+        + (majors ? ` and your own major (one of ${majors}, one per School)` : '')],
+      ['Levels', `${from}–${to}`],
+      ['Then', ends],
+    ]),
+  );
+}
+
+let cardQuests: Set<string> | null = null;
+/** Quests the walkthrough shows as their own card or table row (those keep the quest anchor). */
+function walkthroughQuests(g: Guide): Set<string> {
+  cardQuests ??= new Set(g.sections.flatMap(s => s.blocks).flatMap(b => ('quest' in b ? [b.quest] : 'quests' in b ? b.quests : [])));
+  return cardQuests;
+}
+
+function missionList(g: Guide, c: CourseDef): HTMLElement {
+  const shown = walkthroughQuests(g);
+  return h('details.class-missions', { class: c.school ? `sc-${c.school}` : '' },
+    h('summary', h('strong', c.code), ` ${c.name}`, h('small.muted', ` · ${c.missions.length} missions · `), npcLink(c.teacher)),
+    h('p.small', c.blurb),
+    h('div.scroll', h('table.quests',
+      h('thead', h('tr', h('th.num', '#'), h('th', 'Mission'), h('th', 'From'), h('th.num', 'Lv'), h('th', 'Objectives'), h('th', 'Reward'))),
+      h('tbody', c.missions.map((id, i) => {
+        const q = Registry.quest(id);
+        if (!q) return h('tr', h('td', { colspan: 6 }, id));
+        const kind = questKind(id);
+        return h('tr', { id: shown.has(id) ? undefined : uniqueId(anchor.quest(id)) },
+          h('td.num', i + 1),
+          h('td', shown.has(id) ? questLink(id) : h('strong', q.name),
+            kind !== 'mission' ? h('div.small.muted', KIND_LABEL[kind]) : null,
+            h('div.small.mission-desc', keyText(q.description))),
+          h('td', npcLink(q.giver, true)),
+          h('td.num', q.minLevel),
+          h('td.small', q.objectives.length ? q.objectives.map((o, k) => [k ? h('br') : null, objectiveLine(o)]) : h('span.muted', 'Talk')),
+          h('td.small', rewardLine(q)),
+        );
+      })),
+    )),
+    h('p.small', h('strong', 'Pass: '), badgeImg(c.badge, 24), ` ${c.badge.name} and `, courseRewardLine(c), '. ', h('em', `"${c.passLine}"`)),
+  );
+}
+
+/** Every class of a Year (majors one row per School), then each class's missions in a fold-out list. */
+export function classTable(g: Guide, year: YearNo): HTMLElement {
+  const list = coursesOfYear(g, year);
+  return h('div.class-table',
+    h('div.scroll', h('table.classes',
+      h('caption', `Year ${year} classes`),
+      h('thead', h('tr', h('th', 'Code'), h('th', 'Class'), h('th', 'Teacher'), h('th', 'Kind'), h('th.num', 'Missions'), h('th', 'Badge'), h('th', 'Rewards'))),
+      h('tbody', list.map(c => h('tr', { id: uniqueId(anchor.course(c.id)), class: c.school ? `sc-${c.school}` : '' },
+        h('td', h('strong', c.code)),
+        h('td', h('strong', c.name)),
+        h('td', npcLink(c.teacher, true)),
+        h('td', kindPill(c.kind, c.school)),
+        h('td.num', c.missions.length),
+        h('td', h('div.badge-cell', badgeImg(c.badge, 32), h('span', c.badge.name))),
+        h('td.small', courseRewardLine(c)),
+      ))),
+    )),
+    h('h5', 'Missions, class by class'),
+    list.map(c => missionList(g, c)),
+  );
+}
+
+/** The last mission of each School's major class in a Year: the old Year-end and Fellowship Exams live here now. */
+export function finalsTable(g: Guide, year: YearNo): HTMLElement {
+  const majors = coursesOfYear(g, year).filter(c => c.kind === 'major' && c.school);
   return h('div.exam-table',
     h('div.scroll', h('table.exams',
-      h('thead', h('tr', h('th', 'School'), h('th', 'Professor'), h('th', 'Exam'), h('th', 'Objectives'), h('th', 'Where'), h('th', 'Pass to become'))),
-      h('tbody', SCHOOLS.map(s => {
-        const q = g.exams[s][year];
-        const target = schoolJobs(s)[year - 2];
-        return h('tr', { id: q ? uniqueId(anchor.quest(q.id)) : undefined },
-          h('td', h('a.school-link', { href: `#${anchor.school(s)}`, class: `sc-${s}` }, schoolName(s))),
-          h('td', npcLink(SCHOOL_PROFESSOR[s], true)),
-          h('td', q ? h('strong', q.name.replace(/^Year \d Exam: /, '')) : '—'),
+      h('thead', h('tr', h('th', 'School'), h('th', 'Major class'), h('th', 'Final mission'), h('th.num', 'Lv'), h('th', 'Objectives'), h('th', 'Where'),
+        year < FELLOWSHIP_YEAR ? h('th', `Year ${year + 1} title`) : null)),
+      h('tbody', majors.map(c => {
+        const s = c.school!;
+        const q = Registry.quest(c.missions[c.missions.length - 1] ?? '');
+        const next = schoolJobs(s)[year - 1];
+        return h('tr',
+          h('td', h('a.school-link', { href: `#${anchor.school(s)}`, class: `sc-${s}` }, schoolName(s)), h('div.small', npcLink(SCHOOL_PROFESSOR[s]))),
+          h('td', courseLink(c.id)),
+          h('td', q ? questLink(q.id) : '—'),
+          h('td.num', q?.minLevel ?? '—'),
           h('td.small', q ? q.objectives.map((o, i) => [i ? h('br') : null, objectiveLine(o)]) : '—'),
           h('td.small', q ? q.objectives.map((o, i) => [i ? h('br') : null, objectiveWhere(g, o)]) : '—'),
-          h('td', target ? h('div.job-cell', jobImg(target.id, 1), h('strong', target.name)) : '—'),
+          year < FELLOWSHIP_YEAR ? h('td', next ? h('div.job-cell', jobImg(next.id, 1), h('strong', next.name)) : '—') : null,
         );
       })),
     )),
     (() => {
-      const q = g.exams.fire[year];
-      return q ? h('p.small', `Every exam opens at level ${lv} and pays the same reward: `, rewardLine(q), '. Passing also grants the new title and bonus SP.') : null;
+      const finals = majors.map(c => Registry.quest(c.missions[c.missions.length - 1] ?? '')).filter((q): q is QuestDef => !!q);
+      const same = finals.length > 1 && finals.every(q => JSON.stringify(q.rewards) === JSON.stringify(finals[0].rewards));
+      return same ? h('p.small', 'Every final pays the same: ', rewardLine(finals[0]), '.') : null;
     })(),
+    h('p.small', 'Hand the final in to your Professor to pass your major and take its badge. ',
+      year < FELLOWSHIP_YEAR ? `With the Year's other badges, the Headmistress promotes you, and the new title brings bonus SP.` : 'With the other Fellowship badges, the Headmistress holds the last ceremony.'),
   );
 }
 
@@ -439,14 +554,16 @@ export function npcCard(g: Guide, id: string, noteText?: string): HTMLElement {
   const n = Registry.npc(id);
   if (!n) return h('p.error', `Unknown NPC ${id}`);
   const place = g.npcPlace.get(id);
-  const gives = g.quests.filter(q => q.giver === id && questKind(q.id) !== 'exam');
+  // Class missions are listed with their class; "Quests" is what this NPC offers outside the classes (a story step
+  // in no class is retired in story mode).
+  const gives = g.quests.filter(q => q.giver === id && !g.courseOf.has(q.id) && questKind(q.id) !== 'exam' && questKind(q.id) !== 'story');
+  const teaches = g.courses.filter(c => c.teacher === id);
   const school = SCHOOLS.find(s => SCHOOL_PROFESSOR[s] === id);
-  const exams = school ? [g.exams[school][3], g.exams[school][4]].filter((q): q is QuestDef => !!q) : [];
   const offers: Child[] = [];
   if (g.bram.length && id === 'merchant_bram') offers.push(h('a', { href: '#shops' }, 'Supplies'), ' and the ', h('a', { href: '#trial-hall' }, 'Merit Exchange'));
   if (g.tilda.length && id === 'smith_tilda') offers.push(h('a', { href: '#shops' }, 'Armory'));
-  if (id === 'elder_maelis') offers.push(`Declares your School at level ${JOB_LEVELS[2]}`);
-  if (school) offers.push(h('a', { href: `#${anchor.school(school)}` }, `Head of the ${schoolName(school)} School`), ' (sets its Year-end Exams)');
+  if (id === 'elder_maelis') offers.push(`Your report card; you declare your major with her at the end of Year 1 (level ${JOB_LEVELS[2]}+), and she promotes you every Year after`);
+  if (school) offers.push(h('a', { href: `#${anchor.school(school)}` }, `Head of the ${schoolName(school)} School`), ' (teaches its major classes)');
   return h('article.npc-card', { id: uniqueId(anchor.npc(id)) },
     h('div.npc-art', npcImgFor(id)),
     h('div',
@@ -455,7 +572,7 @@ export function npcCard(g: Guide, id: string, noteText?: string): HTMLElement {
       facts([
         ['Where', place ? mapLink(place.map) : null],
         ['Offers', offers.length ? offers : null],
-        ['Exams', exams.length ? exams.map((q, i) => [i ? ', ' : '', questLink(q.id)]) : null],
+        ['Classes', teaches.length ? teaches.map((c, i) => [i ? ', ' : '', h('a', { href: `#${anchor.course(c.id)}`, title: `${c.code} ${c.name}` }, c.code)]) : null],
         ['Quests', gives.length ? gives.map((q, i) => [i ? ', ' : '', questLink(q.id)]) : null],
       ]),
       note(noteText),

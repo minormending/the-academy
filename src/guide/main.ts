@@ -133,7 +133,7 @@ function walkthrough(g: Guide): HTMLElement {
   const parts = partsOf(g);
   return h('section.walkthrough', { id: 'walkthrough' },
     h('h2.part-title', h('span.kicker', 'Part one'), 'Walkthrough'),
-    h('p.lead', 'Four school Years, from enrolment to the Final Thesis. Every table, map and number below is read from the game.'),
+    h('p.lead', 'Five school Years of classes, from enrolment to the Fellowship\'s last ceremony. Every class table, map and number below is read from the game.'),
     parts.map(p => h('section.part', { id: p.id },
       h('h2.part-head', h('span.kicker', 'Walkthrough'), p.part),
       p.sections.map(s => h('section.wt', { id: s.id },

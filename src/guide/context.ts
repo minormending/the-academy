@@ -1,14 +1,15 @@
 // Everything the handbook renders from, indexed once from the game's own modules (read-only).
 // Nothing here is typed by hand: monsters per zone come from the maps' spawn lists, drop sources from the
-// monsters' drop tables, shop stock from running the shopkeepers' own dialog scripts, and so on.
+// monsters' drop tables, shop stock from running the shopkeepers' own dialog scripts, each Year's classes from the
+// course data (Registry.courses / Registry.yearPlan), and so on.
 
-import type { GameServices, ItemDef, JobDef, JobId, MapDef, MonsterDef, NpcDef, QuestDef, SkillDef } from '../core/types';
+import type { CourseDef, GameServices, ItemDef, JobDef, JobId, MapDef, MonsterDef, NpcDef, QuestDef, SkillDef, YearNo, YearPlan } from '../core/types';
 import { Registry } from '../core/registry';
 import { bus } from '../core/events';
 import { FIELD_BOSSES } from '../data/monsters';
 import { NPCS } from '../data/npcs';
 import { SCHOOLS, BRANCH_ROOT_JOB, type School } from '../data/jobs';
-import { FIELD_BOUNTY_QUEST_IDS, JOB_ADVANCEMENT_QUESTS, JOB_QUEST_IDS } from '../data/quests';
+import { FIELD_BOUNTY_QUEST_IDS, JOB_QUEST_IDS } from '../data/quests';
 import { STORY_FLOW, STORY_QUESTS, STORY_QUEST_IDS } from '../data/storyQuests';
 import { MERIT_SHOP, runNpcScript } from '../data/npcScripts';
 import type { Section } from './types';
@@ -49,9 +50,14 @@ export interface Guide {
   merit: MeritEntry[];
   /** Story steps in chain order. */
   story: QuestDef[];
-  exams: Record<School, { 3: QuestDef | undefined; 4: QuestDef | undefined; 5: QuestDef | undefined }>;
+  /** Every class, in course-data order (Year 1 first; a Year's majors after its core and electives). */
+  courses: CourseDef[];
+  /** Year 1–5 plans: title, welcome, badges to pass, required kinds. */
+  plans: YearPlan[];
+  /** quest id → the class it is a mission of. */
+  courseOf: Map<string, CourseDef>;
   bounties: QuestDef[];
-  /** Side assignments (not story, not exams, not bounties), by minimum level. */
+  /** Assignments that belong to no class (not story, not exams, not bounties), by minimum level. */
   assignments: QuestDef[];
 }
 
@@ -62,6 +68,14 @@ export const mapDef = (id: string) => Registry.map(id);
 export const npc = (id: string) => Registry.npc(id);
 export const quest = (id: string) => Registry.quest(id);
 export const job = (id: JobId) => Registry.job(id);
+
+export const YEARS: YearNo[] = [1, 2, 3, 4, 5];
+
+/** A Year's classes: core first, then electives, then the five majors in School order. */
+export function coursesOfYear(g: Guide, year: YearNo): CourseDef[] {
+  const rank = (c: CourseDef) => (c.kind === 'core' ? 0 : c.kind === 'elective' ? 1 : 2 + SCHOOLS.indexOf(c.school ?? 'fire'));
+  return g.courses.filter(c => c.year === year).sort((a, b) => rank(a) - rank(b));
+}
 
 /** The jobs of a School by Year: [Year 2, Year 3, Year 4, Year 5 (the Fellowship Archon)]. */
 export function schoolJobs(s: School): JobDef[] {
@@ -181,19 +195,13 @@ export function buildGuide(sections: Section[]): Guide {
   const npcPlace = new Map<string, { map: string; x: number }>();
   for (const m of maps) for (const n of m.npcs) npcPlace.set(n.npcId, { map: m.id, x: n.x });
 
-  const exams = {} as Guide['exams'];
-  for (const s of SCHOOLS) {
-    const [, y3, y4, y5] = schoolJobs(s);
-    exams[s] = {
-      3: y3 ? quest(JOB_ADVANCEMENT_QUESTS[y3.id] ?? '') : undefined,
-      4: y4 ? quest(JOB_ADVANCEMENT_QUESTS[y4.id] ?? '') : undefined,
-      5: y5 ? quest(JOB_ADVANCEMENT_QUESTS[y5.id] ?? '') : undefined,
-    };
-  }
+  const courses = Registry.courses();
+  const courseOf = new Map<string, CourseDef>();
+  for (const c of courses) for (const m of c.missions) courseOf.set(m, c);
 
   const bountySet = new Set(FIELD_BOUNTY_QUEST_IDS);
   const assignments = quests
-    .filter(q => !STORY_QUEST_IDS.has(q.id) && !JOB_QUEST_IDS.has(q.id) && !bountySet.has(q.id))
+    .filter(q => !courseOf.has(q.id) && !STORY_QUEST_IDS.has(q.id) && !JOB_QUEST_IDS.has(q.id) && !bountySet.has(q.id))
     .sort((a, b) => a.minLevel - b.minLevel);
 
   // Play order: the campus, then the practicum zones east along the portal chain, then anything else.
@@ -221,7 +229,9 @@ export function buildGuide(sections: Section[]): Guide {
     tilda: tildaStock(),
     merit: (Object.keys(MERIT_SHOP) as (keyof typeof MERIT_SHOP)[]).flatMap(page => MERIT_SHOP[page].map(o => ({ ...o, page }))),
     story: storyChain(),
-    exams,
+    courses,
+    plans: YEARS.map(y => Registry.yearPlan(y)).filter((p): p is YearPlan => !!p),
+    courseOf,
     bounties: FIELD_BOUNTY_QUEST_IDS.map(id => quest(id)).filter((q): q is QuestDef => !!q),
     assignments,
   };

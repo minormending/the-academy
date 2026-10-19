@@ -1,5 +1,9 @@
 # The Academy
 
+**[Play in your browser](https://minormending.github.io/the-academy/)** · [Student Handbook](https://minormending.github.io/the-academy/guide.html) · [Developer Docs](https://minormending.github.io/the-academy/devdocs.html)
+
+![The seven zones of The Academy](docs/screenshots/pixel-maps.png)
+
 A MapleStory-style 2D side-scroller where every student is a mage. Enrol as a Year 1 Apprentice, declare one of
 five Schools of magic at level 10, pass your Year-end Exams, and graduate by defeating the Lich Archon in your
 Final Thesis.
@@ -28,7 +32,8 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5199. To build a static release into `dist/`:
+Open http://localhost:5199 (the handbook is at `/guide.html`, the developer docs at `/devdocs.html`).
+To build a static release into `dist/`:
 
 ```bash
 npm run build
@@ -53,6 +58,9 @@ npm run build
 - `npx tsc --noEmit` typechecks; `?debug=1` shows physics bodies.
 - Debug console: `arcana.levelTo(30)`, `arcana.job('pyromancer')`, `arcana.give('red_potion', 10)`,
   `arcana.warp('cinder_caverns')`, `arcana.pet()`, `arcana.s` (all services).
+- Every push to `main` deploys the game, handbook and developer docs to GitHub Pages
+  (`.github/workflows/pages.yml`). [docs/GUIDE.md](docs/GUIDE.md) and [docs/DEVDOCS.md](docs/DEVDOCS.md) explain how
+  the two documentation pages are built from the game's own data.
 - [ARCHITECTURE.md](ARCHITECTURE.md) documents the contracts, module ownership and every phase of the build;
   [ROADMAP.md](ROADMAP.md) tracks what's left.
 

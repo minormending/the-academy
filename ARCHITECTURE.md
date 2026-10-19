@@ -311,3 +311,25 @@ in the background on the Title screen** via `src/art/lazy.ts` (`ensureOnce`, `sc
 School builds them), monster sheets (`ensureMonsterTexture` on map bind / spawn), particle sheets (`ensureSheet`).
 New art code must follow this: never assume a texture exists — ensure it. Timings: `performance.getEntriesByType
 ('measure')` entries named `gen:*`. Build splits Phaser into its own chunk.
+
+---
+
+## Phase 9: a bigger spellbook (32 per School, 14 in Year 1)
+
+Each School grows from 24 to **32 spells**: **+3 in Year 2, +3 in Year 3, +2 in Year 4**. Year 1 grows from 10 to
+**14**. Existing ids, numbers and behaviour stay unchanged (saves keep working); only new skills are added.
+
+New spells must add **new kinds of play**, not stat variants of what exists. Good shapes that the engine already supports:
+- **Traps / mines / wards**: stationary `summon` with an `aoe_self` attack that wakes only when a monster enters its
+  rectangle (like Fire's Wall of Fire), short duration, one active per skill.
+- **Combo payoffs**: `bonusVs` on a status this School applies (burn, chill/freeze, shock, stun, poison, curse), with or
+  without `consume`, so players sequence spells.
+- **Resource trades** via `onCast`: spend HP for MP or damage, convert a buff into burst, cooldown resets.
+- **Marks / setups**: a cheap spell that applies a status for another spell to cash in.
+- **Movement + damage**: blinks/dashes that hurt along the path (`onCast` + `ctx.runAttack`).
+- **Channels** approximated with short-interval multi-hit beams or a following summon for a few seconds.
+`onCast` effects that persist (fields, timers) must end on `map:changed`, `player:died` and scene shutdown, and must
+never heal/act while dead. Every new spell gets its own readable pixel VFX (keys with the School prefix), registered
+through that School's `lazyRegister` (see "Lazy art generation"). Keep `requires` chains shallow (several roots per
+Year); new spells should open new build paths, not lengthen one chain. Max levels 10–15 for most new spells so SP
+choices stay meaningful.

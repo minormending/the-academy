@@ -793,3 +793,142 @@ body.ax-dragging, body.ax-dragging * { cursor: grabbing !important; }
 .ax-arena-count-num.ax-bump { animation: ax-bump 0.3s steps(3); }
 .ax-arena-count-sub { margin-top: 10px; font-size: 16px; letter-spacing: 3px; text-transform: uppercase; color: #d6dbff; text-shadow: var(--ax-outline); }
 .ax-arena-count-boss .ax-arena-count-num { color: #ff9b6b; }
+
+/* ─────────────────────────── Character Select (save slots, P7a) ─────────────────────────── */
+
+.ax-title-btn.ax-kbd { outline: 2px solid #f4eea0; outline-offset: 2px; }
+.ax-title.ax-cs-on .ax-title-col { display: none; }
+.ax-cs { display: none; }
+.ax-title.ax-cs-on .ax-cs { display: flex; position: absolute; inset: 0; align-items: flex-start; justify-content: center; padding-top: 18px; }
+.ax-cs-frame {
+  display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 14px 22px 16px;
+  border: 1px solid transparent; border-image: var(--ax-img) 7 9 7 10 fill / 14px 18px 14px 20px / 2px;
+}
+.ax-cs-frame.ax-cs-enter { animation: ax-panelin 0.4s steps(4) backwards; }
+.ax-cs-head { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ax-cs-sub { font-size: 16px; color: var(--ax-ink-dim); text-shadow: var(--ax-ts2); }
+.ax-cs-slotnote { color: var(--ax-ink-dim); }
+.ax-cs-grid { display: grid; grid-template-columns: repeat(3, 236px); gap: 12px; }
+.ax-cs-card {
+  --ax-school: #8fa0ff;
+  position: relative; height: 254px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 8px 8px;
+  cursor: pointer; color: var(--ax-ink); background: var(--ax-indigo-lo);
+  box-shadow: inset 0 0 0 2px var(--ax-k), inset 0 0 0 4px var(--ax-line), inset 0 6px 0 4px var(--ax-school);
+}
+.ax-cs-card:hover { background: var(--ax-well); }
+.ax-cs-card.ax-sel {
+  background: var(--ax-indigo);
+  box-shadow: inset 0 0 0 2px var(--ax-k), inset 0 0 0 4px var(--ax-gold), inset 0 6px 0 4px var(--ax-school), 0 0 0 2px var(--ax-k);
+  transform: translateY(-2px);
+}
+.ax-cs-card.ax-sel::after {
+  content: ""; position: absolute; left: 50%; top: -12px; width: 12px; height: 8px; margin-left: -6px; background: var(--ax-gold);
+  clip-path: polygon(0 0, 100% 0, 50% 100%); animation: ax-cs-bob 0.8s steps(2) infinite;
+}
+@keyframes ax-cs-bob { 50% { transform: translateY(2px); } }
+.ax-cs-top { width: 100%; display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.ax-cs-no {
+  min-width: 20px; padding: 3px 4px 2px; text-align: center; font-size: 16px; color: var(--ax-k); background: var(--ax-school);
+  box-shadow: inset 0 0 0 2px var(--ax-k);
+}
+.ax-cs-school { font-size: 16px; color: var(--ax-school); text-shadow: var(--ax-ts2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ax-cs-last {
+  margin-left: auto; padding: 3px 5px 2px; font-size: 16px; color: var(--ax-k); background: var(--ax-gold);
+  box-shadow: inset 0 0 0 2px var(--ax-k), inset -2px -2px 0 2px var(--ax-gold-2);
+}
+.ax-cs-stage {
+  position: relative; width: 100%; height: 132px; overflow: hidden;
+  background: linear-gradient(transparent 0 70%, rgba(0, 0, 0, 0.18) 70%);
+  box-shadow: inset 0 0 0 2px var(--ax-k);
+}
+.ax-cs-pedestal {
+  position: absolute; left: 50%; bottom: 6px; width: 96px; height: 12px; margin-left: -48px; background: var(--ax-school); opacity: 0.35;
+  clip-path: polygon(16% 0, 84% 0, 100% 33%, 100% 67%, 84% 100%, 16% 100%, 0 67%, 0 33%);
+}
+.ax-cs-card.ax-sel .ax-cs-pedestal { opacity: 0.6; animation: ax-cs-glow 1.2s steps(2) infinite; }
+@keyframes ax-cs-glow { 50% { opacity: 0.35; } }
+.ax-cs-sprite { position: absolute; left: 50%; bottom: 4px; width: 160px; height: 160px; margin-left: -80px; image-rendering: pixelated; pointer-events: none; }
+.ax-cs-card:not(.ax-sel) .ax-cs-sprite { filter: brightness(0.82); }
+.ax-cs-name { font-family: var(--ax-head); font-size: 16px; letter-spacing: 1px; color: #f4eea0; text-shadow: var(--ax-ts2); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.ax-cs-line { font-size: 16px; color: #e3e6ff; text-shadow: var(--ax-ts); text-align: center; line-height: 1.05; }
+.ax-cs-meta { margin-top: auto; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 16px; color: var(--ax-ink-faint); text-shadow: var(--ax-ts); }
+.ax-cs-map { color: var(--ax-ink-dim); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* empty slot */
+.ax-cs-card.ax-cs-empty { background: rgba(20, 12, 28, 0.55); box-shadow: inset 0 0 0 2px var(--ax-k); }
+.ax-cs-card.ax-cs-empty::before {
+  content: ""; position: absolute; inset: 6px; pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, var(--ax-line) 0 8px, transparent 8px 16px) top / 100% 2px no-repeat,
+    repeating-linear-gradient(90deg, var(--ax-line) 0 8px, transparent 8px 16px) bottom / 100% 2px no-repeat,
+    repeating-linear-gradient(var(--ax-line) 0 8px, transparent 8px 16px) left / 2px 100% no-repeat,
+    repeating-linear-gradient(var(--ax-line) 0 8px, transparent 8px 16px) right / 2px 100% no-repeat;
+}
+.ax-cs-card.ax-cs-empty .ax-cs-no { background: var(--ax-line); color: var(--ax-ink-dim); }
+.ax-cs-card.ax-cs-empty .ax-cs-school { color: var(--ax-ink-faint); }
+.ax-cs-card.ax-cs-empty:hover::before, .ax-cs-card.ax-cs-empty.ax-sel::before { filter: brightness(1.6); }
+.ax-cs-card.ax-cs-empty.ax-sel { background: rgba(43, 46, 102, 0.75); box-shadow: inset 0 0 0 2px var(--ax-k), 0 0 0 2px var(--ax-gold); }
+.ax-cs-plus { margin-top: 34px; font-family: var(--ax-head); font-size: 64px; line-height: 1; color: var(--ax-line); text-shadow: var(--ax-ts2); }
+.ax-cs-card.ax-cs-empty:hover .ax-cs-plus, .ax-cs-card.ax-cs-empty.ax-sel .ax-cs-plus { color: #f4eea0; }
+.ax-cs-enrol { margin-top: 18px; font-size: 16px; color: var(--ax-ink-dim); text-shadow: var(--ax-ts2); }
+
+/* damaged slot */
+.ax-cs-card.ax-cs-damaged { --ax-school: var(--ax-bad); background: #2a1424; }
+.ax-cs-card.ax-cs-damaged .ax-cs-name { color: var(--ax-bad); }
+.ax-cs-broken { width: 100%; height: 112px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 2px var(--ax-k);
+  background: repeating-linear-gradient(135deg, rgba(255, 122, 110, 0.08) 0 8px, transparent 8px 16px); }
+.ax-cs-crack {
+  width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-family: var(--ax-head); font-size: 32px; color: var(--ax-k);
+  background: var(--ax-bad); box-shadow: inset 0 0 0 2px var(--ax-k), inset -4px -4px 0 2px #7a1f2b;
+}
+
+.ax-cs-bar { display: flex; gap: 10px; justify-content: center; }
+.ax-cs-bar .ax-btn { min-width: 110px; }
+
+/* confirm modal */
+.ax-cs-modal { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; background: rgba(20, 12, 28, 0.6); }
+.ax-cs-dialog {
+  width: 420px; display: flex; flex-direction: column; gap: 14px; padding: 22px 26px;
+  border: 1px solid transparent; border-image: var(--ax-img) 7 9 7 10 fill / 14px 18px 14px 20px / 2px;
+  animation: ax-panelin 0.25s steps(3) backwards;
+}
+.ax-cs-dialog .ax-row { justify-content: center; }
+.ax-btn.ax-kbd { outline: 2px solid #f4eea0; outline-offset: 2px; }
+
+/* ─────────────────────────── Controls window + settings (P7b) ─────────────────────────── */
+
+.ax-ctl-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.ax-ctl-group { margin-bottom: 4px; }
+.ax-ctl-row {
+  appearance: none; display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 6px; margin: 2px 0; padding: 3px 4px 3px 6px;
+  cursor: pointer; font-size: 16px; line-height: 1; color: var(--ax-ink); text-align: left; text-shadow: var(--ax-ts);
+  background: var(--ax-well); border: 0; box-shadow: inset 0 0 0 2px var(--ax-k);
+}
+.ax-ctl-row:hover { background: var(--ax-indigo-hi); box-shadow: inset 0 0 0 2px var(--ax-k), inset 0 0 0 4px var(--ax-gold-dim); }
+.ax-ctl-row.ax-capturing { background: #3d2a12; box-shadow: inset 0 0 0 2px var(--ax-k), inset 0 0 0 4px var(--ax-gold); }
+.ax-ctl-row.ax-unbound kbd { background: #8a8fb0; }
+.ax-ctl-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ax-ctl-row kbd { flex: none; }
+.ax-ctl-wait { flex: none; color: #f4eea0; animation: ax-ctl-blink 0.8s steps(2) infinite; }
+@keyframes ax-ctl-blink { 50% { opacity: 0.35; } }
+.ax-ctl-msg { min-height: 34px; margin: 8px 0; padding: 4px 6px; font-size: 16px; line-height: 1.1; color: var(--ax-ink-dim); background: rgba(20, 12, 28, 0.35); box-shadow: inset 0 0 0 2px var(--ax-line); }
+.ax-ctl-msg.ax-bad { color: var(--ax-bad); }
+.ax-pad-status { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 6px 8px; font-size: 16px; color: var(--ax-ink-dim); background: var(--ax-well); box-shadow: inset 0 0 0 2px var(--ax-k); }
+.ax-pad-dot { width: 10px; height: 10px; flex: none; background: var(--ax-hp); box-shadow: 0 0 0 2px var(--ax-k); }
+.ax-pad-status.ax-on { color: var(--ax-good); }
+.ax-pad-status.ax-on .ax-pad-dot { background: var(--ax-good); }
+.ax-pad-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ax-pad-row { display: flex; align-items: flex-start; gap: 8px; margin: 3px 0; font-size: 16px; }
+.ax-pad-input { flex: none; width: 112px; color: var(--ax-gold); text-shadow: var(--ax-ts); }
+.ax-pad-acts { display: flex; flex-direction: column; gap: 2px; }
+.ax-pad-act { white-space: nowrap; }
+
+.ax-set-row { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 8px; font-size: 16px; color: var(--ax-ink-dim); }
+.ax-seg { display: flex; gap: 0; box-shadow: 0 0 0 2px var(--ax-k); }
+.ax-seg-btn {
+  appearance: none; flex: 1; padding: 4px 2px; cursor: pointer; font-size: 16px; color: var(--ax-ink-dim); text-shadow: var(--ax-ts);
+  background: var(--ax-indigo); border: 0; box-shadow: inset 2px 2px 0 var(--ax-indigo-hi), inset -2px -2px 0 var(--ax-indigo-lo);
+}
+.ax-seg-btn + .ax-seg-btn { border-left: 2px solid var(--ax-k); }
+.ax-seg-btn:hover { color: var(--ax-ink); }
+.ax-seg-btn.ax-active { color: var(--ax-k); text-shadow: 1px 1px 0 rgba(255, 240, 180, 0.55); background: var(--ax-gold); box-shadow: inset 2px 2px 0 #f4eea0, inset -2px -2px 0 var(--ax-gold-2); }

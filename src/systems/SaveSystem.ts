@@ -1,9 +1,10 @@
-// OWNER: A9 (progression). New character + localStorage persistence (versioned, defensive).
+// OWNER: A9 (progression); save slots by P7a. New character + localStorage persistence (versioned, defensive, 6 slots).
 import type { BaseStats, EquipSlot, ItemStack, JobId, PlayerState, QuestProgress } from '../core/types';
 import { HOTBAR_SIZE } from '../core/types';
 import { MAX_LEVEL, SAVE_KEY, START_MAP, TOWN_MAP } from '../core/constants';
 import { Registry } from '../core/registry';
 import { computeDerived, deathExpLoss } from './progression/stats';
+import { isSchool, SCHOOL_NAME, yearOfTier, type School } from '../data/jobs';
 
 const SAVE_FORMAT = 1;
 const EQUIP_SLOTS: EquipSlot[] = ['weapon', 'hat', 'robe', 'shoes', 'gloves', 'ring', 'amulet'];
@@ -64,40 +65,281 @@ function storage(): Storage | null {
   try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch { return null; }
 }
 
-export function hasSave(): boolean {
-  try {
-    const raw = storage()?.getItem(SAVE_KEY);
-    if (!raw) return false;
-    const parsed = JSON.parse(raw);
-    return !!parsed && typeof parsed === 'object';
-  } catch { return false; }
+// ─────────────────────────── Save slots ───────────────────────────
+//
+// Storage layout (localStorage):
+//   `${SAVE_KEY}:slot0` … `${SAVE_KEY}:slot5`  one envelope per slot: { format, savedAt, slot, state }
+//   `${SAVE_KEY}:meta`                         SlotsMeta: last played slot + a cached summary per slot
+//   `${SAVE_KEY}`                              legacy single save; migrated into slot 0 on first run and
+//                                              kept as a backup until slot 0 is successfully re-written
+//                                              (or the player deletes slot 0).
+// The slot envelopes are the source of truth; the meta summaries are a cache (used to label a slot that
+// has since become unreadable). The legacy exports (hasSave/loadSave/writeSave/deleteSave) act on the
+// *active* slot, which the title screen sets before starting the game.
+
+export const SAVE_SLOTS = 6;
+const META_KEY = `${SAVE_KEY}:meta`;
+const slotKey = (i: number) => `${SAVE_KEY}:slot${i}`;
+
+interface SlotMetaEntry { name: string; level: number; job: string; mapId: string; playTimeMs: number; savedAt: number }
+interface SlotsMeta {
+  v: 1;
+  lastSlot: number | null;
+  /** Legacy single save copied into slot 0 but not yet confirmed by a real write. */
+  legacyPending?: boolean;
+  migratedAt?: number;
+  slots: (SlotMetaEntry | null)[];
 }
 
-export function loadSave(): PlayerState | null {
-  let raw: string | null | undefined;
-  try { raw = storage()?.getItem(SAVE_KEY); } catch { return null; }
-  if (!raw) return null;
+export type SlotStatus = 'empty' | 'ok' | 'damaged';
+export interface SlotSummary {
+  index: number;
+  status: SlotStatus;
+  /** True for the slot Continue would load (most recently played). */
+  last: boolean;
+  name: string;
+  level: number;
+  job: JobId;
+  jobName: string;
+  year: number;
+  school: School | null;
+  /** "Fire", "Ice"… or "Core Curriculum" before a School is declared. */
+  schoolName: string;
+  mapId: string;
+  mapName: string;
+  playTimeMs: number;
+  /** ms epoch of the last write (0 if unknown). */
+  savedAt: number;
+  /** Damaged slots: why, plus whatever the meta cache remembers about who was there. */
+  error?: string;
+  previous?: { name: string; level: number; job: string };
+}
+
+const validSlot = (i: unknown): i is number => typeof i === 'number' && Number.isInteger(i) && i >= 0 && i < SAVE_SLOTS;
+
+let activeSlot = 0;
+let inited = false;
+
+function readMeta(): SlotsMeta | null {
   try {
-    const parsed = JSON.parse(raw);
-    // Envelope { format, savedAt, state } — or a bare PlayerState from older builds.
-    const candidate = parsed && typeof parsed === 'object' && 'state' in parsed ? parsed.state : parsed;
-    return repairState(candidate);
+    const raw = storage()?.getItem(META_KEY);
+    if (!raw) return null;
+    const m = JSON.parse(raw) as Partial<SlotsMeta> | null;
+    if (!m || typeof m !== 'object') return null;
+    const slots: (SlotMetaEntry | null)[] = [];
+    for (let i = 0; i < SAVE_SLOTS; i++) {
+      const e = Array.isArray(m.slots) ? m.slots[i] : null;
+      slots.push(e && typeof e === 'object' && typeof (e as SlotMetaEntry).name === 'string' ? e as SlotMetaEntry : null);
+    }
+    return { v: 1, lastSlot: validSlot(m.lastSlot) ? m.lastSlot : null, legacyPending: !!m.legacyPending, migratedAt: m.migratedAt, slots };
+  } catch { return null; }
+}
+
+function emptyMeta(): SlotsMeta { return { v: 1, lastSlot: null, slots: new Array(SAVE_SLOTS).fill(null) }; }
+
+function writeMeta(m: SlotsMeta): boolean {
+  try { storage()?.setItem(META_KEY, JSON.stringify(m)); return true; } catch (e) { console.warn('[save] meta write failed', e); return false; }
+}
+
+function metaEntry(state: PlayerState, savedAt: number): SlotMetaEntry {
+  return { name: state.name, level: state.level, job: state.job, mapId: state.mapId, playTimeMs: Math.floor(state.playTimeMs), savedAt };
+}
+
+/** Raw slot read: null = empty; otherwise the parsed candidate state, or an error when unreadable. */
+function readSlotRaw(i: number): { candidate: unknown; savedAt: number } | { error: string } | null {
+  let raw: string | null | undefined;
+  try { raw = storage()?.getItem(slotKey(i)); } catch { return { error: 'Storage unavailable' }; }
+  if (raw === null || raw === undefined || raw === '') return null;
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return { error: 'Save data is corrupt' }; }
+  if (!parsed || typeof parsed !== 'object') return { error: 'Save data is corrupt' };
+  // Envelope { format, savedAt, state } — or a bare PlayerState from older builds.
+  const env = parsed as Record<string, unknown>;
+  const candidate = 'state' in env ? env.state : parsed;
+  if (!candidate || typeof candidate !== 'object') return { error: 'Save data is corrupt' };
+  const c = candidate as Record<string, unknown>;
+  if (typeof c.name !== 'string' || typeof c.level !== 'number' || !isFinite(c.level) || typeof c.job !== 'string') {
+    return { error: 'Character data is missing' };
+  }
+  const savedAt = typeof env.savedAt === 'number' && isFinite(env.savedAt) ? env.savedAt : 0;
+  return { candidate, savedAt };
+}
+
+/** First-run setup: legacy single-save migration + active slot from the meta. Idempotent. */
+function ensureInit() {
+  if (inited) return;
+  inited = true;
+  const st = storage();
+  if (!st) return;
+  try {
+    let meta = readMeta();
+    if (!meta) {
+      meta = emptyMeta();
+      let anySlot = false;
+      for (let i = 0; i < SAVE_SLOTS; i++) {
+        const r = readSlotRaw(i);
+        if (!r) continue;
+        anySlot = true;
+        if ('candidate' in r) {
+          const c = r.candidate as PlayerState;
+          meta.slots[i] = { name: c.name, level: c.level, job: c.job, mapId: String(c.mapId ?? ''), playTimeMs: Number(c.playTimeMs) || 0, savedAt: r.savedAt };
+        }
+      }
+      // Migrate the pre-slots single save into slot 0 — only on a truly fresh slot store, so a lost
+      // meta key never duplicates a character that was already migrated.
+      const legacy = st.getItem(SAVE_KEY);
+      if (!anySlot && legacy) {
+        st.setItem(slotKey(0), legacy);
+        if (st.getItem(slotKey(0)) === legacy) {
+          meta.legacyPending = true;
+          meta.migratedAt = Date.now();
+          meta.lastSlot = 0;
+          const r = readSlotRaw(0);
+          if (r && 'candidate' in r) {
+            const c = r.candidate as PlayerState;
+            meta.slots[0] = { name: c.name, level: c.level, job: c.job, mapId: String(c.mapId ?? ''), playTimeMs: Number(c.playTimeMs) || 0, savedAt: r.savedAt };
+          }
+          console.info('[save] migrated legacy save into slot 1');
+        }
+      }
+      if (meta.lastSlot === null) {
+        let best = -1, bestAt = -1;
+        meta.slots.forEach((e, i) => { if (e && e.savedAt > bestAt) { best = i; bestAt = e.savedAt; } });
+        if (best >= 0) meta.lastSlot = best;
+      }
+      writeMeta(meta);
+    }
+    activeSlot = meta.lastSlot ?? 0;
   } catch (e) {
-    console.warn('[save] corrupt save, starting fresh', e);
-    return newPlayerState('Apprentice');
+    console.warn('[save] slot init failed', e);
   }
 }
 
-export function writeSave(state: PlayerState): void {
+function summarize(i: number, meta: SlotsMeta | null): SlotSummary {
+  const base: SlotSummary = {
+    index: i, status: 'empty', last: !!meta && meta.lastSlot === i, name: '', level: 0, job: 'apprentice', jobName: '',
+    year: 1, school: null, schoolName: '', mapId: '', mapName: '', playTimeMs: 0, savedAt: 0,
+  };
+  const r = readSlotRaw(i);
+  if (!r) return { ...base, last: false };
+  if ('error' in r) {
+    const prev = meta?.slots[i];
+    return { ...base, status: 'damaged', error: r.error, previous: prev ? { name: prev.name, level: prev.level, job: prev.job } : undefined };
+  }
   try {
-    storage()?.setItem(SAVE_KEY, JSON.stringify({ format: SAVE_FORMAT, savedAt: Date.now(), state }));
+    const s = repairState(r.candidate);
+    const jd = Registry.job(s.job);
+    const school = jd && isSchool(jd.branch) ? jd.branch : null;
+    const map = Registry.map(s.mapId);
+    return {
+      ...base, status: 'ok', name: s.name, level: s.level, job: s.job, jobName: jd?.name ?? s.job,
+      year: yearOfTier(jd?.tier ?? 1), school, schoolName: school ? SCHOOL_NAME[school] : 'Core Curriculum',
+      mapId: s.mapId, mapName: map?.name ?? s.mapId, playTimeMs: s.playTimeMs, savedAt: r.savedAt || meta?.slots[i]?.savedAt || 0,
+    };
+  } catch (e) {
+    return { ...base, status: 'damaged', error: 'Character data could not be repaired' };
+  }
+}
+
+/** One summary per slot (always SAVE_SLOTS entries). Never throws. */
+export function listSlots(): SlotSummary[] {
+  ensureInit();
+  const meta = readMeta();
+  const out: SlotSummary[] = [];
+  for (let i = 0; i < SAVE_SLOTS; i++) {
+    try { out.push(summarize(i, meta)); } catch {
+      out.push({ index: i, status: 'damaged', last: false, name: '', level: 0, job: 'apprentice', jobName: '', year: 1, school: null,
+        schoolName: '', mapId: '', mapName: '', playTimeMs: 0, savedAt: 0, error: 'Save data is corrupt' });
+    }
+  }
+  return out;
+}
+
+export function getActiveSlot(): number { ensureInit(); return activeSlot; }
+
+/** Point hasSave/loadSave/writeSave/deleteSave (and so Progression's autosave) at slot `i`. */
+export function setActiveSlot(i: number): void {
+  ensureInit();
+  if (!validSlot(i)) { console.warn('[save] bad slot', i); return; }
+  activeSlot = i;
+}
+
+/** Slot Continue should load: the most recently played slot (if it still holds a readable save). */
+export function lastPlayedSlot(): number | null {
+  ensureInit();
+  const meta = readMeta();
+  const last = meta?.lastSlot;
+  if (validSlot(last)) { const r = readSlotRaw(last); if (r && 'candidate' in r) return last; }
+  return null;
+}
+
+/** Lowest-numbered empty slot, or null when all are taken (damaged slots count as taken). */
+export function firstEmptySlot(): number | null {
+  ensureInit();
+  for (let i = 0; i < SAVE_SLOTS; i++) if (readSlotRaw(i) === null) return i;
+  return null;
+}
+
+/** The character in slot `i`, repaired; null if the slot is empty or unreadable. */
+export function loadSlot(i: number): PlayerState | null {
+  ensureInit();
+  if (!validSlot(i)) return null;
+  const r = readSlotRaw(i);
+  if (!r) return null;
+  if ('error' in r) { console.warn(`[save] slot ${i} unreadable: ${r.error}`); return null; }
+  return repairState(r.candidate);
+}
+
+export function deleteSlot(i: number): void {
+  ensureInit();
+  if (!validSlot(i)) return;
+  const st = storage();
+  try { st?.removeItem(slotKey(i)); } catch { /* ignore */ }
+  const meta = readMeta() ?? emptyMeta();
+  meta.slots[i] = null;
+  if (meta.lastSlot === i) meta.lastSlot = null;
+  // The player deleted the migrated character on purpose: drop its legacy backup too.
+  if (i === 0 && meta.legacyPending) { try { st?.removeItem(SAVE_KEY); } catch { /* ignore */ } meta.legacyPending = false; }
+  writeMeta(meta);
+}
+
+export function hasSave(): boolean {
+  ensureInit();
+  const r = readSlotRaw(activeSlot);
+  return !!r && 'candidate' in r;
+}
+
+/** Active slot's character (repaired), or null when it is empty or unreadable. */
+export function loadSave(): PlayerState | null {
+  return loadSlot(getActiveSlot());
+}
+
+/** Persist into the active slot (Progression autosave / manual save / map change all land here). */
+export function writeSave(state: PlayerState): void {
+  ensureInit();
+  const st = storage();
+  if (!st) return;
+  const slot = activeSlot;
+  const savedAt = Date.now();
+  try {
+    const raw = JSON.stringify({ format: SAVE_FORMAT, savedAt, slot, state });
+    st.setItem(slotKey(slot), raw);
+    const meta = readMeta() ?? emptyMeta();
+    meta.slots[slot] = metaEntry(state, savedAt);
+    meta.lastSlot = slot;
+    if (slot === 0 && meta.legacyPending && st.getItem(slotKey(0)) === raw) {
+      try { st.removeItem(SAVE_KEY); } catch { /* ignore */ }
+      meta.legacyPending = false;
+    }
+    writeMeta(meta);
   } catch (e) {
     console.warn('[save] write failed', e);
   }
 }
 
+/** Delete the active slot. */
 export function deleteSave(): void {
-  try { storage()?.removeItem(SAVE_KEY); } catch { /* ignore */ }
+  deleteSlot(getActiveSlot());
 }
 
 // ─────────────────────────── Repair ───────────────────────────

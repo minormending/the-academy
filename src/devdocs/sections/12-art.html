@@ -114,7 +114,7 @@ export function assetUrl(path: string): string {
           ramp's base and half of its hue offset.</td>
         <td>One witch sprite must become ten job looks with different robe, hat, trim and gem colours, so the swap
           has to be per body part.</td></tr>
-      <tr><td>Monsters, <a data-src="src/art/monsterArt.ts#L1836">monsterArt.ts:1836</a> <code>gradientMap</code>,
+      <tr><td>Monsters, <a data-src="src/art/monsterArt.ts#L1837">monsterArt.ts:1837</a> <code>gradientMap</code>,
           <code>hueShift</code></td>
         <td>Gradient map: normalise each filtered pixel's luminance over the sheet and map it onto a ramp. Hue shift:
           rotate hue, scale saturation and lightness. Both take a <code>PixFilter</code> (hue range, min saturation,
@@ -133,7 +133,7 @@ export function assetUrl(path: string): string {
   </table>
 
   <p>The ramps themselves are data. Monster ramps live in <code>RAMP</code>
-    (<a data-src="src/art/monsterArt.ts#L1868">monsterArt.ts:1868</a>: ice, snowFur, void, lava, magma, crag, storm,
+    (<a data-src="src/art/monsterArt.ts#L1900">monsterArt.ts:1900</a>: ice, snowFur, void, lava, magma, crag, storm,
     thunder, arcaneFire); VFX ramps in <code>RAMPS</code>
     (<a data-src="src/art/particles.ts#L142">particles.ts:142</a>):</p>
   <pre><code class="lang-ts">export const RAMPS = {
@@ -168,7 +168,7 @@ export function assetUrl(path: string): string {
     the robe colour, stopped at the feet row so feet stay on the ground line
     (<a data-src="src/art/char/pixel.ts#L464">char/pixel.ts:464</a>). Monsters get one when their spec sets
     <code>outline</code> (the ember imp and lava salamander), via a 1 px border added around each cut frame so the
-    ring has room (<a data-src="src/art/monsterArt.ts#L2118">monsterArt.ts:2118</a>). All of this happens at 1× before
+    ring has room (<a data-src="src/art/monsterArt.ts#L2240">monsterArt.ts:2240</a>). All of this happens at 1× before
     scaling, so the outline is exactly one source pixel wide on screen.</p>
 
   <!-- ===================================================================== -->
@@ -226,7 +226,7 @@ function playerOpts(tier: number): PixelOpts {
   <p><a data-src="src/art/monsterArt.ts">monsterArt.ts</a> builds <code>monster_&lt;id&gt;</code> with frames named
     <code>&lt;anim&gt;_&lt;i&gt;</code> and animations <code>monster_&lt;id&gt;_&lt;anim&gt;</code> for idle, move,
     hit, die and (optionally) attack. Each monster has a <code>PixelSpec</code> in <code>buildPixelSpecs()</code>
-    (<a data-src="src/art/monsterArt.ts#L1912">monsterArt.ts:1912</a>) that names its source frames, its recolour and
+    (<a data-src="src/art/monsterArt.ts#L1945">monsterArt.ts:1945</a>) that names its source frames, its recolour and
     options:</p>
   <pre><code class="lang-ts">    frost_bat: { recolor: gradientMap(RAMP.ice), idle: { frames: batFly(0, 1, 2, 3), rate: 9 }, move: { frames: batFly(0, 1, 2, 3), rate: 12 },
       hit: batHit(1)[0], die: { frames: [...batDie(...range(0, 7)), ...batDieLow(8, 9, 10)], rate: 15 } },
@@ -238,7 +238,7 @@ function playerOpts(tier: number): PixelOpts {
       attack: { frames: wizard(...range(5, 14)), rate: 15 } },</code></pre>
   <p>One source often serves several monsters: the Bestiary golem is both the magma golem (magma ramp) and the crag golem
     (crag ramp); the Sunny mushroom is the cap shroom, the thorn shroom (hue-shifted cap) and the Shroom Monarch field
-    boss. <code>paintPixelMonsterSheet</code> (<a data-src="src/art/monsterArt.ts#L2154">monsterArt.ts:2154</a>) then:</p>
+    boss. <code>paintPixelMonsterSheet</code> (<a data-src="src/art/monsterArt.ts#L2276">monsterArt.ts:2276</a>) then:</p>
   <ul>
     <li>recolours the whole source sheet once (cached per monster), cuts each frame at 1×, flips left-facing art so every
       texture faces right, adds the optional outline and stamps <dfn>overlays</dfn>: tiny hand-placed pixel maps (the
@@ -259,7 +259,7 @@ function playerOpts(tier: number): PixelOpts {
     (aura ×4); Monster draws and tints them for burn, freeze, stun and so on (see <a href="#monsters">Monsters</a>).</p>
 
   <p><strong>On demand.</strong> Per-monster sheets are not built at boot. <code>ensureMonsterTexture(scene, id)</code>
-    (<a data-src="src/art/monsterArt.ts#L2466">monsterArt.ts:2466</a>) is idempotent and never throws: it tries the
+    (<a data-src="src/art/monsterArt.ts#L2588">monsterArt.ts:2588</a>) is idempotent and never throws: it tries the
     pixel sheet, falls back to the procedural <code>paintMonsterSheet</code>, and registers the anims. The Monster
     constructor and <code>MonsterManager.bindMap</code> call it, so a map pays only for the monsters it spawns.</p>
 

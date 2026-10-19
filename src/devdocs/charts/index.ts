@@ -547,7 +547,7 @@ const mapsC: ChartDef<ReturnType<typeof mapGraph>> = {
     const arc = 56; // room above the top row for edges that skip over maps
     const W = lay.cols * colW + pad * 2 - (colW - nw), H = lay.rows * rowH + pad * 2 + arc - (rowH - nh);
     const at = new Map(lay.placed.map((p) => [p.id, { x: pad + p.x, y: pad + arc + p.y }]));
-    const kind = (n: (typeof m.nodes)[number]) => (n.safe ? 3 : n.theme === "sanctum" ? 2 : 1);
+    const kind = (n: (typeof m.nodes)[number]) => (n.safe ? 3 : n.arena ? 2 : 1);
     const edgeEls = m.edges.map((e) => {
       const a = at.get(e.a)!, b = at.get(e.b)!;
       const sameRow = a.y === b.y;

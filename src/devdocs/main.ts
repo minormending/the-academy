@@ -5,17 +5,20 @@
 // charts drawn from the game's own modules. See docs/DEVDOCS.md.
 
 import "./devdocs.css";
-import { MONSTERS } from "../data/monsters";
+import { FIELD_BOSSES, MONSTERS } from "../data/monsters";
 import { MAPS } from "../data/maps";
 import { ITEMS } from "../data/items";
 import { QUESTS } from "../data/quests";
 import { STORY_QUESTS } from "../data/storyQuests";
-import { SCHOOLS } from "../data/jobs";
+import { JOBS, SCHOOLS } from "../data/jobs";
+import { NPCS } from "../data/npcs";
+import { HONORS } from "../data/honors";
 import { gameModules, mountCharts, renderAllCharts } from "./charts";
+import { spellStats } from "./charts/data";
 import { h } from "./dom";
 import { highlightElement } from "./highlight";
 import { mountDiagrams, renderAllDiagrams, rethemeDiagrams } from "./mermaid";
-import { CHART_NAMES, CODE_LANGS, REPO_URL, SHELL_IDS, srcUrl } from "./names";
+import { CHART_NAMES, CODE_LANGS, REPO_URL, SHELL_IDS, STAT_NAMES, srcUrl } from "./names";
 import { FRAGMENTS } from "./sections";
 import { formatProblems, validateFragments, type Fragment } from "./validate";
 
@@ -417,13 +420,54 @@ function cover(sections: Built[]): HTMLElement {
 async function devChecks(root: HTMLElement, fragments: Fragment[]) {
   if (!import.meta.env.DEV) return;
   const lines = (await import("virtual:devdocs-files")).default;
-  const problems = validateFragments(fragments, { chartNames: CHART_NAMES, codeLangs: CODE_LANGS, shellIds: SHELL_IDS, fileLines: (p) => lines[p] });
+  const problems = validateFragments(fragments, { chartNames: CHART_NAMES, codeLangs: CODE_LANGS, shellIds: SHELL_IDS, statNames: STAT_NAMES, fileLines: (p) => lines[p] });
   (window as unknown as { __devdocsProblems: unknown }).__devdocsProblems = problems;
   if (!problems.length) return;
   console.error(`[devdocs] ${problems.length} problem(s) in src/devdocs/sections:\n${formatProblems(problems)}`);
   root.before(h("div.dev-problems", { role: "alert" },
     h("strong", `${problems.length} problem${problems.length === 1 ? "" : "s"} in src/devdocs/sections (dev only; node src/devdocs/check.mjs lists them too)`),
     h("ul", problems.slice(0, 30).map((p) => h("li", h("code", p.file), " ", p.message))),
+  ));
+}
+
+// ---- live numbers ------------------------------------------------------------------
+
+/**
+ * Fill every `<span data-stat="NAME">fallback</span>` from the game's data (CONTRACT.md § Live numbers). The text
+ * written in the fragment is only what shows before the game modules load (and in search); in dev a fallback that
+ * no longer matches the data is reported in the same banner as contract problems.
+ */
+async function fillStats(content: HTMLElement, host: HTMLElement): Promise<void> {
+  const spans = Array.from(content.querySelectorAll<HTMLElement>("[data-stat]"));
+  if (!spans.length) return;
+  const stats: Record<string, number | string> = {
+    ...spellStats((await gameModules()).skills, JOBS),
+    monsters: MONSTERS.length, bosses: MONSTERS.filter((m) => m.boss).length, "field-bosses": Object.keys(FIELD_BOSSES).length,
+    maps: MAPS.length, items: ITEMS.length, quests: QUESTS.length + STORY_QUESTS.length, "quests-story": STORY_QUESTS.length,
+    npcs: NPCS.length, jobs: JOBS.length, honors: HONORS.length,
+  };
+  // Source sizes are "about" numbers: rounded (total to 1,000, a folder to 100) and shown with thousands separators.
+  const { folders } = (await import("virtual:devdocs-source")).default;
+  const lines = (f: string) => folders.find((x) => x.folder === f)?.lines ?? 0;
+  const about = (n: number, step: number) => (Math.round(n / step) * step).toLocaleString("en-US");
+  stats["lines-total"] = about(folders.reduce((a, f) => a + f.lines, 0), 1000);
+  stats["lines-skills"] = about(lines("skills"), 100);
+  stats["lines-art"] = about(lines("art"), 100);
+  const stale: string[] = [];
+  for (const el of spans) {
+    const name = el.dataset.stat!;
+    const value = stats[name];
+    if (value === undefined) continue;
+    const text = String(value);
+    if (el.textContent?.trim() !== text) stale.push(`data-stat="${name}" says ${el.textContent?.trim()} but the data says ${text}`);
+    el.textContent = text;
+  }
+  if (!import.meta.env.DEV || !stale.length) return;
+  const unique = [...new Set(stale)];
+  console.error(`[devdocs] ${unique.length} stale number(s) in src/devdocs/sections:\n${unique.join("\n")}`);
+  host.before(h("div.dev-problems", { role: "alert" },
+    h("strong", `${unique.length} stale number${unique.length === 1 ? "" : "s"} in src/devdocs/sections (dev only; the page shows the live value)`),
+    h("ul", unique.map((m) => h("li", m))),
   ));
 }
 
@@ -469,6 +513,7 @@ function boot() {
   enhance(main);
   mountDiagrams(main);
   mountCharts(main);
+  void fillStats(main, root).catch((e) => console.warn("[devdocs] live numbers", e));
   syncAdvancedButton();
   scrollSpy(built);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeToc(); });

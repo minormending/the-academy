@@ -1,4 +1,4 @@
-<section id="history" data-title="How it was built" data-summary="The build story from git: a lead Claude session, ten parallel builder subagents, Codex runs, eight roadmap phases and the QA waves between them.">
+<section id="history" data-title="How it was built" data-summary="The build story from git: a lead Claude session, ten parallel builder subagents, Codex runs, eight roadmap phases, the Phase 9 spellbook wave and the QA waves between them.">
   <h2>How it was built</h2>
 
   <p>The Academy was written by a team of AI agents. One <dfn>lead session</dfn> (an orchestrating Claude Code
@@ -19,20 +19,21 @@
       game imports, but does nothing yet. An agent "fills in" its stubs.</li>
   </ul>
 
-  <p>The numbers below were counted from the repository with the commands shown in the table.</p>
+  <p>The numbers below were counted from the repository with the commands shown in the table, at commit <code>f64c1ce</code>
+    (they are a snapshot: every new commit makes the first rows stale).</p>
 
   <table>
     <thead><tr><th>Fact</th><th>Value</th><th>How it was counted</th></tr></thead>
     <tbody>
-      <tr><td>Commits</td><td>75</td><td><code>git rev-list --count HEAD</code></td></tr>
-      <tr><td>First and last commit</td><td>2026-10-18 17:29 to 2026-10-19 04:13 (UTC−4)</td><td><code>git log --format='%ad'</code></td></tr>
-      <tr><td>Commits marked "via Codex"</td><td>10</td><td><code>git log --oneline | grep -c "via Codex"</code></td></tr>
+      <tr><td>Commits</td><td>89</td><td><code>git rev-list --count HEAD</code></td></tr>
+      <tr><td>First and last commit</td><td>2026-10-18 17:29 to 2026-10-19 06:08 (UTC−4)</td><td><code>git log --format='%ad'</code></td></tr>
+      <tr><td>Commits marked "via Codex"</td><td>14 (10 before Phase 9, 4 in it)</td><td><code>git log --oneline | grep -c "via Codex"</code></td></tr>
       <tr><td>Commits fixing Codex review findings</td><td>1 (<code>5ba20ad</code>)</td><td><code>grep -c "Codex review"</code></td></tr>
       <tr><td>QA-pass commits</td><td>5 (UI, progression, movement/combat, pixel, final)</td><td><code>grep "QA"</code></td></tr>
       <tr><td>Pacing and balance commits</td><td>4</td><td><code>grep -E "Pacing|Balance"</code></td></tr>
       <tr><td>Roadmap bookkeeping commits</td><td>7</td><td>subjects starting "Roadmap" or "ROADMAP"</td></tr>
-      <tr><td>Commits that changed <code>src/core/types.ts</code></td><td>6 (597 lines at scaffold, 622 now)</td><td><code>git log --oneline -- src/core/types.ts</code></td></tr>
-      <tr><td>Commits that changed <code>src/core/vfx.ts</code> or <code>src/core/balance.ts</code></td><td>1 each (the scaffold)</td><td><code>git log --oneline -- &lt;file&gt;</code></td></tr>
+      <tr><td>Commits that changed <code>src/core/types.ts</code></td><td>9 (597 lines at scaffold, 637 now)</td><td><code>git log --oneline -- src/core/types.ts</code></td></tr>
+      <tr><td>Commits that changed <code>src/core/vfx.ts</code> or <code>src/core/balance.ts</code></td><td>1 for <code>vfx.ts</code> (the scaffold), 2 for <code>balance.ts</code> (the scaffold and the bug-fix pass <code>c5c64d4</code>)</td><td><code>git log --oneline -- &lt;file&gt;</code></td></tr>
     </tbody>
   </table>
 
@@ -96,7 +97,7 @@
     <a data-src="src/art/particles.ts#L1">particles.ts</a>. Phase 3 added a "Holy tree agent". Phase 6 added a
     "story agent" (<a data-src="src/data/storyQuests.ts#L1">storyQuests.ts</a>), and Phase 7 added
     <code>P7a</code> (save slots) and <code>P7b</code> (bindings and settings, see
-    <a data-src="src/core/settings.ts#L2">settings.ts</a>). Codex built ten features of its own (see
+    <a data-src="src/core/settings.ts#L2">settings.ts</a>). Codex built ten features of its own during the roadmap and four spell sets in Phase 9 (see
     <a href="#history-codex">below</a>).</p>
 
   <!-- ===================================================================== -->
@@ -165,7 +166,7 @@ export class SkillSystem implements ISkillSystem {
         <td><code>c6de896</code> pipeline (manifests, <code>PIXEL_SCALE</code>) · <code>99dbf07</code> characters · <code>e0cffe6</code> UI · <code>c88904b</code> monsters · <code>1b9a307</code> world · <code>f2c2b46</code> VFX · <code>67893fe</code> final pixel QA</td></tr>
       <tr><td>3. Holy &amp; Shadow</td><td>Contract, jobs, poison/curse statuses, two new trees</td>
         <td><code>7e70b18</code> Phase 3 contract · <code>c09fa9c</code> audio (Codex) · <code>fdd90e1</code> Shadow tree (Codex)</td></tr>
-      <tr><td>4. The Academy</td><td>Rename, school Years, 10 Year-1 spells and 5 Schools × 24, professors, exams, five-hall campus, spellbook UI, two-page hotbar, Pip, field bosses</td>
+      <tr><td>4. The Academy</td><td>Rename, school Years, 10 Year-1 spells and 5 Schools × 24 (later grown in Phase 9), professors, exams, five-hall campus, spellbook UI, two-page hotbar, Pip, field bosses</td>
         <td><code>7d96785</code> rename · <code>8260e98</code>, <code>23d73a5</code>, <code>44a5347</code>, <code>58dc6ac</code>, <code>76abe50</code>, <code>a563d43</code> spellbooks · <code>3c91190</code>, <code>ccf1505</code> re-theme · <code>2a87c88</code> hotbar · <code>665f98f</code>, <code>20e4ef8</code> familiar · <code>5ba20ad</code> Codex review fixes · <code>1938592</code> field bosses</td></tr>
       <tr><td>5. Systems &amp; feel</td><td>Respec, gamepad, Trial Hall, pacing QA 1–25</td>
         <td><code>415b340</code>, <code>f4edf35</code> respec · <code>f5343f7</code> gamepad · <code>d097273</code> Trial Hall · <code>49fcaad</code>, <code>214db26</code> pacing</td></tr>
@@ -201,6 +202,38 @@ export class SkillSystem implements ISkillSystem {
     the story commit (Phase 6) both have the timestamp 22:17, and <code>a9dad10</code> ticks both off together.
     A bar only covers committed work. Agents were writing code before each phase's first commit, and git cannot
     show when that started.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="history-phase9">Phase 9: a bigger spellbook</h3>
+
+  <p>After the game shipped, the lead started a ninth phase, one that lives in
+    <a data-src="ARCHITECTURE.md#L317">ARCHITECTURE.md</a> rather than ROADMAP.md. The goal was depth of choice: every School grows from
+    24 to <span data-stat="spells-school">32</span> spells (+3 in Year 2, +3 in Year 3, +2 in Year 4) and Year 1 from 10 to <span data-stat="spells-core">14</span>, for <span data-stat="spells">174</span> in all. The
+    rule written into the brief was that new spells must add <em>new kinds of play</em>, not stat variants of old ones:
+    traps and wards, combo payoffs on a status, HP-for-MP trades, damaging dashes and channels (see
+    <a href="#skills-phase9">Phase 9: traps, combos, trades, dashes and channels</a>). The brief also made the cleanup
+    rule explicit: an effect that outlives the cast must end on <code>map:changed</code>, <code>player:died</code> and
+    scene shutdown.</p>
+
+  <p>The wave was one brief commit followed by one commit per tree. Each agent worked in its own files and
+    added its spells to the existing tree without changing an existing id, number or behaviour:</p>
+  <table>
+    <thead><tr><th>Commit</th><th>What landed</th></tr></thead>
+    <tbody>
+      <tr><td><code>77d3c0d</code></td><td>The Phase 9 brief in ARCHITECTURE.md (docs only)</td></tr>
+      <tr><td><code>a19cea6</code></td><td>Year 1: four spells, Practice Ward, Seal Break, Vital Ink, Quill Step (via Codex)</td></tr>
+      <tr><td><code>02dd95d</code></td><td>Lightning: Ion Brand, Grounding Seal, Short Circuit, Blood Dynamo, Arc Skate, Tesla Channel, Storm Circuit, Tempest Reprisal (via Codex)</td></tr>
+      <tr><td><code>cbf6e37</code></td><td>Shadow: Grave Mine, Bitter Harvest, Blood Tithe, Umbra Passage, Dirge Channel, Doom Seal, Hex Relay, Soul Ward (via Codex)</td></tr>
+      <tr><td><code>2491b1b</code></td><td>Ice: Rime Snare, Cold Snap, Rime Brand, Fracture Route, Cold Exchange, Hail Loom, Rime Recall, Diamond Reckoning (via Codex)</td></tr>
+      <tr><td><code>8b26342</code></td><td>Fire and Holy: eight spells each, bringing every School to 32</td></tr>
+    </tbody>
+  </table>
+  <p>The brief fixed the rule but not the code, so the agents each wrote their own small lifetime helper
+    (<code>fire/persist.ts</code>, <code>holy/phase9.ts</code>, <code>shadow/lifetime.ts</code>,
+    <code>lightning/spellbookMechanics.ts</code>, <code>ice/spellbook.ts</code>). That duplication is a cost of working in
+    parallel inside separate folders, and it is the one thing a future cleanup could merge. Because every spell is data
+    plus a few functions, nothing else in the game had to change: the Spellbook, the hotbar, the handbook's spell tables and
+    the developer-docs charts all picked the new spells up from the Registry.</p>
 
   <!-- ===================================================================== -->
   <h3 id="history-orchestration">How one phase ran</h3>
@@ -351,11 +384,13 @@ export type JobId =
     "School parity"), each followed by a smaller commit of follow-ups.</p>
 
   <h4 id="history-codex">What Codex built</h4>
-  <p>Ten commits are marked "(via Codex)". Each is a feature with clear edges, mostly in its own files:</p>
+  <p>Fourteen commits are marked "(via Codex)": ten during the roadmap, then the four Phase 9 spell sets (Year 1, Lightning, Shadow and Ice,
+    listed in <a href="#history-phase9">Phase 9</a>). Each is a feature with clear edges, mostly in its own files:</p>
   <ul>
     <li>Spellbooks: Shadow tree (<code>fdd90e1</code>, 14 skills) and its expansion to 24 (<code>a563d43</code>),
       Ice to 24 (<code>44a5347</code>), Lightning to 24 (<code>58dc6ac</code>), the Year 1 core curriculum
-      (<code>8260e98</code>, 10 spells).</li>
+      (<code>8260e98</code>, 10 spells). Phase 9 added Year 1 (<code>a19cea6</code>, four spells), Lightning
+      (<code>02dd95d</code>), Shadow (<code>cbf6e37</code>) and Ice (<code>2491b1b</code>), eight spells each.</li>
     <li>Audio: synth voices for <code>cast_holy</code>, <code>cast_shadow</code> and <code>curse</code>
       (<code>c09fa9c</code>).</li>
     <li>Systems: Pip the familiar (<code>665f98f</code>), respec with the Tome of Unlearning (<code>f4edf35</code>),

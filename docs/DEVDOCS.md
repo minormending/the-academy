@@ -35,7 +35,7 @@ unchanged.
 | `src/devdocs/charts/data.ts` | **Pure chart data** from `balance.ts`, `MONSTERS`, `MAPS`, `JOBS`, `ITEMS`, the skill definitions and `computeDerived`. |
 | `src/devdocs/charts/sourceStats.ts` | Pure parsing of source text: lines and files per `src/` folder, imports between folders. |
 | `src/devdocs/charts/index.ts`, `svg.ts` | The charts as dependency-free SVG: titles, legends, tooltips, `role="img"` summaries, "Show data" tables, redraw on resize. |
-| `src/devdocs/names.ts` | Chart names, reserved shell ids, code languages, the GitHub source URL. |
+| `src/devdocs/names.ts` | Chart names, `data-stat` names, reserved shell ids, code languages, the GitHub source URL. |
 
 ### Charts and the game's modules
 
@@ -119,6 +119,15 @@ don't exist or whose `#L` line is past the end of the file.
 It cannot tell whether `#L120` still points at the code the text describes:
 line links drift when code above them changes. After a refactor, grep the
 sections for the file name and re-check the numbers.
+
+### Numbers in prose
+
+A count of game data (how many spells there are, how many a School has) is written as
+`<span data-stat="spells">174</span>`, not as a bare number. `fillStats` in `main.ts` replaces the text with the
+value from `spellStats` (`charts/data.ts`) when the game modules load, and `check.mjs` rejects a name that is not in
+`STAT_NAMES` (`names.ts`). The number typed inside the span is only a fallback; in `npm run dev` a stale one is
+listed in the red banner, so a content change shows up the next time someone opens the page. To add a stat, add
+the name to `STAT_NAMES`, the value to `spellStats` and a row to CONTRACT.md's "Live numbers" table.
 
 ### Adding a chart
 

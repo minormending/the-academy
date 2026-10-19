@@ -9,6 +9,7 @@ import { ARENA_TUNING, bonusExpForWave, meritsForWave } from '../systems/ArenaSy
 import { DEATH_EXP_PENALTY, JOB_ADVANCE_BONUS_SP, MAX_INVENTORY_STACKS, killExpMultiplier } from '../systems/Progression';
 import { DEFAULT_SETTINGS } from '../core/settings';
 import { GRADUATION_MERITS } from '../data/npcScripts';
+import { HONOR_CATEGORIES, availableHonors } from '../data/honors';
 import { isSchool } from '../data/jobs';
 import { append, h, type Child } from './dom';
 import { iconImg, monsterImg } from './art';
@@ -284,12 +285,42 @@ export function studentLife(g: Guide): RefSection {
           h('li', 'Six save slots. Character Select on the title screen shows each student\'s School and Year.'),
           h('li', 'The game saves on map changes, level-ups, quests and every so often while you play.'),
           h('li', 'Every key can be rebound in ', kbd('menu'), ' → Controls, and a standard gamepad works out of the box.'),
-          h('li', 'Settings: screen shake (on, reduced or off), damage-number size and the familiar.'),
+          h('li', 'Settings: screen shake (on, reduced or off), damage-number size, the familiar and the on-screen touch controls.'),
         ),
       ),
     ),
   );
   return { id: 'student-life', title: 'Familiar, respec & saves', el };
+}
+
+// ─────────────────────────── Academy Honors ───────────────────────────
+
+export function honorsSection(): RefSection {
+  const all = availableHonors();
+  const secrets = all.filter(x => x.secret).length;
+  const titled = all.filter(x => x.title).length;
+  const el = h('section.ref', { id: 'honors' },
+    sectionHeading(2, 'honors-h', 'Academy Honors', 'Reference'),
+    h('p.lead', `${all.length} honors in ${HONOR_CATEGORIES.length} categories. Each pays Merits once, and ${titled} of them unlock a title you can wear under your name tag. Open the Honors window with `, kbd('honors'), ' to see your progress bars and pick a title.'),
+    h('p.small', `${secrets} honors are secret and stay hidden until you earn them. Merits are spent at Bram's Merit Exchange (see `, h('a', { href: '#trial-hall' }, 'the Trial Hall'), ').'),
+    HONOR_CATEGORIES.map(c => {
+      const list = all.filter(x => x.category === c.id && !x.secret);
+      if (!list.length) return null;
+      return h('div.honor-cat',
+        h('h3', { id: `honors-${c.id}` }, c.name, h('small.muted', ` ${list.length}`)),
+        h('div.scroll', h('table.compact',
+          h('thead', h('tr', h('th', 'Honor'), h('th', 'How'), h('th.num', 'Merits'), h('th', 'Title'))),
+          h('tbody', list.map(x => h('tr', { id: `honor-${x.id}` },
+            h('td', h('div.spell-head', iconImg(x.icon, 24, ''), h('strong', x.name))),
+            h('td.small', x.description),
+            h('td.num', x.reward ? num(x.reward) : '—'),
+            h('td.small', x.title ?? '—'),
+          ))),
+        )),
+      );
+    }),
+  );
+  return { id: 'honors', title: 'Academy Honors', el };
 }
 
 // ─────────────────────────── Assignments ───────────────────────────

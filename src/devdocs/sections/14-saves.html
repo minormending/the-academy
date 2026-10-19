@@ -38,14 +38,17 @@
   merits?: number;
   /** Best Trial Hall wave reached. */
   arenaBest?: number;
+  /** Academy Honors (achievements + chosen title); absent on saves from before honors existed. */
+  honors?: HonorsState;
 }</code></pre>
-  <p>(<a data-src="src/core/types.ts#L431">types.ts:431</a>.) Everything else is derived on load: max HP, matk and
+  <p>(<a data-src="src/core/types.ts#L432">types.ts:432</a>.) Everything else is derived on load: max HP, matk and
     the other stats are recomputed from this (<a href="#progression-stats">derived stats</a>), monsters and drops
     are respawned, buffs start empty. Notice what the state refers to by <strong>id</strong>: the job, every
     skill, every item, the map and every quest. That is the root of the
     <a href="#saves-ids">"ids never change"</a> rule.</p>
   <p>The two Phase 5 fields, <code>merits</code> and <code>arenaBest</code>, were added as optional so the type
-    still describes saves written before them; repair fills them with 0. <code>version</code> is still 1: no
+    still describes saves written before them; repair fills them with 0. <code>honors</code> (<a href="#progression-honors">Academy Honors</a>) is optional too, but repair leaves it <em>absent</em> instead of filling it, because
+    "no honors field" is how a legacy save is recognised and backfilled. <code>version</code> is still 1: no
     change so far has needed a format migration, only defaults.</p>
 
   <!-- ===================================================================== -->
@@ -114,7 +117,7 @@
 // *active* slot, which the title screen sets before starting the game.
 
 export const SAVE_SLOTS = 6;</code></pre>
-  <p>(<a data-src="src/systems/SaveSystem.ts#L71-L83">SaveSystem.ts:71</a>.) <code>SAVE_KEY</code> is
+  <p>(<a data-src="src/systems/SaveSystem.ts#L72-L84">SaveSystem.ts:72</a>.) <code>SAVE_KEY</code> is
     <code>'arcana-story-save-v1'</code> (<a data-src="src/core/constants.ts#L32">constants.ts:32</a>), from the
     game's earlier title "Arcana Story". It was deliberately not renamed for The Academy, because renaming it would
     orphan every existing save.</p>
@@ -136,7 +139,7 @@ export const SAVE_SLOTS = 6;</code></pre>
       <code>readSlotRaw</code> also accepts a bare <code>PlayerState</code> (the shape older builds wrote), and
       requires at least a string <code>name</code>, a finite numeric <code>level</code> and a string
       <code>job</code>; anything less is an error ("Save data is corrupt", "Character data is missing")
-      (<a data-src="src/systems/SaveSystem.ts#L152">SaveSystem.ts:152</a>).</li>
+      (<a data-src="src/systems/SaveSystem.ts#L153">SaveSystem.ts:153</a>).</li>
     <li><strong>Meta.</strong> The last played slot, and per slot a cached name, level, job, map, play time and
       save time. Only the cache: if a slot becomes unreadable, its card can still say who used to be there.</li>
     <li><strong>The active slot.</strong> A module-level <code>activeSlot</code>. The original single-save API
@@ -185,7 +188,7 @@ export function writeSave(state: PlayerState): boolean {
     return false;
   }
 }</code></pre>
-  <p>(<a data-src="src/systems/SaveSystem.ts#L324">SaveSystem.ts:324</a>.) It returns whether the write happened;
+  <p>(<a data-src="src/systems/SaveSystem.ts#L325">SaveSystem.ts:325</a>.) It returns whether the write happened;
     <code>Progression.save()</code> passes that on. The slot is written first, then the meta. Writing also makes this slot the "last played" one, which is how Continue knows where to go.</p>
 
   <!-- ===================================================================== -->
@@ -226,9 +229,10 @@ export function writeSave(state: PlayerState): boolean {
       <tr><td>equipment</td><td>Only known items whose <code>equip.slot</code> matches the slot they are in.</td></tr>
       <tr><td>quests</td><td>Only known quest ids; invalid statuses become <code>active</code>; counts resized to the current objectives.</td></tr>
       <tr><td>hp, mp</td><td>Clamped to the derived maximums.</td></tr>
+      <tr><td>honors</td><td>Only well-formed entries kept: <code>done</code> times and counters must be finite positive numbers (counters capped), the title is cut to 40 characters. Absent stays absent; unknown honor ids are kept.</td></tr>
     </tbody>
   </table>
-  <p>(<a data-src="src/systems/SaveSystem.ts#L372">SaveSystem.ts:372</a>.) One case gets special treatment, a save
+  <p>(<a data-src="src/systems/SaveSystem.ts#L397">SaveSystem.ts:397</a>.) One case gets special treatment, a save
     written while the student was dead (the tab was closed at the death prompt):</p>
   <pre><code class="lang-ts">    // Saved while dead (closed/reloaded before pressing respawn): apply the normal respawn —
     // EXP penalty, 50% HP/MP, back in town — instead of reviving in place on a hostile map.
@@ -238,7 +242,7 @@ export function writeSave(state: PlayerState): boolean {
       out.mp = Math.max(out.mp, Math.ceil(d.maxMp * 0.5));
       if (Registry.map(TOWN_MAP) || Registry.maps().length === 0) out.mapId = TOWN_MAP;
     }</code></pre>
-  <p>(<a data-src="src/systems/SaveSystem.ts#L471">SaveSystem.ts:471</a>, from the progression QA pass
+  <p>(<a data-src="src/systems/SaveSystem.ts#L498">SaveSystem.ts:498</a>, from the progression QA pass
     <code>7faacd7</code>.) It mirrors <code>Progression.respawn()</code> exactly (see
     <a href="#progression-death">death and respawn</a>), so reloading neither skips the penalty nor revives the
     student next to whatever killed them.</p>
@@ -287,7 +291,7 @@ export function writeSave(state: PlayerState): boolean {
           console.info('[save] migrated legacy save into slot 1');
         }
       }</code></pre>
-  <p>(<a data-src="src/systems/SaveSystem.ts#L191">SaveSystem.ts:191</a>; "slot 1" is the player-facing, 1-based
+  <p>(<a data-src="src/systems/SaveSystem.ts#L192">SaveSystem.ts:192</a>; "slot 1" is the player-facing, 1-based
     number of slot 0.) The legacy value is copied verbatim, a bare <code>PlayerState</code>, which
     <code>readSlotRaw</code> accepts. The original key is <strong>kept as a backup</strong> while
     <code>legacyPending</code> is set, and removed only when <code>writeSave</code> has written slot 0 and read the
@@ -314,14 +318,14 @@ export function writeSave(state: PlayerState): boolean {
   <table>
     <thead><tr><th>Trigger</th><th>Where</th></tr></thead>
     <tbody>
-      <tr><td>Every map change, including the first map load</td><td><a data-src="src/scenes/GameScene.ts#L172">GameScene.ts:172</a></td></tr>
+      <tr><td>Every map change, including the first map load</td><td><a data-src="src/scenes/GameScene.ts#L175">GameScene.ts:175</a></td></tr>
       <tr><td>Autosave every 30 s of play (<code>AUTOSAVE_MS</code>)</td><td><a data-src="src/systems/Progression.ts#L749">Progression.ts:749</a></td></tr>
       <tr><td>Level-up, job advancement, respawn</td><td><code>gainExp</code>, <code>advanceJob</code>, <code>respawn</code></td></tr>
       <tr><td>Quest turn-in (and again after a story step's after-hook)</td><td><code>turnInQuest</code>, <code>storyTurnIn</code></td></tr>
       <tr><td>Merit Exchange purchase</td><td><code>buyWithMerits</code></td></tr>
       <tr><td>End of a Trial Hall run</td><td><code>ArenaSystem.endRun</code></td></tr>
       <tr><td>Menu: Save Game (reports failure if the write fails), Quit to Title</td><td><a data-src="src/ui/miscWindows.ts#L70">miscWindows.ts:70</a></td></tr>
-      <tr><td>Game scene shutdown (teardown)</td><td><a data-src="src/scenes/GameScene.ts#L344">GameScene.ts:344</a></td></tr>
+      <tr><td>Game scene shutdown (teardown)</td><td><a data-src="src/scenes/GameScene.ts#L348">GameScene.ts:348</a></td></tr>
       <tr><td>A new character, before the game starts</td><td>Title menu <code>begin()</code></td></tr>
     </tbody>
   </table>
@@ -388,8 +392,8 @@ export function writeSave(state: PlayerState): boolean {
     <thead><tr><th>Key</th><th>Contents</th><th>Owner</th></tr></thead>
     <tbody>
       <tr><td><code>arcana-ui-layout-v1</code></td><td>Window positions and UI flags, including the per-slot credits flag <code>creditsSeen:&lt;slot&gt;:&lt;name&gt;</code></td><td><a data-src="src/ui/context.ts#L24">ui/context.ts</a></td></tr>
-      <tr><td><code>academy-bindings-v1</code></td><td>Key bindings</td><td><a data-src="src/core/bindings.ts#L90">core/bindings.ts</a></td></tr>
-      <tr><td><code>academy-settings-v1</code></td><td>Screen shake, damage-number size, familiar on/off</td><td><a data-src="src/core/settings.ts#L19">core/settings.ts</a></td></tr>
+      <tr><td><code>academy-bindings-v1</code></td><td>Key bindings</td><td><a data-src="src/core/bindings.ts#L91">core/bindings.ts</a></td></tr>
+      <tr><td><code>academy-settings-v1</code></td><td>Screen shake, damage-number size, familiar on/off</td><td><a data-src="src/core/settings.ts#L22">core/settings.ts</a></td></tr>
       <tr><td><code>arcana-audio</code>, <code>arcana-ui-volumes</code></td><td>Sound and music volumes</td><td>AudioSystem, miscWindows</td></tr>
     </tbody>
   </table>

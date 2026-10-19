@@ -6,8 +6,8 @@
     <code>slot0</code> or <code>inventory</code>) and a <dfn>binding</dfn> maps each action to one numeric
     <dfn>keyCode</dfn>, the browser's old-style key number (<code>81</code> for <kbd>Q</kbd>, <code>32</code> for
     <kbd>Space</kbd>). Bindings live in <a data-src="src/core/bindings.ts">src/core/bindings.ts</a>, are saved to
-    <code>localStorage</code>, and can be changed while the game runs. A gamepad does not get its own input path: a
-    small bridge turns stick and button state into the same keyboard events a player would type.</p>
+    <code>localStorage</code>, and can be changed while the game runs. A gamepad and the on-screen touch controls do not get their own input paths: a
+    small bridge (and, for touch, an overlay) turns stick, button and finger state into the same keyboard events a player would type.</p>
 
   <p>Along the way it covers the parts of <code>GameScene</code> that make input feel good: <dfn>latched
     presses</dfn> (a tap shorter than one frame still counts), the 24-slot hotbar split into two pages, and the
@@ -18,7 +18,9 @@
   <pre class="mermaid">flowchart LR
   KB["Keyboard"] --> WIN["window keydown / keyup"]
   PAD["Gamepad"] -- "polled every frame" --> GB["GamepadBridge"]
+  TCH["Touch screen"] --> TC["TouchControls<br>(ui/touchControls.ts)"]
   GB -- "synthetic KeyboardEvent<br>with the bound keyCode" --> WIN
+  TC -- "synthetic KeyboardEvent<br>with the bound keyCode" --> WIN
   WIN --> CW["ControlsWindow<br>(capture phase, while rebinding)"]
   WIN --> PH["Phaser keyboard plugin"]
   WIN --> UI["UIRoot.keyDown"]
@@ -30,7 +32,8 @@
   B[("core/bindings")] -.-> PL
   B -.-> GS
   B -.-> UI
-  B -.-> GB</pre>
+  B -.-> GB
+  B -.-> TC</pre>
 
   <!-- ===================================================================== -->
   <h3 id="input-owners">Who owns which input</h3>
@@ -45,11 +48,11 @@
         <td><code>left</code>, <code>right</code>, <code>up</code>, <code>down</code>, <code>jump</code>, <code>jump2</code></td>
         <td>Phaser <code>Key</code> objects polled in <code>readInput()</code> every frame; Jump and Left/Right taps
           are also latched from the key's <code>'down'</code> event.</td></tr>
-      <tr><td><a data-src="src/scenes/GameScene.ts#L273">GameScene</a></td>
+      <tr><td><a data-src="src/scenes/GameScene.ts#L276">GameScene</a></td>
         <td><code>slot0</code>–<code>slot11</code>, <code>interact</code>, <code>pickup</code>, <code>hotbarPage</code></td>
         <td>Phaser <code>Key</code> objects with latched presses, read in <code>handleInput()</code>, which runs near
           the end of <code>GameScene.update</code> (after every service has updated, before the UI).</td></tr>
-      <tr><td><a data-src="src/ui/UIRoot.ts#L243">UIRoot</a></td>
+      <tr><td><a data-src="src/ui/UIRoot.ts#L249">UIRoot</a></td>
         <td><code>skills</code>, <code>inventory</code>, <code>stats</code>, <code>quests</code>,
           <code>minimap</code>, <code>help</code>, <code>menu</code></td>
         <td>A plain DOM <code>keydown</code> listener on <code>window</code>; looks the key up with
@@ -63,7 +66,7 @@
     existing key when one is already registered for that code. That is why <code>Player.destroy()</code> skips
     removing the key bound to <code>interact</code>. When the player presses <kbd>↑</kbd> next to a rope, the
     Player updates first and grabs the rope; GameScene then sees <code>isClimbing()</code> and skips the
-    portal/NPC check (<a data-src="src/scenes/GameScene.ts#L312">GameScene.ts:312</a>).</p>
+    portal/NPC check (<a data-src="src/scenes/GameScene.ts#L315">GameScene.ts:315</a>).</p>
 
   <!-- ===================================================================== -->
   <h3 id="input-bindings">Bindings: src/core/bindings.ts</h3>
@@ -82,7 +85,7 @@
     Controls window.</p>
 
   <h4 id="input-defaults">Defaults</h4>
-  <p><code>buildDefaults()</code> (<a data-src="src/core/bindings.ts#L69">bindings.ts:69</a>) turns the older
+  <p><code>buildDefaults()</code> (<a data-src="src/core/bindings.ts#L70">bindings.ts:70</a>) turns the older
     hard-coded key-name constants in <a data-src="src/core/constants.ts#L23">constants.ts</a> into keyCodes, so the
     defaults are exactly the controls the game shipped with before rebinding existed:</p>
   <table>
@@ -104,7 +107,7 @@
 
   <h4 id="input-persist">Persistence and load-time repair</h4>
   <p>The map is saved as <code>{ v: 1, map }</code> under the <code>localStorage</code> key
-    <code>academy-bindings-v1</code> (<a data-src="src/core/bindings.ts#L90">bindings.ts:90</a>). <code>load()</code>
+    <code>academy-bindings-v1</code> (<a data-src="src/core/bindings.ts#L91">bindings.ts:91</a>). <code>load()</code>
     starts from the defaults and copies only values that are valid: <code>0</code>, a bindable key, or that action's
     own default. Then it unbinds later duplicates, so a corrupt or hand-edited save can never leave two actions on
     one key. Any exception (storage blocked, bad JSON) falls back to the defaults.</p>
@@ -127,16 +130,16 @@
   emit();
   return res;
 }</code></pre>
-  <p>Source: <a data-src="src/core/bindings.ts#L158">bindings.ts:158</a></p>
+  <p>Source: <a data-src="src/core/bindings.ts#L159">bindings.ts:159</a></p>
   <ul>
-    <li><strong>Sharing.</strong> <code>SHARE_GROUPS</code> (<a data-src="src/core/bindings.ts#L85">bindings.ts:85</a>)
+    <li><strong>Sharing.</strong> <code>SHARE_GROUPS</code> (<a data-src="src/core/bindings.ts#L86">bindings.ts:86</a>)
       lists the pairs allowed on one key. There is one: <code>['up', 'interact']</code>. Binding Up to a new key
       therefore never displaces <code>interact</code>.</li>
     <li><strong>Unbinding instead of swapping.</strong> If the old key cannot move (it was <code>0</code>, it is
       reserved, or it would collide with a third action), the displaced action is left unbound and the result says
       so. The Controls window prints "… is now unbound."</li>
     <li><strong>The reserved Esc rule.</strong> <code>UNBINDABLE</code>
-      (<a data-src="src/core/bindings.ts#L93">bindings.ts:93</a>) holds <kbd>Esc</kbd> (27), the OS/meta keys
+      (<a data-src="src/core/bindings.ts#L94">bindings.ts:94</a>) holds <kbd>Esc</kbd> (27), the OS/meta keys
       (91–93, 224), the IME key (229) and the lock keys (20, 144, 145). <kbd>Esc</kbd> cancels a key capture and
       always opens the menu, whatever <code>menu</code> is bound to. If <code>menu</code> is moved off Esc and
       lands on a key someone else had, that action gets unbound rather than handed Esc (commit
@@ -147,21 +150,21 @@
   </ul>
 
   <h4 id="input-live">Live rebinding and labels</h4>
-  <p><code>onBindingsChanged(cb)</code> (<a data-src="src/core/bindings.ts#L182">bindings.ts:182</a>) registers a
+  <p><code>onBindingsChanged(cb)</code> (<a data-src="src/core/bindings.ts#L183">bindings.ts:183</a>) registers a
     callback and returns its unsubscribe function. Each consumer re-reads the map when it fires:</p>
   <ul>
     <li><code>Player.bindKeys()</code> and <code>GameScene.bindKeys()</code> drop their old Phaser keys and
       <code>'down'</code> listeners and create new ones for the current codes. GameScene also removes Phaser keys
       (and their browser capture) for codes no gameplay action uses any more, so an old key stops being swallowed
       by the canvas.</li>
-    <li>The HUD relabels the hotbar and page hint (<a data-src="src/ui/hud.ts#L229">hud.ts:229</a>); the Controls
+    <li>The HUD relabels the hotbar and page hint (<a data-src="src/ui/hud.ts#L230">hud.ts:230</a>); the Controls
       window redraws itself.</li>
     <li>UIRoot and GamepadBridge need no callback. They call <code>actionsForKey()</code> /
       <code>getBinding()</code> on every event or poll.</li>
   </ul>
   <p>Text shown to the player must never spell out a key. Use <code>keyLabel(getBinding(action))</code>, which gives
     a short name: <code>'Q'</code>, <code>'Space'</code>, <code>'↑'</code>, <code>'F5'</code>, <code>'Num3'</code>,
-    or <code>'—'</code> when unbound (<a data-src="src/core/bindings.ts#L230">bindings.ts:230</a>). Two helpers
+    or <code>'—'</code> when unbound (<a data-src="src/core/bindings.ts#L231">bindings.ts:231</a>). Two helpers
     sit next to it. <code>keyEventInit(code)</code> builds the <code>key</code>/<code>code</code> strings for a
     synthetic event (the gamepad bridge needs these). <code>eventKeyCode(e)</code> reads a DOM event's keyCode and
     falls back to parsing <code>e.code</code> on browsers that leave <code>keyCode</code> at 0; it maps right-hand
@@ -241,8 +244,8 @@ export function keyText(text: string): string {
     this.latched.delete(k);
     return true;
   }</code></pre>
-  <p>Source: <a data-src="src/scenes/GameScene.ts#L211">GameScene.ts:211</a> and
-    <a data-src="src/scenes/GameScene.ts#L265">GameScene.ts:265</a></p>
+  <p>Source: <a data-src="src/scenes/GameScene.ts#L214">GameScene.ts:214</a> and
+    <a data-src="src/scenes/GameScene.ts#L268">GameScene.ts:268</a></p>
   <p><code>consumePress</code> still calls <code>JustDown</code> so Phaser's own flag is cleared and cannot fire
     later. <code>handleInput</code> clears the whole set when input is blocked, during a map transition or while the
     player is dead, so a key pressed during a dialog never fires afterwards. The Player latches Jump the same way
@@ -253,7 +256,7 @@ export function keyText(text: string): string {
   <h3 id="input-hotbar">Hotbar: held skills, one-shot items, two pages</h3>
 
   <p>The hotbar is <code>PlayerState.hotbar</code>, an array of <code>HOTBAR_SIZE = 24</code> entries
-    (<a data-src="src/core/types.ts#L428">types.ts:428</a>). Each entry is a skill id, <code>"item:&lt;itemId&gt;"</code>
+    (<a data-src="src/core/types.ts#L429">types.ts:429</a>). Each entry is a skill id, <code>"item:&lt;itemId&gt;"</code>
     or <code>null</code>. Twelve slot actions address <code>HOTBAR_PAGE_SIZE = 12</code> entries at a time, so there are
     two <dfn>pages</dfn>. The <code>hotbarPage</code> action (default <kbd>Tab</kbd>) moves to the next page, wrapping
     around. <code>setHotbarPage()</code> emits <code>hotbar:page</code>, which the HUD listens to;
@@ -275,7 +278,7 @@ export function keyText(text: string): string {
         // … 'Not enough MP.' / cooldown / not learned / passive → ui:log, skill:fail, ui_error sound
       }
     }</code></pre>
-  <p>Source: <a data-src="src/scenes/GameScene.ts#L291">GameScene.ts:291</a>, where
+  <p>Source: <a data-src="src/scenes/GameScene.ts#L294">GameScene.ts:294</a>, where
     <code>offset = page × HOTBAR_PAGE_SIZE</code>.</p>
   <ul>
     <li><strong>Skills repeat while held</strong>, as in MapleStory: while the key is down, <code>tryCast</code> runs
@@ -285,10 +288,10 @@ export function keyText(text: string): string {
     <li><strong>Items fire once per press.</strong> Holding <kbd>1</kbd> drinks one potion, not one per frame.</li>
     <li><strong>Empty slots still consume the latch</strong> (<code>JustDown(key)</code>). Otherwise a press on an
       empty slot would wait in the set and fire later, after something was dragged into that slot.</li>
-    <li><strong>Interact</strong> (<a data-src="src/scenes/GameScene.ts#L312">GameScene.ts:312</a>): portal first
+    <li><strong>Interact</strong> (<a data-src="src/scenes/GameScene.ts#L315">GameScene.ts:315</a>): portal first
       (<code>map.getPortalNear</code>), then the nearest NPC. Skipped while climbing.</li>
     <li><strong>Pick up</strong> repeats while held, at most once every 110 ms
-      (<a data-src="src/scenes/GameScene.ts#L321">GameScene.ts:321</a>).</li>
+      (<a data-src="src/scenes/GameScene.ts#L324">GameScene.ts:324</a>).</li>
   </ul>
 
   <!-- ===================================================================== -->
@@ -308,7 +311,7 @@ export function keyText(text: string): string {
         s.skills.tryCast(id);
       }
     }</code></pre>
-  <p>Source: <a data-src="src/scenes/GameScene.ts#L282">GameScene.ts:282</a></p>
+  <p>Source: <a data-src="src/scenes/GameScene.ts#L285">GameScene.ts:285</a></p>
   <p>The buffer holds one spell, and the latest busy tap replaces any earlier one. It runs before the hotbar loop, so
     a buffered spell takes priority over a key that is merely being held. <code>isBusy()</code> is also true during
     hit-stun and while climbing a rope, so a tap in those states is buffered too. It fires only if the state ends
@@ -321,7 +324,7 @@ export function keyText(text: string): string {
   <h3 id="input-block">Blocking gameplay input</h3>
 
   <p>While a dialog, a shop, the credits roll or a text field is active, gameplay keys must do nothing. UIRoot checks
-    this every frame in <code>syncInputBlock()</code> (<a data-src="src/ui/UIRoot.ts#L350">UIRoot.ts:350</a>) and,
+    this every frame in <code>syncInputBlock()</code> (<a data-src="src/ui/UIRoot.ts#L357">UIRoot.ts:357</a>) and,
     when it changes, calls <code>game.setInputBlocked()</code>:</p>
   <pre><code class="lang-ts">  setInputBlocked(blocked: boolean) {
     this.inputBlocked = blocked;
@@ -329,7 +332,7 @@ export function keyText(text: string): string {
     if (blocked) { kb.disableGlobalCapture(); kb.resetKeys(); } else { kb.enableGlobalCapture(); }
     this.s.player.setControlEnabled(!blocked &amp;&amp; !this.transitioning);
   }</code></pre>
-  <p>Source: <a data-src="src/scenes/GameScene.ts#L118">GameScene.ts:118</a></p>
+  <p>Source: <a data-src="src/scenes/GameScene.ts#L121">GameScene.ts:121</a></p>
   <p><code>disableGlobalCapture()</code> stops Phaser from calling <code>preventDefault</code> on bound keys, so
     typing a name with <kbd>Q</kbd> or <kbd>Space</kbd> works in a text box. <code>resetKeys()</code> releases every
     held key, so the character does not keep walking after a dialog opens. The Controls window also blocks input
@@ -338,7 +341,7 @@ export function keyText(text: string): string {
   <!-- ===================================================================== -->
   <h3 id="input-settings">Settings: src/core/settings.ts</h3>
 
-  <p>Three accessibility settings are stored next to the bindings, under <code>academy-settings-v1</code>, with the
+  <p>Four player settings are stored next to the bindings, under <code>academy-settings-v1</code>, with the
     same pattern: a module-level object, <code>getSettings()</code>, <code>setSetting(key, value)</code> (persists,
     then notifies) and <code>onSettingsChanged(cb)</code>. The controls are in the Esc menu's Settings tab
     (<a data-src="src/ui/miscWindows.ts#L97">miscWindows.ts:97</a>). Volumes are not here; the audio system keeps
@@ -354,6 +357,10 @@ export function keyText(text: string): string {
         <td><a data-src="src/systems/skill/DamageNumbers.ts#L242">DamageNumbers.ts:242</a>, read per number</td></tr>
       <tr><td><code>familiar</code></td><td><code>true</code>, <code>false</code></td>
         <td>Shows or hides Pip the owl (auto-loot)</td><td><code>PetSystem.setEnabled</code> from GameScene</td></tr>
+      <tr><td><code>touch</code></td><td><code>auto</code>, <code>on</code>, <code>off</code></td>
+        <td>On-screen touch controls: <code>auto</code> shows them on coarse-pointer devices or after the first touch,
+          <code>on</code> always, <code>off</code> never</td>
+        <td><code>isTouchMode()</code> in <a data-src="src/ui/touchControls.ts#L38">touchControls.ts:38</a></td></tr>
     </tbody>
   </table>
 
@@ -375,7 +382,7 @@ export function keyText(text: string): string {
         cam.flashEffect.alpha = a;
         return flash(duration, red, green, blue, force, callback, context);
       };</code></pre>
-  <p>Source: <a data-src="src/scenes/GameScene.ts#L238">GameScene.ts:238</a></p>
+  <p>Source: <a data-src="src/scenes/GameScene.ts#L241">GameScene.ts:241</a></p>
   <p>The settings are read at call time, so a change applies to the next shake without re-patching. Setting
     <code>shake</code> to <code>off</code> also resets any shake or flash already running.</p>
 
@@ -485,6 +492,25 @@ export function keyText(text: string): string {
         also removes it from the pad (<code>bindingFor()</code> returns null).</li>
     </ul>
   </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="input-touch">Touch controls</h3>
+
+  <p>Phones and tablets get an on-screen layer from <a data-src="src/ui/touchControls.ts#L176">TouchControls</a>, created by
+    UIRoot inside <code>#ui-root</code> so it scales with the canvas. It copies the gamepad bridge's trick: nothing in
+    Player, GameScene or UIRoot knows about touch. Each control is a <dfn>source</dfn> holding a set of actions, and it presses the
+    <em>current binding</em> of each action with a synthetic <code>KeyboardEvent</code> on <code>window</code>. A key is pressed when
+    its first source takes it and released when the last source lets go, which is what makes multi-touch (move with one thumb, jump and cast with
+    the other) and shared keys (Up is both climb and portal) behave. Because it reads bindings at press time, rebinding a key
+    rebinds the touch button too.</p>
+  <ul>
+    <li><strong>Layout</strong> (logical 1280×720): an 8-way d-pad bottom-left; Jump, Pick up (hold) and a 2×3 cluster showing half of
+      the current hotbar page bottom-right, with a flip button that cycles halves and pages; Spellbook, Items, Character,
+      Assignments, Honors and Menu along the top.</li>
+    <li><strong>Mode</strong> comes from the <code>touch</code> setting. In <code>auto</code> a real key press on a fine-pointer device
+      switches the overlay back off. The module also installs two page-wide touch fixes when imported: a block on iOS pinch-zoom and a
+      double-tap to <code>dblclick</code> shim, because the Inventory, Spellbook and Character windows use double-click to use, equip and place.</li>
+  </ul>
 
   <!-- ===================================================================== -->
   <h3 id="input-controls">The Controls window</h3>

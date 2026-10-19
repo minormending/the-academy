@@ -12,7 +12,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CHART_NAMES, CODE_LANGS, SHELL_IDS } from "./names.ts";
+import { CHART_NAMES, CODE_LANGS, SHELL_IDS, STAT_NAMES } from "./names.ts";
 import { formatProblems, validateFragments } from "./validate.ts";
 
 const SKIP_DIRS = new Set(["node_modules", "dist", ".git", ".claude", ".vite"]);
@@ -53,6 +53,7 @@ export function checkDocs(root, files = repoFiles(root)) {
     chartNames: CHART_NAMES,
     codeLangs: CODE_LANGS,
     shellIds: SHELL_IDS,
+    statNames: STAT_NAMES,
     fileLines: (p) => (p in files ? lineCount(files[p]) : undefined),
   });
 }

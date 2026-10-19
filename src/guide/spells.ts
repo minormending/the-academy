@@ -75,7 +75,8 @@ export function spellFacts(s: SkillDef): SpellFacts {
     if (mx > 1) effects.push(`Lv 1: ${modsText(s.passive(lv1))}`);
   }
   if (s.movement) effects.push(`Blinks ${fromTo(s.movement.distance(lv1), s.movement.distance(mx), ' px')}`);
-  if (s.summon) effects.push(`Lasts ${fromTo(s.summon.durationMs(lv1) / 1000, s.summon.durationMs(mx) / 1000, ' s')}, attacks every ${secs(s.summon.attackIntervalMs)}`);
+  // An interval at the engine's 100 ms floor is a trap's trigger poll (Grave Mine), not a rate of fire.
+  if (s.summon) effects.push(`Lasts ${fromTo(s.summon.durationMs(lv1) / 1000, s.summon.durationMs(mx) / 1000, ' s')}, ${s.summon.attackIntervalMs <= 100 ? 'strikes when a foe steps in' : `attacks every ${secs(s.summon.attackIntervalMs)}`}`);
   if (a?.projectile?.count && a.projectile.count(mx) > 1) effects.push(`Fires ${fromTo(a.projectile.count(lv1), a.projectile.count(mx))} projectiles`);
   if (a?.rain) effects.push(`${fromTo(a.rain.count(lv1), a.rain.count(mx))} impacts`);
   if (a?.bonusVs) effects.push(`×${a.bonusVs.mult} damage to ${AFFLICTED[a.bonusVs.status]} foes${a.bonusVs.consume ? ' (removes it)' : ''}`);

@@ -50,7 +50,7 @@ export function services(): GameServices {
   return current;
 }
 export function maybeServices(): GameServices | null { return current; }</code></pre>
-  <p>The object itself is declared at the end of the contracts (<a data-src="src/core/types.ts#L612">types.ts:612</a>):</p>
+  <p>The object itself is declared at the end of the contracts (<a data-src="src/core/types.ts#L625">types.ts:625</a>):</p>
   <pre><code class="lang-ts">export interface GameServices {
   scene: Phaser.Scene;   // the GameScene
   game: IGameApi;
@@ -115,7 +115,7 @@ export function maybeServices(): GameServices | null { return current; }</code><
 
   <h3 id="architecture-contracts">The contracts in types.ts</h3>
   <p>
-    <a data-src="src/core/types.ts">types.ts</a> (about 620 lines) is the shared language. Its header says builder agents
+    <a data-src="src/core/types.ts">types.ts</a> (about 640 lines) is the shared language. Its header says builder agents
     must not edit it; contract changes went through the lead. It has two kinds of declaration:
     <dfn>data definitions</dfn> (plain objects authored in <code>src/data/</code> and <code>src/skills/</code>) and
     <dfn>service interfaces</dfn> (the live systems above).
@@ -129,17 +129,17 @@ export function maybeServices(): GameServices | null { return current; }</code><
       <tr><td><a data-src="src/core/types.ts#L124">Skills</a></td><td><code>SkillDef</code>, <code>AttackSpec</code> and its seven <code>AttackPattern</code>s, <code>BuffSpec</code>, <code>SummonSpec</code>, <code>MovementSpec</code>, <code>SkillContext</code></td><td><code>skills/*.ts</code></td></tr>
       <tr><td><a data-src="src/core/types.ts#L236">VFX</a></td><td><code>VfxOptions</code>, <code>VfxFn</code></td><td><code>skills/*Vfx.ts</code>, <code>art/particles.ts</code></td></tr>
       <tr><td><a data-src="src/core/types.ts#L261">Audio</a></td><td><code>SfxKey</code>, <code>MusicKey</code></td><td><code>systems/audio/</code></td></tr>
-      <tr><td><a data-src="src/core/types.ts#L272">Items</a></td><td><code>ItemDef</code>, <code>ItemStack</code>, <code>DropEntry</code>, <code>EquipSlot</code></td><td><code>data/items.ts</code></td></tr>
-      <tr><td><a data-src="src/core/types.ts#L303">Monsters</a></td><td><code>MonsterDef</code>, <code>IMonster</code></td><td><code>data/monsters.ts</code></td></tr>
-      <tr><td><a data-src="src/core/types.ts#L348">Maps</a></td><td><code>MapDef</code> with platforms, walls, ropes, portals, spawns, NPC placements; <code>IMapInstance</code></td><td><code>data/maps.ts</code></td></tr>
-      <tr><td><a data-src="src/core/types.ts#L396">NPCs, dialog, quests</a></td><td><code>NpcDef</code>, <code>DialogSpec</code>, <code>ShopSpec</code>, <code>QuestDef</code>, <code>QuestProgress</code></td><td><code>data/npcs.ts</code>, <code>data/quests.ts</code>, <code>data/storyQuests.ts</code></td></tr>
-      <tr><td><a data-src="src/core/types.ts#L431">Player state</a></td><td><code>PlayerState</code> (the save), <code>HOTBAR_SIZE</code> = 24, <code>HOTBAR_PAGE_SIZE</code> = 12</td><td><code>SaveSystem.newPlayerState</code></td></tr>
-      <tr><td><a data-src="src/core/types.ts#L458">Service interfaces</a></td><td><code>IPlayer</code>, <code>IMonsterManager</code>, <code>IDropManager</code>, <code>ISkillSystem</code>, <code>ICombatSystem</code>, <code>IProgression</code>, <code>INpcManager</code>, <code>IAudio</code>, <code>IGameApi</code>, <code>IUI</code>, <code>GameServices</code></td><td>systems, entities, UI</td></tr>
+      <tr><td><a data-src="src/core/types.ts#L273">Items</a></td><td><code>ItemDef</code>, <code>ItemStack</code>, <code>DropEntry</code>, <code>EquipSlot</code></td><td><code>data/items.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L304">Monsters</a></td><td><code>MonsterDef</code>, <code>IMonster</code></td><td><code>data/monsters.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L349">Maps</a></td><td><code>MapDef</code> with platforms, walls, ropes, portals, spawns, NPC placements; <code>IMapInstance</code></td><td><code>data/maps.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L397">NPCs, dialog, quests</a></td><td><code>NpcDef</code>, <code>DialogSpec</code>, <code>ShopSpec</code>, <code>QuestDef</code>, <code>QuestProgress</code></td><td><code>data/npcs.ts</code>, <code>data/quests.ts</code>, <code>data/storyQuests.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L432">Player state</a></td><td><code>PlayerState</code> (the save), <code>HOTBAR_SIZE</code> = 24, <code>HOTBAR_PAGE_SIZE</code> = 12</td><td><code>SaveSystem.newPlayerState</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L471">Service interfaces</a></td><td><code>IPlayer</code>, <code>IMonsterManager</code>, <code>IDropManager</code>, <code>ISkillSystem</code>, <code>ICombatSystem</code>, <code>IProgression</code>, <code>INpcManager</code>, <code>IAudio</code>, <code>IGameApi</code>, <code>IUI</code>, <code>GameServices</code></td><td>systems, entities, UI</td></tr>
     </tbody>
   </table>
   <p>
     A service interface is deliberately narrow. The skill engine, for example, exposes only what other systems need
-    (<a data-src="src/core/types.ts#L514">types.ts:514</a>):
+    (<a data-src="src/core/types.ts#L527">types.ts:527</a>):
   </p>
   <pre><code class="lang-ts">export interface ISkillSystem {
   tryCast(skillId: string): CastResult;
@@ -410,7 +410,7 @@ export function playVfx(scene: Phaser.Scene, key: string | undefined, o: VfxOpti
 
   <h3 id="architecture-frame">The frame flow</h3>
   <p>
-    <code>GameScene</code> (<a data-src="src/scenes/GameScene.ts#L63">GameScene.ts:63</a>) builds the services in a fixed
+    <code>GameScene</code> (<a data-src="src/scenes/GameScene.ts#L65">GameScene.ts:65</a>) builds the services in a fixed
     order, then wires events, keys and settings, loads the saved map and fades in:
   </p>
   <pre><code class="lang-ts">  create() {
@@ -443,7 +443,7 @@ export function playVfx(scene: Phaser.Scene, key: string | undefined, o: VfxOpti
     this.exposeDebug();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =&gt; this.teardown());
   }</code></pre>
-  <p>Every frame, Phaser calls <code>update(time, delta)</code>, which runs each system once, in this order (<a data-src="src/scenes/GameScene.ts#L327">GameScene.ts:327</a>):</p>
+  <p>Every frame, Phaser calls <code>update(time, delta)</code>, which runs each system once, in this order (<a data-src="src/scenes/GameScene.ts#L330">GameScene.ts:330</a>):</p>
   <pre class="mermaid">flowchart LR
   a["progression<br>regen, autosave"] --> b["player<br>move, physics"]
   b --> c["monsters<br>AI, contact dmg"]

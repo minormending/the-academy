@@ -36,7 +36,7 @@
   rewards: { exp?: number; mesos?: number; items?: { itemId: string; qty: number }[] };
 }
 export interface QuestProgress { status: 'active' | 'complete' | 'turned_in'; counts: number[]; }</code></pre>
-  <p>(<a data-src="src/core/types.ts#L413">types.ts:413</a>.) A quest is pure data. The player's progress is a
+  <p>(<a data-src="src/core/types.ts#L414">types.ts:414</a>.) A quest is pure data. The player's progress is a
     <code>QuestProgress</code> in <code>state.quests[questId]</code>, with one count per objective. A quest that is
     not in that record has never been accepted.</p>
   <table>
@@ -97,7 +97,7 @@ const xp = (level: number, frac: number) =&gt; Math.round(expToNext(level) * fra
     Whisperwood), Shroom Monarch (14), Frostfang Alpha (24), Magmaw (34) and Tempest Wyrm (44); the bosses
     themselves are in <a href="#monsters">the monsters section</a>. "Before the hunt" matters: kill counts only move
     for accepted quests. Once handed in, Finn offers the bounty again: <code>bountyRenewOptions</code> (which calls the shared
-    <code>renewOptions</code>, <a data-src="src/data/npcScripts.ts#L965">npcScripts.ts:965</a>) deletes the
+    <code>renewOptions</code>, <a data-src="src/data/npcScripts.ts#L983">npcScripts.ts:983</a>) deletes the
     old record and accepts it fresh.</p>
 
   <!-- ===================================================================== -->
@@ -176,7 +176,7 @@ const xp = (level: number, frac: number) =&gt; Math.round(expToNext(level) * fra
     declaration, the violet light leaking from the Forbidden Wing, the Professors' missing notes, and the Lich
     Archon, the Academy's former Archmage Valdris. Quest data lives in
     <a data-src="src/data/storyQuests.ts">storyQuests.ts</a>; every line of dialog for it lives in
-    <code>STORY_SCRIPT</code> in <a data-src="src/data/npcScripts.ts#L218">npcScripts.ts:218</a>.</p>
+    <code>STORY_SCRIPT</code> in <a data-src="src/data/npcScripts.ts#L236">npcScripts.ts:236</a>.</p>
 
   <table>
     <thead><tr><th>#</th><th>Step (id)</th><th>Run by</th><th>Lv</th><th>Year gate</th><th>Objectives</th></tr></thead>
@@ -260,10 +260,10 @@ export function storyStepUnlocked(v: StoryStateView, id: string): boolean {
       <li><strong>The old Lich side quest.</strong> <code>q_maelis_archon</code> was the same deed as the Final
         Thesis. <code>supersededByStory</code> hides it once the story step is available, and handing in the Final
         Thesis marks the untouched side quest <code>turned_in</code> (<code>retireSideArchon</code>,
-        <a data-src="src/data/npcScripts.ts#L362">npcScripts.ts:362</a>). It really is repeatable afterwards: once the
+        <a data-src="src/data/npcScripts.ts#L380">npcScripts.ts:380</a>). It really is repeatable afterwards: once the
         Final Thesis is handed in, Maelis lists "[Repeat] The Lich Archon (again)" and re-posts it the same way Finn
         re-posts Field Bounties (<code>archonRenewOptions</code>,
-        <a data-src="src/data/npcScripts.ts#L999">npcScripts.ts:999</a>), so the Sigil can be farmed for the bounty
+        <a data-src="src/data/npcScripts.ts#L1017">npcScripts.ts:1017</a>), so the Sigil can be farmed for the bounty
         reward.</li>
       <li><strong>No skipping ahead.</strong> The Year gates mean a student who never sits the Year 3 Exam stays at
         Pages in the Snow, however high their level.</li>
@@ -319,7 +319,7 @@ const bye = (label = 'Goodbye.'): DialogOption =&gt; ({ label, closes: true });<
   ST -- complete --> E3["hand in, then confirm"]
   ST -- turned_in --> E4["'Make me a Flamebinder' → advanceJob"]
   E3 --> E4</pre>
-  <p>(<a data-src="src/data/npcScripts.ts#L750">npcScripts.ts:750</a>.) If the exam's quest data were missing,
+  <p>(<a data-src="src/data/npcScripts.ts#L768">npcScripts.ts:768</a>.) If the exam's quest data were missing,
     the script offers the advancement anyway rather than soft-locking the student.</p>
 
   <h4>Campus staff</h4>
@@ -329,7 +329,7 @@ const bye = (label = 'Goodbye.'): DialogOption =&gt; ({ label, closes: true });<
       mesos. Purchases call <code>buyWithMerits</code>; prices and stock are in
       <a href="#progression-merits">progression</a>.</li>
     <li><strong>Tilda</strong> builds her stock from every priced equip up to level max(10, level + 8), hiding other
-      Schools' locked gear (<a data-src="src/data/npcScripts.ts#L927">npcScripts.ts:927</a>).</li>
+      Schools' locked gear (<a data-src="src/data/npcScripts.ts#L945">npcScripts.ts:945</a>).</li>
     <li><strong>Finn</strong> gives tips that never repeat twice in a row, and re-posts finished Field Bounties.</li>
   </ul>
 
@@ -337,7 +337,7 @@ const bye = (label = 'Goodbye.'): DialogOption =&gt; ({ label, closes: true });<
   <p>Above each NPC floats a yellow <strong>!</strong> (something new) or a green <strong>!</strong> (something to
     hand in). <code>npcNotice</code> decides which by checking, in order: story steps this NPC runs, side quests,
     Maelis's "ready to declare" at level 10, and for a Professor, the student's pending Exam
-    (<a data-src="src/data/npcScripts.ts#L495">npcScripts.ts:495</a>). A hand-in always wins over "new".</p>
+    (<a data-src="src/data/npcScripts.ts#L513">npcScripts.ts:513</a>). A hand-in always wins over "new".</p>
 
   <details class="advanced"><summary>Advanced: writing and extending scripts safely</summary>
     <ul>
@@ -351,7 +351,7 @@ const bye = (label = 'Goodbye.'): DialogOption =&gt; ({ label, closes: true });<
         graduation Merits could be lost on reload.</li>
       <li><strong>Scripts must not throw.</strong> <code>runNpcScript</code> wraps every script; on an exception
         it logs and shows "..." with a goodbye button
-        (<a data-src="src/data/npcScripts.ts#L1039">npcScripts.ts:1039</a>). An NPC with no entry in
+        (<a data-src="src/data/npcScripts.ts#L1057">npcScripts.ts:1057</a>). An NPC with no entry in
         <code>SCRIPTS</code> still offers its story and side quests with a generic greeting.</li>
       <li><strong>Adding an NPC</strong>: an <code>NpcDef</code> in npcs.ts, a placement in a map, and optionally a
         script in <code>SCRIPTS</code>. Quests whose <code>giver</code> is the new id appear in its dialog and markers
@@ -420,7 +420,7 @@ const bye = (label = 'Goodbye.'): DialogOption =&gt; ({ label, closes: true });<
     "Graduation Day!" banner; its rewards are the Arcane Amulet, 10 Power Elixirs and 50,000 mesos. The credits are
     started by the UI, not the script:</p>
   <pre><code class="lang-ts">    if (questId === GRADUATION_QUEST_ID &amp;&amp; now === 'turned_in' &amp;&amp; prev !== 'turned_in' &amp;&amp; this.started) this.credits.arm();</code></pre>
-  <p>(<a data-src="src/ui/UIRoot.ts#L203">UIRoot.ts:203</a>.) <code>arm()</code> marks the roll pending and starts
+  <p>(<a data-src="src/ui/UIRoot.ts#L209">UIRoot.ts:209</a>.) <code>arm()</code> marks the roll pending and starts
     loading the art credits; the roll itself begins on the first frame with no dialog, shop or death prompt open, so
     the Headmistress finishes her speech first.</p>
   <pre class="mermaid">sequenceDiagram
@@ -447,7 +447,7 @@ const bye = (label = 'Goodbye.'): DialogOption =&gt; ({ label, closes: true });<
 
   <p>The <dfn>Trial Hall</dfn> (map <code>trial_hall</code>) is a replayable wave-survival arena. Its door is on
     the balcony of the Headmistress's tower on campus, reached by the ladder at x 1392
-    (<a data-src="src/data/maps.ts#L53">maps.ts:53</a>). The hall has no natural spawns and is not a safe map.
+    (<a data-src="src/data/maps.ts#L54">maps.ts:54</a>). The hall has no natural spawns and is not a safe map.
     <a data-src="src/systems/ArenaSystem.ts">ArenaSystem.ts</a> runs the waves; the DOM panel
     <a data-src="src/ui/arenaPanel.ts">arenaPanel.ts</a> mounts only while you are in the hall, reads
     <code>getArena()?.view()</code> every frame and calls <code>begin()</code> / <code>forfeit()</code>.</p>

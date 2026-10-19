@@ -120,9 +120,9 @@ export const AP_PER_LEVEL = 5;</code></pre>
     </tbody>
   </table>
   <p>Multi-hit skills split the total across lines (three lines of 90% is about 270%). Max skill levels are 10
-    for Year 1, 15–20 for Years 2–4 and 10 for ultimates. For example, Fire's Year 2 primary Flame Arrow scales
+    for Year 1, 10–20 for Years 2–4 (the Phase 9 spells are mostly 10–15) and 10 for ultimates. For example, Fire's Year 2 primary Flame Arrow scales
     from 170% to 262% over 20 levels, right on the tier-2 band
-    (<a data-src="src/skills/fire.ts#L97">fire.ts:97</a>). How a percentage turns into damage is covered in
+    (<a data-src="src/skills/fire.ts#L99">fire.ts:99</a>). How a percentage turns into damage is covered in
     <a href="#skills">the skills section</a>.</p>
 
   <figure data-chart="matk-curve"><figcaption>Reference magic attack against what the base formula gives an
@@ -372,9 +372,9 @@ export function applyModifiers(base: DerivedStats, mods: StatModifier[]): Derive
       <tr><td>Total by level 50</td><td>3 + 49 × 3 + 3 × 3 = <strong>159</strong></td><td>245</td></tr>
     </tbody>
   </table>
-  <p>A School lineage (Year 1 core plus that School's 24 spells) has between 369 and 464 purchasable spell levels
-    (Holy 369, Fire 399, Ice 439, Lightning 449, Shadow 464, summing the <code>maxLevel</code> values in
-    <code>src/skills/*.ts</code> and leaving out the free Arcane Bolt level), so a graduate can fill roughly a third to two fifths of their
+  <p>A School lineage (Year 1 core plus that School's <span data-stat="spells-school">32</span> spells) has between <span data-stat="levels-min">579</span> and <span data-stat="levels-max">599</span> purchasable spell levels
+    (summing the <code>maxLevel</code> values in <code>src/skills/*.ts</code> and leaving out the free Arcane Bolt level),
+    against the 159 SP a graduate has, so a graduate can fill a little over a quarter of their
     spellbook. That is the Phase 4 goal: "nobody can max everything — builds are choices".</p>
 
   <p>The spellbook's learn button calls <code>canLearn</code>:</p>
@@ -394,7 +394,7 @@ export function applyModifiers(base: DerivedStats, mods: StatModifier[]): Derive
     anywhere in the student's <dfn>lineage</dfn> (the chain of jobs from Apprentice to the current one, from
     <code>Registry.jobLineage</code>), it isn't maxed, and every <code>requires</code> entry is met. Requirements are
     kept shallow so each Year has two or three roots: Flame Burst needs Flame Arrow 3, Kindle needs Flame Arrow 5
-    (<a data-src="src/skills/fire.ts#L110">fire.ts:110</a>). <code>learnSkill</code> spends 1 SP and puts a
+    (<a data-src="src/skills/fire.ts#L112">fire.ts:112</a>). <code>learnSkill</code> spends 1 SP and puts a
     newly learned castable spell in the first free hotbar slot on either page, skipping slots 10 and 11 of each
     page (the potion keys).</p>
 
@@ -507,8 +507,8 @@ export function yearOfTier(tier: number): number { return Math.max(1, Math.min(4
     GameScene swap the player's sprite sheet (<code>player.setJob</code>) and play the advancement effect.</p>
 
   <figure data-chart="spells-by-year"><figcaption>Spells per School per Year, stacked by kind. Year 1 is the same
-    ten core spells for everyone; every School then has exactly eight per Year (24 in all), and attacks are the
-    largest share in every School (11 or 12 of the 24). Compare where each School puts its buffs, passives and
+    <span data-stat="spells-core">14</span> core spells for everyone; every School then has the same shape, <span data-stat="spells-y2">11</span> in Year 2, <span data-stat="spells-y3">11</span> in Year 3 and <span data-stat="spells-y4">10</span> in Year 4
+    (<span data-stat="spells-school">32</span> in all), and attacks are the largest share in every School. Compare where each School puts its buffs, passives and
     summons: that is most of what makes the Schools play differently.</figcaption></figure>
 
   <details class="advanced"><summary>Advanced: where the Exam gate actually lives</summary>
@@ -578,8 +578,8 @@ export function yearOfTier(tier: number): number { return Math.max(1, Math.min(4
 
   <p><dfn>Academy Merits</dfn> are a second currency stored in <code>state.merits</code> (optional in
     <code>PlayerState</code>, so pre-Phase 5 saves load with 0). They are earned in the Trial Hall
-    (<code>meritsForWave(n) = 2 + 2n</code>, doubled on every fifth wave, so ten waves pay 164) and through the
-    1,000-Merit graduation award, and they are spent only at Bram's Merit Exchange.</p>
+    (<code>meritsForWave(n) = 2 + 2n</code>, doubled on every fifth wave, so ten waves pay 164), through the
+    1,000-Merit graduation award and as the reward for <a href="#progression-honors">Academy Honors</a>, and they are spent only at Bram's Merit Exchange.</p>
   <pre><code class="lang-ts">  addMerits(amount: number) {
     amount = Math.floor(amount);
     if (!amount) return;
@@ -598,8 +598,54 @@ export function yearOfTier(tier: number): number { return Math.max(1, Math.min(4
       <tr><td>Field Trophies</td><td>Ring of the Slow Garden (400), Monarch's Signet (700), Alpha Fang Necklace (1,200), Magmaw Gauntlets (2,000), Wyrmheart Amulet (3,000)</td></tr>
     </tbody>
   </table>
-  <p>(<code>MERIT_SHOP</code>, <a data-src="src/data/npcScripts.ts#L854">npcScripts.ts:854</a>.) The trophies are
+  <p>(<code>MERIT_SHOP</code>, <a data-src="src/data/npcScripts.ts#L872">npcScripts.ts:872</a>.) The trophies are
     the field bosses' rare accessory drops, offered here for students who don't want to farm them.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="progression-honors">Academy Honors</h3>
+
+  <p><dfn>Academy Honors</dfn> are the game's achievements: <span data-stat="honors">60</span> of them in six categories (Studies, Schools, Field Work, Trial Hall,
+    Academy Life and Secret). Each pays Merits once and some unlock a <dfn>title</dfn> that shows under the student's name tag.
+    They are all data in <a data-src="src/data/honors.ts#L34">honors.ts</a>: an <code>HonorDef</code> has a
+    <code>measure(view)</code> and a <code>target(view)</code>, both pure functions of the saved <code>PlayerState</code>
+    plus a bag of counters, and the honor is earned when <code>measure &gt;= target</code>. The same two functions draw
+    the progress bars in the Honors window (<kbd>O</kbd> by default, or the Honors quick button), so the bar and the award can't disagree.</p>
+
+  <pre class="mermaid">flowchart LR
+  BUS["event bus<br>monster:killed, skill:cast,<br>map:changed, ui:dialog, ..."] --> HS["HonorsSystem<br>counters"]
+  HS --> ST[("PlayerState.honors<br>done + counters + title")]
+  ST --> EV["evaluate()<br>measure &gt;= target?"]
+  EV -- "newly earned" --> GR["grant(): log, banner,<br>addMerits, save"]
+  ST --> WIN["Honors window<br>progress bars, titles"]
+  ST --> NT["name tag title"]</pre>
+
+  <p>The saved shape is small (<a data-src="src/core/types.ts#L460">types.ts:460</a>): <code>done</code> maps an honor id to
+    the time it was earned, <code>counters</code> holds tallies the save does not otherwise remember (kills per zone and per
+    monster, casts, deaths, visited maps, people talked to, Merits earned and spent, the fastest Lich Archon kill), and
+    <code>title</code> is the chosen title. <a data-src="src/systems/HonorsSystem.ts#L57">HonorsSystem</a> is created by GameScene next to Progression
+    (<a data-src="src/scenes/GameScene.ts#L72">GameScene.ts:72</a>), subscribes to the bus to keep the counters, and
+    runs <code>evaluate()</code> on a throttle: soon after something changed, and at least every couple of seconds.</p>
+
+  <details class="advanced"><summary>Advanced: invariants of the honors system</summary>
+    <ul>
+      <li><strong>An honor can never pay twice.</strong> <code>evaluate()</code> writes <code>done[id]</code> <em>before</em>
+        it grants anything (<a data-src="src/systems/HonorsSystem.ts#L243">HonorsSystem.ts:243</a>), so a handler that throws or a
+        re-entrant <code>player:changed</code> finds the honor already marked. Granting Merits goes through
+        <code>addMerits</code>, which emits <code>player:changed</code>; a <code>granting</code> flag keeps that from being counted
+        as Merits <em>earned</em> by play.</li>
+      <li><strong>Old saves are backfilled.</strong> A save with no <code>honors</code> field (written before the system existed)
+        gets counters derived from what it does know: level, job, exams, graduation, quest kill counts, the current map and Merits.
+        Whatever that already satisfies is granted in one summary banner instead of a banner per honor.
+        <code>repairHonors</code> (<a data-src="src/systems/SaveSystem.ts#L373">SaveSystem.ts:373</a>) deliberately leaves the field
+        <em>undefined</em> when it is absent so the system can tell a legacy save from a new one, keeps unknown honor ids (they may
+        come from a newer build) and clamps counters.</li>
+      <li><strong>Ids are save data.</strong> Like skills and maps, an honor id is never renamed, for the reasons in
+        <a href="#saves-ids">Why ids never get renamed</a>.</li>
+      <li><strong>Honors can depend on content.</strong> <code>requiresMaps</code> hides an honor until its maps exist
+        (<code>availableHonors()</code>), so the branch-zone honors are only offered when those zones are in the build.</li>
+      <li><strong>Banners are rationed.</strong> Honor banners wait behind level-up, exam and map-name banners and appear one at a time.</li>
+    </ul>
+  </details>
 
   <!-- ===================================================================== -->
   <h3 id="progression-items">Items, equipment, inventory and shops</h3>

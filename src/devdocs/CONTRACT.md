@@ -48,6 +48,7 @@ safely.
 | Key term | `<dfn>service locator</dfn>` on first use |
 | Keys | `<kbd>Tab</kbd>` |
 | Table | plain `<table>` with `<thead>` |
+| Live number | `<span data-stat="spells">174</span>` (a NAME from the list below; the text inside is a fallback) |
 
 Code excerpts must be copied from the real source (shortened with `// …`
 where needed), never invented. Every claim must match the code. Line numbers
@@ -64,7 +65,7 @@ right line.
 | `03-boot.html` | `boot` | `main.ts`, Boot / Title / Game scenes, asset preload, lazy art generation, map changes, teardown |
 | `04-input.html` | `input` | Bindings, latched presses, hotbar pages, cast buffer, settings, gamepad bridge |
 | `05-physics.html` | `physics` | Player movement, one-way platforms, ropes and ladders, blink, hit reaction |
-| `06-skills.html` | `skills` | SkillDef, cast flow, the seven attack patterns, VFX conventions, buffs, summons, combat math, statuses |
+| `06-skills.html` | `skills` | SkillDef, cast flow, the seven attack patterns, VFX conventions, buffs, summons, the Phase 9 spell shapes and their lifetime helpers, combat math, statuses |
 | `07-progression.html` | `progression` | Balance curves, derived stats, SP/AP, jobs as school Years, exams, respec, merits |
 | `08-world.html` | `world` | MapDef, MapLoader, platforms/walls/ropes/portals, parallax and themes, ambient, the map graph |
 | `09-monsters.html` | `monsters` | MonsterDef, Monster AI, MonsterManager, drops, field bosses, the Lich Archon, Trial Hall waves |
@@ -96,6 +97,28 @@ right line.
 
 If you need a chart that isn't listed, describe it in your report instead of
 inventing a NAME.
+
+## Live numbers
+
+Prose that states a count of game data (how many spells, how many per School) should not be typed and forgotten.
+Wrap the number in `<span data-stat="NAME">…</span>`; the page replaces the text with the value computed from the
+game's data (`spellStats` in `charts/data.ts`) once the game modules load. Type the current value inside the span
+as the fallback: it shows until then and is what search indexes. In `npm run dev`, a fallback that no longer
+matches the data is listed in the red banner, so a stale number is noticed the next time someone opens the page.
+`check.mjs` rejects an unknown NAME.
+
+| NAME | Value |
+|---|---|
+| `spells` | Every spell in the Registry |
+| `spells-core` | Year 1 (Apprentice) spells |
+| `spells-school` | Spells in one School (the largest School, if they ever differ) |
+| `spells-y2`, `spells-y3`, `spells-y4` | Spells in one School's Year 2, 3 and 4 |
+| `monsters`, `bosses`, `field-bosses`, `maps`, `items`, `quests`, `quests-story`, `npcs`, `jobs`, `honors` | The same counts the `content-counts` chart draws (plus the Academy Honors): monster types, those flagged `boss`, the field bosses, maps, items, quests (side plus story), the story questline alone, NPCs, jobs |
+| `lines-total`, `lines-skills`, `lines-art` | Source lines of `src/**/*.ts` outside the docs folders, in all and in `skills/` and `art/`, rounded ("about"): the total to 1,000, a folder to 100 |
+| `levels-min`, `levels-max` | Fewest and most purchasable spell levels in one School's lineage (Year 1 plus that School, Arcane Bolt's free first level left out) |
+
+Counts that no stat covers are still typed; keep them current when content changes, or point at the
+`content-counts` chart instead.
 
 ## Checking your work
 

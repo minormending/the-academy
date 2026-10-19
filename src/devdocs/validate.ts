@@ -62,6 +62,8 @@ export interface ValidateOptions {
   chartNames: readonly string[];
   /** Code languages the highlighter knows. */
   codeLangs: readonly string[];
+  /** Names a `data-stat` span may use (names.ts). Omit to skip the check. */
+  statNames?: readonly string[];
   /** Ids the shell creates (links may target them; fragments must not reuse them). */
   shellIds?: readonly string[];
   /**
@@ -136,6 +138,8 @@ export function validateFragments(frags: readonly Fragment[], opts: ValidateOpti
       if (t.attrs["data-chart"] !== undefined && !charts.has(t.attrs["data-chart"])) {
         bad(`unknown chart "${t.attrs["data-chart"]}" (see CONTRACT.md § Charts)`);
       }
+      const stat = t.attrs["data-stat"];
+      if (stat !== undefined && opts.statNames && !opts.statNames.includes(stat)) bad(`unknown data-stat "${stat}" (see CONTRACT.md § Live numbers)`);
       const href = t.attrs.href;
       if (t.name === "a" && href !== undefined && href.startsWith("#")) links.push({ file, target: decodeURIComponent(href.slice(1)) });
       const ds = t.attrs["data-src"];

@@ -19,6 +19,16 @@ export const CHART_NAMES = [
 ] as const;
 export type ChartName = (typeof CHART_NAMES)[number];
 
+/**
+ * Every `<span data-stat="NAME">fallback</span>` the page can fill from the game's data (CONTRACT.md § Live numbers).
+ * Computed by `spellStats` in charts/data.ts.
+ */
+export const STAT_NAMES = [
+  "spells", "spells-core", "spells-school", "spells-y2", "spells-y3", "spells-y4", "levels-min", "levels-max",
+  "lines-total", "lines-skills", "lines-art",
+  "honors", "monsters", "bosses", "field-bosses", "maps", "items", "quests", "quests-story", "npcs", "jobs",
+] as const;
+
 /** Ids the page shell itself creates; fragments may link to them but not reuse them. */
 export const SHELL_IDS = ["top", "contents", "cover", "inside", "search", "search-results", "main"] as const;
 

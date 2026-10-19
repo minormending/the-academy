@@ -44,6 +44,15 @@ export const BUILDS: Record<School, Build[]> = {
       ],
       notes: ['Kindle up, then Flame Arrow and later Blazing Orb on repeat.', 'Overheat trades defence for damage: pop it when the boss is busy elsewhere.', 'Immolation costs HP; keep a Red Potion key under your finger.'],
     },
+    {
+      name: 'Trapper', style: 'Mines on the approach, brands on the survivors, and fire that spreads on its own. Fight from where you are standing.',
+      years: [
+        { fire_arrow: 10, fire_firebomb: 3, fire_cinder_mine: 13, fire_kindling_brand: 12, fire_flamethrower: 6, fire_overheat: 8 },
+        { fire_flashover: 15, fire_vent_heat: 10, fire_orb: 13, fire_pyre_mastery: 10 },
+        { fire_last_ember: 12, fire_inferno_lance: 15, fire_inferno_heart: 9 },
+      ],
+      notes: ['Plant Cinder Mines between you and the pack; they arm after half a second and erupt when a foe steps on them.', 'Kindling Brand up to three foes: a branded foe that dies bursts and lights its neighbours. Flashover on a burning target then ignites everything around it.', 'Overheat, then Vent Heat to cash it in for a blast: the fresher the buff, the bigger the blast. Last Ember hits hardest when your HP is low, so save it for the moment a boss has you cornered.'],
+    },
   ],
   ice: [
     {
@@ -63,6 +72,15 @@ export const BUILDS: Record<School, Build[]> = {
         { ice_glacial_lance: 20, ice_permafrost: 10, ice_hoarfrost_relay: 6 },
       ],
       notes: ['Frost Armor and Rime Guard make you the sturdiest student in the Academy.', 'Icicle Lance and Glacial Lance pierce lines of monsters.', 'Restorative Thaw is your heal: use it early, not at the last sliver.'],
+    },
+    {
+      name: 'Rime Tactician', style: 'Set the trap, mark the target, cash it in. Chill, freeze and thaw all pay you something.',
+      years: [
+        { ice_frost_bolt: 10, ice_cold_snap: 14, ice_rime_snare: 10, ice_rime_brand: 10, ice_frost_nova: 5, ice_frost_armor: 2, ice_frost_step: 1 },
+        { ice_hail_loom: 15, ice_cold_exchange: 10, ice_fracture_route: 15, ice_lance: 8 },
+        { ice_diamond_reckoning: 15, ice_rime_recall: 10, ice_glacial_lance: 11 },
+      ],
+      notes: ['Rime Snare freezes the first group to step into it. Rime Brand marks one foe: three ice hits on it freeze it.', 'Cold Snap cashes in chill on a tight cluster for double damage. Cold Exchange thaws up to three frozen foes nearby and pays you MP for the privilege.', 'Hail Loom is a channel that lashes a line six times, harder on chilled foes; move or get hit and it breaks. Fracture Route cuts a chilling trail as you blink backward out of trouble.', 'Diamond Reckoning doubles its burst if Frost Armor or Diamond Barrier is up, and uses that armour up: do not cast it with the only thing keeping you alive. Rime Recall drops an anchor; recast it to snap back and freeze whatever stood there.'],
     },
   ],
   lightning: [
@@ -84,6 +102,15 @@ export const BUILDS: Record<School, Build[]> = {
       ],
       notes: ['Galvanic Needle and Capacitor Burst hit one target many times.', 'Ion Judgment and Rail of Heaven are the boss finishers.', 'Charge Reversal refills HP and MP in the middle of a long boss fight.'],
     },
+    {
+      name: 'Short Circuit', style: 'Brand, then discharge. Seals and fields hold the room while you skate and channel.',
+      years: [
+        { ltn_thunder_bolt: 12, ltn_ion_brand: 10, ltn_short_circuit: 15, ltn_grounding_seal: 15 },
+        { ltn_tesla_channel: 15, ltn_arc_skate: 15, ltn_blood_dynamo: 10, ltn_thunder_spear: 8 },
+        { ltn_tempest_reprisal: 10, ltn_storm_circuit: 15, ltn_arc_storm: 11 },
+      ],
+      notes: ['Ion Brand puts a long-lived shock on one foe; Short Circuit chains through three foes and consumes shock for 80% more damage.', 'Grounding Seal wakes for intruders and stuns them repeatedly. Storm Circuit shocks foes only while you stand inside it, so fight at its centre.', 'Arc Skate cuts three shocking lines along your real path. Tesla Channel needs you to stand still for a second.', 'Blood Dynamo trades up to 12% of your max HP for MP when you are dry. Tempest Reprisal answers up to three hits with a retaliation: pop it before a boss swing, not after.'],
+    },
   ],
   holy: [
     {
@@ -104,6 +131,15 @@ export const BUILDS: Record<School, Build[]> = {
       ],
       notes: ['Keep Bless and Holy Symbol up at all times.', 'Guardian Spirit and later Summon Seraph fight while you heal.', 'Salvation is the panic button: save it for the Lich\'s enrage.'],
     },
+    {
+      name: 'Verdict', style: 'Stun them, then judge them. Wards and a vow of blood hold the line, and a ray finishes it.',
+      years: [
+        { holy_arrow: 10, holy_heal: 5, holy_faith: 3, holy_smite: 5, holy_glyph: 10, holy_verdict: 14, holy_dawn_rush: 5 },
+        { holy_brand: 15, holy_martyr: 10, holy_retribution: 13, holy_shining_ray: 10 },
+        { holy_dawn_ray: 15, holy_sanctuary: 10, holy_halo_nova: 11 },
+      ],
+      notes: ['Warding Glyph stuns whatever steps on it; Brand of Judgment leaps between foes with a near-certain stun. Verdict hits a stunned target far harder.', 'Dawn Rush charges along the ground, hitting everything on the way and healing you more for each foe.', "Martyr's Vow spends a quarter of your current HP (never the last point) and then heals you strongly over five seconds. Retribution calls judgment on the nearest foe whenever you are hit, with a short pause between strikes.", 'Sanctuary absorbs damage, then bursts: the more it held, the harder it hits. Ray of Dawn is a channel; stunned foes burn brighter.'],
+    },
   ],
   shadow: [
     {
@@ -123,6 +159,15 @@ export const BUILDS: Record<School, Build[]> = {
         { shd_lich_shade: 15, shd_bone_dragon: 10, shd_veil_of_night: 5, shd_soul_reservoir: 6 },
       ],
       notes: ['Raise your servants before you pull, then Soul Drain to stay topped up.', 'Grave Skin and Bone Ward keep you alive while the summons tank.', 'Bone Dragon has a very long cooldown: open every boss fight with it.'],
+    },
+    {
+      name: 'Hexweaver', style: 'Poison and curse as setups, then spend them. Traps and wards do the waiting for you.',
+      years: [
+        { shd_shadow_bolt: 10, shd_hex: 10, shd_grave_mine: 10, shd_bitter_harvest: 15, shd_blood_tithe: 7 },
+        { shd_doom_seal: 15, shd_dirge_channel: 10, shd_umbra_passage: 10, shd_soul_drain: 13 },
+        { shd_hex_relay: 15, shd_soul_ward: 10, shd_death_scythe: 11 },
+      ],
+      notes: ['Grave Mine bursts into poison when a foe steps on it; Bitter Harvest then cleaves for double damage against poison and consumes it.', 'Doom Seal curses a zone and collapses it two seconds later, spending every curse in it. Hex Relay does the same to scattered foes, 1.8 times over.', 'Dirge Channel sends a wraith whose beams punish cursed foes. Umbra Passage cuts every foe along the blink.', 'Blood Tithe turns HP into MP when you are dry. Soul Ward pulses against cursed foes and drains a little life, so Hex first.'],
     },
   ],
 };

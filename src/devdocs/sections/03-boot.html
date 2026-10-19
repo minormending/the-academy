@@ -177,8 +177,8 @@ export function queueArtAssets(load: Phaser.Loader.LoaderPlugin): void {
     <tbody>
       <tr><td><code>particles</code></td><td>The shared white particle textures (<code>px_dot</code>, <code>px_soft</code>, <code>px_spark</code>…)</td><td>Every pixel VFX sheet and palette variant, built by <code>ensureSheet</code> on first use (<a data-src="src/art/particles.ts#L291">particles.ts:291</a>)</td></tr>
       <tr><td><code>characters</code></td><td>Pixel sources and the Apprentice sheet + anims</td><td>The other 15 job sheets, queued in the background as <code>job:&lt;id&gt;</code> (<a data-src="src/art/characters.ts#L189">characters.ts:189</a>)</td></tr>
-      <tr><td><code>monsters</code></td><td>Shared monster FX and drop textures</td><td>Each <code>monster_&lt;id&gt;</code> sheet, built by <code>ensureMonsterTexture</code> when a map binds or a monster spawns (<a data-src="src/art/monsterArt.ts#L2450">monsterArt.ts:2450</a>)</td></tr>
-      <tr><td><code>tiles</code></td><td>All world textures (pixel first, procedural fills gaps), then the <code>w__ready</code> marker</td><td>Nothing; <code>MapLoader</code> re-runs it if the marker is missing (<a data-src="src/world/MapLoader.ts#L79">MapLoader.ts:79</a>)</td></tr>
+      <tr><td><code>monsters</code></td><td>Shared monster FX and drop textures</td><td>Each <code>monster_&lt;id&gt;</code> sheet, built by <code>ensureMonsterTexture</code> when a map binds or a monster spawns (<a data-src="src/art/monsterArt.ts#L2572">monsterArt.ts:2572</a>)</td></tr>
+      <tr><td><code>tiles</code></td><td>All world textures (pixel first, procedural fills gaps), then the <code>w__ready</code> marker</td><td>Nothing; <code>MapLoader</code> re-runs it if the marker is missing (<a data-src="src/world/MapLoader.ts#L85">MapLoader.ts:85</a>)</td></tr>
       <tr><td><code>skills</code></td><td>Apprentice spell textures</td><td>Each School's textures and sheets, queued in the background</td></tr>
       <tr><td><code>vfx</code></td><td>Registers every VFX function (cheap: map inserts)</td><td>Per-School keys are wrapped by <code>lazyRegister</code></td></tr>
     </tbody>
@@ -229,7 +229,7 @@ export function queueArtAssets(load: Phaser.Loader.LoaderPlugin): void {
       <tr><td><a data-src="src/art/lazy.ts#L74"><code>lazyRegister(name, gen)</code></a></td><td>Returns a drop-in replacement for <code>registerVfx</code> whose wrapped functions call <code>ensureOnce</code> on their first play. After that the cost is one boolean check.</td></tr>
     </tbody>
   </table>
-  <p>A School wires all of this in three lines; Fire, from <a data-src="src/skills/fireVfx.ts#L15">fireVfx.ts:15</a>:</p>
+  <p>A School wires all of this in three lines; Fire, from <a data-src="src/skills/fireVfx.ts#L16">fireVfx.ts:16</a>:</p>
   <pre><code class="lang-ts">function buildFire(scene: Phaser.Scene): void {
   genTextures(scene);
   generateFireSheets(scene);
@@ -349,7 +349,7 @@ const registerVfx = lazyRegister('fire', buildFire);</code></pre>
     <code>init(data)</code>, then <code>create()</code>, then <code>update</code> every frame until another scene is
     started, which <dfn>shuts down</dfn> this one: Phaser destroys its display list, timers and tweens and emits
     <code>SHUTDOWN</code>. The constructor never runs again, so <code>init</code> must reset every per-run field
-    (<a data-src="src/scenes/GameScene.ts#L52">GameScene.ts:52</a>):
+    (<a data-src="src/scenes/GameScene.ts#L54">GameScene.ts:54</a>):
   </p>
   <pre><code class="lang-ts">  init(data: { state: PlayerState }) {
     this.initialState = data.state;
@@ -366,8 +366,8 @@ const registerVfx = lazyRegister('fire', buildFire);</code></pre>
     <code>window.arcana</code> and registers <code>teardown</code> for <code>SHUTDOWN</code>; it is reproduced in
     <a href="#architecture-frame">Architecture: the frame flow</a>. The only way back to the title is Esc → Quit to
     Title, which saves and calls <code>scene.start(SCENES.TITLE)</code>
-    (<a data-src="src/ui/miscWindows.ts#L115">miscWindows.ts:115</a>). That shuts the Game scene down and runs
-    <a data-src="src/scenes/GameScene.ts#L344">teardown()</a>:
+    (<a data-src="src/ui/miscWindows.ts#L116">miscWindows.ts:116</a>). That shuts the Game scene down and runs
+    <a data-src="src/scenes/GameScene.ts#L348">teardown()</a>:
   </p>
   <pre><code class="lang-ts">  private teardown() {
     const s = this.s;
@@ -411,7 +411,7 @@ const registerVfx = lazyRegister('fire', buildFire);</code></pre>
 
   <h3 id="boot-maps">Map changes: loadMapNow and changeMap</h3>
   <p>
-    <code>loadMapNow(mapId, portalId?)</code> (<a data-src="src/scenes/GameScene.ts#L139">GameScene.ts:139</a>) swaps the
+    <code>loadMapNow(mapId, portalId?)</code> (<a data-src="src/scenes/GameScene.ts#L142">GameScene.ts:142</a>) swaps the
     map immediately: it clears every system's per-map objects, destroys the old map, builds the new one with
     <code>loadMap</code>, records <code>state.mapId</code>, sets the physics and camera bounds, places the player at the
     named portal (or the map's default spawn), re-binds every system, starts the map's music, emits
@@ -420,7 +420,7 @@ const registerVfx = lazyRegister('fire', buildFire);</code></pre>
   </p>
   <p>
     Everything else calls <code>changeMap</code>, which wraps that in a fade
-    (<a data-src="src/scenes/GameScene.ts#L96">GameScene.ts:96</a>):
+    (<a data-src="src/scenes/GameScene.ts#L99">GameScene.ts:99</a>):
   </p>
   <pre><code class="lang-ts">  changeMap(mapId: string, portalId?: string) {
     if (!Registry.map(mapId)) { console.warn(`[game] unknown map ${mapId}`); return; }

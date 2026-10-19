@@ -21,7 +21,7 @@
   <table>
     <thead><tr><th>Year (tier)</th><th>Level</th><th>Fire</th><th>Ice</th><th>Lightning</th><th>Holy</th><th>Shadow</th></tr></thead>
     <tbody>
-      <tr><td>1</td><td>1</td><td colspan="5">Apprentice (everyone; 10 core spells)</td></tr>
+      <tr><td>1</td><td>1</td><td colspan="5">Apprentice (everyone; <span data-stat="spells-core">14</span> core spells)</td></tr>
       <tr><td>2</td><td>10</td><td>Pyromancer</td><td>Cryomancer</td><td>Stormcaller</td><td>Cleric</td><td>Occultist</td></tr>
       <tr><td>3</td><td>25</td><td>Flamebinder</td><td>Frostbinder</td><td>Stormbinder</td><td>Priest</td><td>Necromancer</td></tr>
       <tr><td>4</td><td>40</td><td>Inferno Sage</td><td>Glacial Sage</td><td>Tempest Sage</td><td>Hierophant</td><td>Umbral Sage</td></tr>
@@ -30,10 +30,11 @@
   <p>
     The level thresholds are <code>JOB_LEVELS = { 1: 1, 2: 10, 3: 25, 4: 40 }</code>
     (<a data-src="src/core/constants.ts#L20">constants.ts:20</a>); the jobs themselves are in
-    <a data-src="src/data/jobs.ts#L14">src/data/jobs.ts</a>. Each School has 24 spells, 8 per Year from Year 2 to 4,
+    <a data-src="src/data/jobs.ts#L14">src/data/jobs.ts</a>. Each School has <span data-stat="spells-school">32</span> spells (<span data-stat="spells-y2">11</span> in Year 2, <span data-stat="spells-y3">11</span> in Year 3 and <span data-stat="spells-y4">10</span> in Year 4),
     with two ultimates in Year 4. Skill points come at 3 per level, so nobody can max everything and builds are choices
-    (a Tome of Unlearning lets you respec a Year). The world is eight maps: the campus (Academy Grounds), six field zones
-    from Whisperwood (levels 1–8) to the Arcane Sanctum (45–50), and the Trial Hall wave arena. Five rare
+    (a Tome of Unlearning lets you respec a Year). The world is <span data-stat="maps">11</span> maps: the campus (Academy Grounds), six field zones
+    from Whisperwood (levels 1–8) to the Arcane Sanctum (45–50), the Trial Hall wave arena and three optional
+    branch zones off the main road (Moonlit Marsh, Glacier Grotto and the Restricted Stacks). Five rare
     <dfn>field bosses</dfn> roam the field zones, one per zone from Whisperwood to Stormspire Peak.
   </p>
   <aside class="note">
@@ -54,10 +55,10 @@
       <tr><td>UI</td><td>A <dfn>DOM overlay</dfn>: HTML windows and HUD in <code>#ui-root</code>, laid out at 1280×720 and scaled over the canvas</td><td>Text, scrolling lists, drag and drop, tooltips and text input are far easier in HTML/CSS than in canvas. Damage numbers and name tags stay in Phaser because they live in world space.</td></tr>
       <tr><td>Art</td><td>16-bit pixel art from CC0 / CC-BY / OGA-BY packs (196 PNGs, about 1.5 MB in <code>public/assets/</code>), sliced, palette-swapped and integer-scaled in code; the older procedural painters remain as a fallback</td><td>A coherent SNES-era look without commissioning art. Every pack is credited in <a data-src="CREDITS.md">CREDITS.md</a>.</td></tr>
       <tr><td>Audio</td><td>Web Audio synthesis: SFX voices and procedural music, no audio files (<a data-src="src/systems/AudioSystem.ts#L1">AudioSystem.ts</a>)</td><td>Zero download weight and no licensing questions.</td></tr>
-      <tr><td>Dependencies</td><td>Runtime: <code>phaser</code> only. Dev: <code>typescript</code>, <code>vite</code> (<a data-src="package.json#L12">package.json</a>)</td><td>Fewer moving parts; nothing to audit or upgrade except Phaser.</td></tr>
+      <tr><td>Dependencies</td><td>Runtime: <code>phaser</code> only. Dev: <code>typescript</code>, <code>vite</code> (<a data-src="package.json#L14">package.json</a>)</td><td>Fewer moving parts; nothing to audit or upgrade except Phaser.</td></tr>
     </tbody>
   </table>
-  <p>The game canvas and the UI overlay are siblings in one stage element (<a data-src="index.html#L10">index.html:10</a>):</p>
+  <p>The game canvas and the UI overlay are siblings in one stage element (<a data-src="index.html#L12">index.html:12</a>):</p>
   <pre><code class="lang-html">    &lt;div id="stage"&gt;
       &lt;div id="game"&gt;&lt;/div&gt;
       &lt;div id="ui-root"&gt;&lt;/div&gt;
@@ -69,7 +70,7 @@
     <a data-src="src/ui/scaler.ts#L15">src/ui/scaler.ts</a> keeps <code>#ui-root</code> at a logical 1280×720 and
     scales it to cover the canvas exactly, so UI code can use game-pixel coordinates. The overlay itself has
     <code>pointer-events: none</code>; only its children take clicks, so the game underneath still receives input
-    (<a data-src="src/style.css#L6">style.css:6</a>).
+    (<a data-src="src/style.css#L12">style.css:12</a>).
   </p>
   <details class="advanced">
     <summary>Advanced: consequences of the stack choices</summary>
@@ -110,7 +111,7 @@ npm run preview      # serve dist/ locally</code></pre>
   </p>
   <p>
     Once a character is in the world, <code>GameScene</code> puts a small cheat API on <code>window.arcana</code>
-    (<a data-src="src/scenes/GameScene.ts#L361">GameScene.ts:361</a>). It is the fastest way to test anything that
+    (<a data-src="src/scenes/GameScene.ts#L365">GameScene.ts:365</a>). It is the fastest way to test anything that
     would otherwise take an hour of play:
   </p>
   <pre><code class="lang-ts">    const api = {
@@ -208,17 +209,18 @@ npm run preview      # serve dist/ locally</code></pre>
       <tr><td><a data-src="ROADMAP.md">ROADMAP.md</a></td><td>The phases to "finished" and the resume protocol for the lead session.</td></tr>
       <tr><td><a data-src="CREDITS.md">CREDITS.md</a></td><td>Every art pack: author, source, license, use.</td></tr>
       <tr><td><a data-src="vite.config.ts">vite.config.ts</a></td><td>Three page inputs, relative base, Phaser chunk, the devdocs plugin.</td></tr>
-      <tr><td><a data-src=".github/workflows/pages.yml">.github/workflows/pages.yml</a></td><td>Build and deploy to GitHub Pages on every push to <code>main</code>.</td></tr>
+      <tr><td><a data-src=".github/workflows/pages.yml">.github/workflows/pages.yml</a></td><td>Test, build and deploy to GitHub Pages on every push to <code>main</code>.</td></tr>
+      <tr><td><a data-src="tests/skills.test.ts">tests/</a>, <a data-src="vitest.config.ts">vitest.config.ts</a></td><td>The Vitest suite: data-integrity checks over skills, VFX keys, cross-references, graduation paths, balance curves, stats, saves and bindings (see <a href="#build-tests">Unit tests</a>).</td></tr>
       <tr><td><a data-src="scripts/make-publish-page.mjs">scripts/make-publish-page.mjs</a></td><td>Makes the single-page playable Artifact build (see <a href="#build">Build and deploy</a>).</td></tr>
     </tbody>
   </table>
 
   <h3 id="overview-counts">The game in numbers</h3>
   <p>
-    At the time of writing the Registry holds 130 spells (10 Year 1 + 5 Schools × 24), 21 monster types (6 of them
-    bosses: five field bosses and the Lich Archon), 8 maps, 67 items, 39 quests (13 of them the <code>story_</code>
-    questline), 9 NPCs and 16 jobs. About 38,000 lines of TypeScript sit outside <code>src/devdocs/</code>; the
-    largest folders are <code>skills/</code> (about 9,600 lines, mostly VFX) and <code>art/</code> (about 8,800).
+    At the time of writing the Registry holds <span data-stat="spells">174</span> spells (<span data-stat="spells-core">14</span> Year 1 + 5 Schools × <span data-stat="spells-school">32</span>), <span data-stat="monsters">27</span> monster types (<span data-stat="bosses">6</span> of them
+    bosses: the <span data-stat="field-bosses">5</span> field bosses and the Lich Archon), <span data-stat="maps">11</span> maps, <span data-stat="items">73</span> items, <span data-stat="quests">42</span> quests (<span data-stat="quests-story">13</span> of them the <code>story_</code>
+    questline), <span data-stat="npcs">9</span> NPCs and <span data-stat="jobs">16</span> jobs. About <span data-stat="lines-total">44,000</span> lines of TypeScript sit outside <code>src/devdocs/</code> and <code>src/guide/</code>; the
+    largest folders are <code>skills/</code> (about <span data-stat="lines-skills">13,400</span> lines, mostly VFX) and <code>art/</code> (about <span data-stat="lines-art">8,900</span>).
   </p>
   <figure data-chart="content-counts"><figcaption>Content counts from the Registry, and source lines per src/ folder. Notice that skills/ and art/ together outweigh every gameplay system: most of the code is visual effects and art processing, not rules.</figcaption></figure>
 

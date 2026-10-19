@@ -25,7 +25,7 @@ but nothing boots it. Pictures come from the game's canvas painters, fed with PN
 | `src/guide/spells.ts` | Spell tables straight from each `SkillDef`'s level functions: damage % Lv 1 → max, hits, targets, MP, cooldown, status (chance, duration), prerequisites, buff/passive effects. |
 | `src/guide/schools.ts`, `builds.ts` | Year 1 Core Curriculum and The Five Schools: portraits per Year, matchups against every monster (weak / resist / immune to the School's own statuses), School gear, every spell table, and suggested builds. `checkBuild` totals each build's SP, checks every prerequisite and that each Year fits the SP a student has before the next Year opens (`SP_PER_LEVEL`, `JOB_ADVANCE_BONUS_SP`, `JOB_LEVELS`). |
 | `src/guide/bossNotes.ts` | Prose for boss cards: tagline, attacks (read from the AI in `src/entities/monsters/`) and strategy. Stats, matchups, drops, spawn timers and bounties on the card come from data. |
-| `src/guide/reference.ts` | Bestiary (filterable), Atlas, Campus staff, Items & gear (with every source: shops, drops, rewards, Merit Exchange), Trial Hall (`ARENA_TUNING`, `meritsForWave`, `bonusExpForWave`), familiar/respec/saves, Assignments, Levels & EXP (`expToNext`, `killExpMultiplier`). |
+| `src/guide/reference.ts` | Bestiary (filterable), Atlas, Campus staff, Items & gear (with every source: shops, drops, rewards, Merit Exchange), Trial Hall (`ARENA_TUNING`, `meritsForWave`, `bonusExpForWave`), familiar/respec/saves, Academy Honors (every non-secret honor from `HONORS`, with its Merits and title), Assignments, Levels & EXP (`expToNext`, `killExpMultiplier`). |
 | `src/guide/front.ts` | Cover (the title screen's PNGs), How to play (controls from `ACTIONS` + `DEFAULT_BINDINGS` + `GAMEPAD_MAP`, the hotbar, the HUD, the starting kit from `newPlayerState`, what one AP buys by diffing `baseDerived`), table of contents. |
 | `src/guide/validate.ts` | Checks the content against the data (below). |
 | `src/guide/main.ts`, `guide.css` | Page shell: sticky bar, search (`/` to focus), night/day themes, print. |
@@ -64,9 +64,9 @@ opens), `{qlv:story_violet_thorns}` (a quest's level), `{mlv:moss_snail}` (a mon
 
 Anchors other sections can link to: `#zone-<mapId>` (walkthrough panel), `#map-<mapId>` (Atlas),
 `#mon-<monsterId>`, `#boss-<monsterId>`, `#item-<itemId>`, `#spell-<skillId>`, `#spells-<jobId>`,
-`#quest-<questId>`, `#npc-<npcId>`, `#school-<school>`, `#builds-<school>`, and the chapters `#core`,
+`#quest-<questId>`, `#npc-<npcId>`, `#school-<school>`, `#builds-<school>`, `#honor-<honorId>`, and the chapters `#core`,
 `#schools`, `#bestiary`, `#atlas`, `#staff`, `#items`, `#shops`, `#trial-hall`, `#familiar`, `#respec`,
-`#assignments`, `#progression`.
+`#honors`, `#assignments`, `#progression`.
 
 ## How to add a section
 
@@ -87,7 +87,15 @@ still missing.
 To add a **reference chapter**, write a function returning `{ id, title, el }` (see `reference.ts`) and add
 it to the `refs` list in `main.ts`; the contents, top bar search and chapter list pick it up.
 
-To add a **build**, add it to `BUILDS` in `builds.ts`; the page totals and checks it.
+To add a **build**, add it to `BUILDS` in `builds.ts`; the page totals and checks it. Each School has three
+(the third one is built around the Phase 9 spells: traps and wards, combo payoffs, HP-for-MP trades, dashes and
+channels), and the validator flags any build that names an unknown spell, skips a prerequisite or does not fit the
+SP a student really has by the end of each Year. The totals shown under each build come from `spAtLevel`, so they
+follow `SP_PER_LEVEL`, `JOB_ADVANCE_BONUS_SP` and `JOB_LEVELS` if those change.
+
+The spell tables list each spell's numbers from its `SkillDef`, and a spell that cashes in a status says so in its
+effects line ("removes it"). A spell whose behaviour lives in `onCast` shows its `attack` or `summon` numbers and
+its description; keep the numbers in those fields so the handbook can print them.
 
 To refresh the **screenshots**, replace the JPEGs in `public/guide/` (800×450 works well) and keep the
 file names, or add an `{ image }` block for a new one.

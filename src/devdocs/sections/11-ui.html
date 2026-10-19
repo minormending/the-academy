@@ -49,7 +49,7 @@
     constructors may build DOM and subscribe to the bus but must not call other services, because the services
     object is still being filled in. It finds or creates <code>#ui-root</code>, makes the scaler, tooltip and drag
     manager, builds the <code>UICtx</code>, then the HUD pieces, the windows, the dialog, shop, death prompt and
-    credits roll (<a data-src="src/ui/UIRoot.ts#L82">UIRoot.ts:82</a>). Construction order is the DOM order, so
+    credits roll (<a data-src="src/ui/UIRoot.ts#L86">UIRoot.ts:86</a>). Construction order is the DOM order, so
     it is also the stacking order for elements without a <code>z-index</code>.</p>
 
   <p>Every bus subscription goes through one wrapper that catches handler errors and remembers the unsubscribe
@@ -57,8 +57,8 @@
   <pre><code class="lang-ts">  private on&lt;K extends keyof GameEvents&gt;(ev: K, fn: (p: GameEvents[K]) =&gt; void) {
     this.unsubs.push(bus.on(ev, (p) =&gt; { try { fn(p); } catch (e) { console.warn(`[ui] ${String(ev)} handler failed`, e); } }));
   }</code></pre>
-  <p>(<a data-src="src/ui/UIRoot.ts#L137">UIRoot.ts:137</a>). The subscriptions
-    (<a data-src="src/ui/UIRoot.ts#L141">UIRoot.ts:141</a>) map game events to UI reactions:</p>
+  <p>(<a data-src="src/ui/UIRoot.ts#L143">UIRoot.ts:143</a>). The subscriptions
+    (<a data-src="src/ui/UIRoot.ts#L147">UIRoot.ts:147</a>) map game events to UI reactions:</p>
   <table>
     <thead><tr><th>Event</th><th>UI reaction</th></tr></thead>
     <tbody>
@@ -77,7 +77,7 @@
     </tbody>
   </table>
 
-  <p><code>update()</code> (<a data-src="src/ui/UIRoot.ts#L357">UIRoot.ts:357</a>) runs the first-frame
+  <p><code>update()</code> (<a data-src="src/ui/UIRoot.ts#L364">UIRoot.ts:364</a>) runs the first-frame
     <code>start()</code> (welcome line, saved volumes, auto-open Help for a new character), re-checks the scaler,
     turns EXP deltas into a single coalesced "+N EXP" line, ticks the HUD and every window, and then decides whether
     gameplay input must be blocked. The whole body is in a <code>try</code>; errors are logged at most once every 2 s,
@@ -92,8 +92,8 @@
     this.blocked = want;
     try { this.services.game.setInputBlocked(want); } catch { /* ignore */ }
   }</code></pre>
-  <p>(<a data-src="src/ui/UIRoot.ts#L350">UIRoot.ts:350</a>). On the other side,
-    <a data-src="src/scenes/GameScene.ts#L118">GameScene.setInputBlocked</a> disables Phaser's global key capture
+  <p>(<a data-src="src/ui/UIRoot.ts#L357">UIRoot.ts:357</a>). On the other side,
+    <a data-src="src/scenes/GameScene.ts#L121">GameScene.setInputBlocked</a> disables Phaser's global key capture
     (so typed characters reach the input field), resets held keys and turns off player control:</p>
   <pre><code class="lang-ts">  setInputBlocked(blocked: boolean) {
     this.inputBlocked = blocked;
@@ -103,7 +103,7 @@
   }</code></pre>
 
   <h4 id="ui-keys">Window keys</h4>
-  <p><code>keyDown</code> (<a data-src="src/ui/UIRoot.ts#L243">UIRoot.ts:243</a>) is a <code>window</code>
+  <p><code>keyDown</code> (<a data-src="src/ui/UIRoot.ts#L249">UIRoot.ts:249</a>) is a <code>window</code>
     listener. Its order of precedence: an open Controls window that is capturing a key wins
     (<code>controlsClaimKey</code>); a focused text field only gets Esc (blur); the death prompt and credits roll
     swallow everything; an open dialog handles Esc, Enter/Space and digit keys. Otherwise the key is looked up in the
@@ -143,7 +143,7 @@
 
   <p>Because all UI code works in logical pixels, anything that reads mouse positions converts first:
     <code>scaler.toLogical(clientX, clientY)</code> divides by <code>k</code>. Window dragging, the drag ghost and
-    tooltip placement all use it. In <a data-src="src/style.css#L6">style.css</a> the root itself has
+    tooltip placement all use it. In <a data-src="src/style.css#L12">style.css</a> the root itself has
     <code>pointer-events: none</code> and its children <code>auto</code>, so empty overlay space never steals clicks
     from the canvas.</p>
 
@@ -219,7 +219,7 @@
     arms a source; a drag only starts after the pointer moves 5 px, so clicks and double-clicks still work. While
     dragging, a ghost icon follows the pointer, the slot under it gets <code>ax-drop-hover</code>, and hovering a
     hotbar page button dispatches a custom <code>ax-drag-over</code> event that flips the page. On release
-    <code>UIRoot.onDrop</code> (<a data-src="src/ui/UIRoot.ts#L280">UIRoot.ts:280</a>) swaps or sets hotbar entries;
+    <code>UIRoot.onDrop</code> (<a data-src="src/ui/UIRoot.ts#L287">UIRoot.ts:287</a>) swaps or sets hotbar entries;
     dropping a hotbar entry onto the game world (not a window, hotbar or status bar) clears that slot. A
     capture-phase <code>click</code> listener eats the click that the browser fires at the end of a drag.</p>
 
@@ -228,16 +228,16 @@
 
   <p><a data-src="src/ui/hud.ts">hud.ts</a> holds four always-on pieces.</p>
   <ul>
-    <li><strong>StatusBar</strong> (<a data-src="src/ui/hud.ts#L60">hud.ts:60</a>): level, name and
+    <li><strong>StatusBar</strong> (<a data-src="src/ui/hud.ts#L61">hud.ts:61</a>): level, name and
       "Year n · Job", HP and MP gauges, and the quick-menu buttons (Char, Items, Skills, Tasks, Help, Menu) whose key
       hints follow the bindings. A bag badge appears when the inventory is within 4 stacks of
       <code>MAX_INVENTORY_STACKS</code>, and a one-time banner fires when it is full. The full-width EXP bar is a
       separate element at the very bottom.</li>
-    <li><strong>Gauge</strong> (<a data-src="src/ui/hud.ts#L20">hud.ts:20</a>): each bar has a fill and a
+    <li><strong>Gauge</strong> (<a data-src="src/ui/hud.ts#L21">hud.ts:21</a>): each bar has a fill and a
       <dfn>lag layer</dfn>. The fill eases toward the target (rate <code>dt/1000 × 14</code>); the lag layer holds for
       380 ms after a hit and then drains at least 25%/s, which draws the classic damage trail. Both are
       <code>transform: scaleX()</code>, so updates never trigger layout.</li>
-    <li><strong>Hotbar</strong> (<a data-src="src/ui/hud.ts#L163">hud.ts:163</a>): 24 entries in two pages of 12
+    <li><strong>Hotbar</strong> (<a data-src="src/ui/hud.ts#L164">hud.ts:164</a>): 24 entries in two pages of 12
       (<code>HOTBAR_SIZE</code>, <code>HOTBAR_PAGE_SIZE</code>). Only 12 slot elements exist; each carries its
       absolute index (<code>page × 12 + i</code>) in <code>data-hotbar-slot</code>, rewritten on a page flip, so drops
       and swaps work across pages. Visual order mirrors the keyboard, two rows <code>Q W E R T 1 / A S D F G 2</code>
@@ -263,7 +263,7 @@
     return kinds.find(kind =&gt; kind.includes(id))
       ?.find(candidate =&gt; p.countItem(candidate) &gt; 0 &amp;&amp; Registry.item(candidate)?.consumable) ?? id;
   }</code></pre>
-  <p>(<a data-src="src/ui/hud.ts#L270">hud.ts:270</a>). The slot then shows the substitute's icon and count with an
+  <p>(<a data-src="src/ui/hud.ts#L271">hud.ts:271</a>). The slot then shows the substitute's icon and count with an
     <code>ax-potion-fallback</code> marker, and its tooltip says "Out of Red Potion — using Orange Potion".</p>
 
   <!-- ===================================================================== -->
@@ -284,8 +284,12 @@
       <tr><td>Assignments (J)</td><td><a data-src="src/ui/questsWindow.ts#L13">questsWindow.ts</a></td>
         <td>In Progress / Available / Handed in, with objective progress; re-renders when bindings change because quest
           text carries live key hints.</td></tr>
+      <tr><td>Academy Honors (O)</td><td><a data-src="src/ui/honorsWindow.ts#L17">honorsWindow.ts</a></td>
+        <td>Honors by category with progress bars, earned dates, hidden secrets and a title selector. Not in UIRoot's
+          <code>windows</code> map (UIRoot keeps it in its own field and toggles it from the key handler and the HUD's Honors
+          button). See <a href="#progression-honors">Academy Honors</a>.</td></tr>
       <tr><td>Menu (Esc), Help (H), Year-end Exam</td><td><a data-src="src/ui/miscWindows.ts#L28">miscWindows.ts</a></td>
-        <td>Menu: Resume, Controls, Settings (SFX/music sliders, shake, damage-number size, familiar), How to Play, Save,
+        <td>Menu: Resume, Controls, Settings (SFX/music sliders, shake, damage-number size, familiar, touch controls), How to Play, Save,
           Quit to Title with confirm. Help: controls cheat-sheet. <code>JobsWindow</code>: the School / Year chooser,
           widened to fit five cards when declaring a School.</td></tr>
       <tr><td>Controls</td><td><a data-src="src/ui/controlsWindow.ts#L17">controlsWindow.ts</a></td>
@@ -453,7 +457,7 @@
     <p>UIRoot is created once per GameScene run and destroyed on Quit to Title (GameScene's teardown calls
       <code>s.ui.destroy()</code>). Anything the UI registers outside its own elements outlives the elements unless it
       is removed, and a leaked closure keeps the whole old UI (and its services object) alive. The inventory of what
-      <code>destroy()</code> (<a data-src="src/ui/UIRoot.ts#L384">UIRoot.ts:384</a>) undoes:</p>
+      <code>destroy()</code> (<a data-src="src/ui/UIRoot.ts#L392">UIRoot.ts:392</a>) undoes:</p>
     <ul>
       <li>every bus subscription (<code>unsubs</code>) and pending "Assignment Complete" timers;</li>
       <li>the <code>window</code> keydown listener and the root's contextmenu / dragstart / mousedown listeners;</li>
@@ -480,7 +484,7 @@
       <li><strong>Rebindable keys can collide with browser shortcuts.</strong> If a player binds the Spellbook to
         <kbd>F5</kbd>, the browser would reload the page. <code>keyDown</code> calls <code>preventDefault()</code> for
         any key bound to a UI action, before the <code>e.repeat</code> check, so even auto-repeat never reaches the
-        browser (<a data-src="src/ui/UIRoot.ts#L261">UIRoot.ts:261</a>). Gameplay keys get the same treatment from
+        browser (<a data-src="src/ui/UIRoot.ts#L267">UIRoot.ts:267</a>). Gameplay keys get the same treatment from
         Phaser's global key capture, which is why blocking input must disable that capture.</li>
       <li><strong>Buttons never take focus.</strong> A root-level <code>mousedown</code> handler calls
         <code>preventDefault()</code> on buttons. Otherwise a clicked button keeps focus and the next <kbd>Space</kbd>
@@ -498,7 +502,7 @@
     <p>The architecture fixes the split (DOM for windows and HUD, Phaser for damage numbers and name tags); these are the
       trade-offs it buys.</p>
     <ul>
-      <li><strong>Gains.</strong> Text layout, wrapping and scrolling lists (the Spellbook holds up to 24 spells per
+      <li><strong>Gains.</strong> Text layout, wrapping and scrolling lists (the Spellbook holds up to <span data-stat="spells-school">32</span> spells per
         School), real <code>&lt;input&gt;</code> elements for names and sliders, hover and right-click events per element,
         9-slice frames through <code>border-image</code>, and windows that stay crisp at any canvas scale because the
         browser re-rasterises text after the CSS <code>scale()</code>. None of it touches the WebGL renderer, so a busy

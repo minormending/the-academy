@@ -252,7 +252,7 @@
     drums: { kick: ['x . . . x . . .'], snare: ['. . . . . . . .', '. . . . . . x x'], hat: ['. . x . . . x .'], vol: 0.8, crashOnLoop: true },
     echo: { time: 0.33, feedback: 0.25, mix: 0.18 },
   },</code></pre>
-  <p><code>compile()</code> (<a data-src="src/systems/audio/music.ts#L194">music.ts:194</a>) turns this once per
+  <p><code>compile()</code> (<a data-src="src/systems/audio/music.ts#L269">music.ts:269</a>) turns this once per
     song into per-step arrays: the chord at each step (a bar with two chord names is split evenly), where chord segments
     start, and the notes that begin on each step with their lengths. Patterns shorter than the song (bass, drums, arp)
     are cycled per bar. Instruments are small recipes over <code>tone</code> and <code>bell</code>: the flute is a sine
@@ -260,7 +260,7 @@
     pad three chord tones each doubled at ±6 cents with a slow linear-release envelope.</p>
 
   <h4 id="audio-sequencer">The lookahead sequencer</h4>
-  <p><code>SongPlayer</code> (<a data-src="src/systems/audio/music.ts#L327">music.ts:327</a>) does not play notes when a
+  <p><code>SongPlayer</code> (<a data-src="src/systems/audio/music.ts#L428">music.ts:428</a>) does not play notes when a
     timer fires; it uses the timer to <em>schedule</em> notes slightly in the future on the audio clock, the standard
     WebAudio pattern for steady timing:</p>
   <pre><code class="lang-ts">  private tick() {
@@ -281,7 +281,7 @@
       if (this.step &gt;= this.song.totalSteps) { this.step = 0; this.pass++; }
     }
   }</code></pre>
-  <p>(<a data-src="src/systems/audio/music.ts#L380">music.ts:380</a>). A <code>setInterval</code> fires every 25 ms;
+  <p>(<a data-src="src/systems/audio/music.ts#L481">music.ts:481</a>). A <code>setInterval</code> fires every 25 ms;
     each tick schedules every step whose start time falls within the next 0.14 s. Looping is just the step counter
     wrapping; <code>pass</code> counts loops and drives variation: counter-melodies and arpeggios marked
     <code>everyOther</code> play only on odd passes, <code>leadOctaveUpOnRepeat</code> doubles the lead's frequency on

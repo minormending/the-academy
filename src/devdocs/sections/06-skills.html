@@ -4,8 +4,8 @@
   <p>Every spell in The Academy is <strong>data</strong>: a <code>SkillDef</code> object in one of the six spell files
     (<a data-src="src/skills/apprentice.ts">apprentice.ts</a>, <a data-src="src/skills/fire.ts">fire.ts</a>,
     <a data-src="src/skills/ice.ts">ice.ts</a>, <a data-src="src/skills/lightning.ts">lightning.ts</a>,
-    <a data-src="src/skills/holy.ts">holy.ts</a>, <a data-src="src/skills/shadow.ts">shadow.ts</a>). There are 130 of
-    them: 10 Year-1 Apprentice spells and 24 per School. A small <dfn>skill engine</dfn> turns that data into gameplay.
+    <a data-src="src/skills/holy.ts">holy.ts</a>, <a data-src="src/skills/shadow.ts">shadow.ts</a>). There are <span data-stat="spells">174</span> of
+    them: <span data-stat="spells-core">14</span> Year-1 Apprentice spells and <span data-stat="spells-school">32</span> per School. A small <dfn>skill engine</dfn> turns that data into gameplay.
     It has three parts:</p>
   <ul>
     <li><a data-src="src/systems/SkillSystem.ts">SkillSystem.ts</a> decides <em>whether</em> a cast happens (learned,
@@ -167,7 +167,7 @@ export interface SummonSpec {
       vfx: { cast: 'app_bolt_cast', projectile: 'app_bolt', hit: 'app_bolt_hit' },
     },
   },</code></pre>
-  <p><small>Source: <a data-src="src/skills/apprentice.ts#L25-L46">apprentice.ts:25</a></small></p>
+  <p><small>Source: <a data-src="src/skills/apprentice.ts#L27-L48">apprentice.ts:27</a></small></p>
 
   <p><strong>Buff.</strong> Mana Shield adds to the derived stat <code>mpShield</code> for 60–180 s and keeps an aura on
     the player.</p>
@@ -179,7 +179,7 @@ export interface SummonSpec {
       vfx: 'app_shield_cast',
       auraVfx: 'app_shield_aura',
     },</code></pre>
-  <p><small>Source: <a data-src="src/skills/apprentice.ts#L78-L89">apprentice.ts:78</a></small></p>
+  <p><small>Source: <a data-src="src/skills/apprentice.ts#L80-L91">apprentice.ts:80</a></small></p>
 
   <p><strong>Passive.</strong> Mana Font has no cast at all. Its <code>passive</code> function returns modifiers that
     Progression folds into derived stats for as long as the spell is learned.</p>
@@ -190,7 +190,7 @@ export interface SummonSpec {
       { stat: 'maxMp', mul: +(0.02 * lv).toFixed(3) },
       { stat: 'mpRegen', add: 1 + lv },
     ],</code></pre>
-  <p><small>Source: <a data-src="src/skills/apprentice.ts#L97-L104">apprentice.ts:97</a></small></p>
+  <p><small>Source: <a data-src="src/skills/apprentice.ts#L99-L106">apprentice.ts:99</a></small></p>
 
   <p><strong>Movement.</strong> Blink teleports 120–200 px in the held direction. It has a short cooldown and a 150 ms
     lock.</p>
@@ -207,7 +207,7 @@ export interface SummonSpec {
       vfxOut: 'app_blink_out',
       vfxIn: 'app_blink_in',
     },</code></pre>
-  <p><small>Source: <a data-src="src/skills/apprentice.ts#L112-L125">apprentice.ts:112</a></small></p>
+  <p><small>Source: <a data-src="src/skills/apprentice.ts#L114-L127">apprentice.ts:114</a></small></p>
 
   <p><strong>Summon.</strong> Wall of Fire is a stationary "summon" whose attack is an <code>aoe_self</code> pulse every
     600 ms. Persistent fields are written as summons because a summon already gives you a body visual, a lifetime
@@ -226,7 +226,7 @@ export interface SummonSpec {
       },
     },
   },</code></pre>
-  <p><small>Source: <a data-src="src/skills/fire.ts#L233-L247">fire.ts:233</a></small></p>
+  <p><small>Source: <a data-src="src/skills/fire.ts#L236-L250">fire.ts:236</a></small></p>
 
   <p><strong>The escape hatch.</strong> Holy's Heal is an <code>attack</code> with an <code>onCast</code>. When
     <code>onCast</code> is present, the engine still checks the cast and pays for it (MP, cooldown, cast lock, sfx and
@@ -245,7 +245,7 @@ export function castHeal(ctx: SkillContext, pct: number, matkShare: number, atta
   restore(ctx, d.maxHp * pct + d.matk * matkShare, 0);
   ctx.runAttack(attack, bodyOrigin(ctx));
 }</code></pre>
-  <p><small>Source: <a data-src="src/skills/holy.ts#L98-L105">holy.ts:98</a>,
+  <p><small>Source: <a data-src="src/skills/holy.ts#L144-L151">holy.ts:144</a>,
     <a data-src="src/skills/holy/casts.ts#L28-L34">holy/casts.ts:28</a></small></p>
   <p>The <code>attack: HEAL_ATTACK</code> field is still set even though <code>onCast</code> replaces the default
     behaviour. The spellbook tooltips (<a data-src="src/ui/info.ts#L118">info.ts:118</a>) and the charts read it, and <code>onCast</code> passes the same object to
@@ -421,8 +421,7 @@ export function castHeal(ctx: SkillContext, pct: number, matkShare: number, atta
     <code>inRect</code>, which sorts by distance from a reference point and keeps the first <code>maxTargets</code>.</p>
 
   <figure data-chart="attack-patterns"><figcaption>Attack specs by pattern, stacked by School (summon attacks
-    included). Projectile is by far the most common shape. Lightning owns <code>chain</code>, and neither Fire nor Holy
-    has a chain spell. <code>rain</code> appears exactly once per School, as one of its Year-4 ultimates (Meteor Storm,
+    included). Projectile is by far the most common shape. Lightning has the most <code>chain</code> spells, and Fire has none. <code>rain</code> appears exactly once per School, as one of its Year-4 ultimates (Meteor Storm,
     Blizzard, Thunderstorm, Genesis, Night Tide), and never in Year 1.</figcaption></figure>
 
   <h4 id="skills-projectiles">Projectiles in detail</h4>
@@ -609,12 +608,12 @@ export function playVfx(scene: Phaser.Scene, key: string | undefined, o: VfxOpti
   <table>
     <thead><tr><th>Prefix</th><th>Registration</th><th>Drawing code</th></tr></thead>
     <tbody>
-      <tr><td><code>app_</code></td><td><code>registerApprenticeVfx</code> in <a data-src="src/skills/apprentice.ts#L925">apprentice.ts</a> (eager)</td><td>same file</td></tr>
-      <tr><td><code>fire_</code></td><td><a data-src="src/skills/fireVfx.ts#L1033">fireVfx.ts</a></td><td><code>src/skills/fire/</code></td></tr>
+      <tr><td><code>app_</code></td><td><code>registerApprenticeVfx</code> in <a data-src="src/skills/apprentice.ts#L1160">apprentice.ts</a> (eager)</td><td>same file</td></tr>
+      <tr><td><code>fire_</code></td><td><a data-src="src/skills/fireVfx.ts#L1034">fireVfx.ts</a></td><td><code>src/skills/fire/</code></td></tr>
       <tr><td><code>ice_</code></td><td><a data-src="src/skills/iceVfx.ts">iceVfx.ts</a></td><td><code>src/skills/ice/</code></td></tr>
       <tr><td><code>ltn_</code></td><td><a data-src="src/skills/lightningVfx.ts">lightningVfx.ts</a></td><td><code>src/skills/lightning/</code></td></tr>
       <tr><td><code>holy_</code></td><td><a data-src="src/skills/holyVfx.ts">holyVfx.ts</a></td><td><code>src/skills/holy/</code></td></tr>
-      <tr><td><code>shd_</code></td><td><a data-src="src/skills/shadowVfx.ts#L18">shadowVfx.ts</a></td><td><code>src/skills/shadow/</code></td></tr>
+      <tr><td><code>shd_</code></td><td><a data-src="src/skills/shadowVfx.ts#L24">shadowVfx.ts</a></td><td><code>src/skills/shadow/</code></td></tr>
     </tbody>
   </table>
   <p>The five School modules do not call <code>registerVfx</code> directly. They wrap it with
@@ -633,7 +632,7 @@ export function registerShadowVfx(): void {
   registerVfx('shd_pact_cast', (scene, o) =&gt; { buffCast(scene, o); });
   registerVfx('shd_pact_aura', (scene, o) =&gt; aura(scene, o));
   // …</code></pre>
-  <p><small>Source: <a data-src="src/skills/shadowVfx.ts#L17-L25">shadowVfx.ts:17</a></small></p>
+  <p><small>Source: <a data-src="src/skills/shadowVfx.ts#L23-L31">shadowVfx.ts:23</a></small></p>
 
   <aside class="warn">A persistent visual is destroyed by the engine without warning, sometimes with a short alpha fade
     (auras 200 ms, summons 250 ms). If it spawned anything that is not its child, such as a particle trail that follows
@@ -688,7 +687,7 @@ const HIT_VFX_PER_WINDOW = 14;</code></pre>
     (<a data-src="src/systems/progression/stats.ts#L49">stats.ts:49</a>). Passives have no cast event, so a few
     Schools make them visible by checking for them inside another spell's <code>onCast</code>. Lightning's
     <code>studiedAttack</code> plays a Live Wire or Perfect Conductor sigil on the cast if those passives are learned
-    (<a data-src="src/skills/lightning.ts#L23">lightning.ts:23</a>).</p>
+    (<a data-src="src/skills/lightning.ts#L24">lightning.ts:24</a>).</p>
 
   <h4 id="skills-summons">Summons</h4>
   <p>Only one copy of each summon exists at a time. Recasting destroys the old one first. Different summons do
@@ -762,6 +761,126 @@ const HIT_VFX_PER_WINDOW = 14;</code></pre>
   </details>
 
   <!-- ===================================================================== -->
+  <h3 id="skills-phase9">Phase 9: traps, combos, trades, dashes and channels</h3>
+  <p>Phase 9 (<a data-src="ARCHITECTURE.md#L317">ARCHITECTURE.md "a bigger spellbook"</a>) took the spellbook from 130 to
+    <span data-stat="spells">174</span> spells: Year 1 grew from ten to <span data-stat="spells-core">14</span>, and each School gained eight (three in Year 2, three in Year 3 and two in Year 4, so
+    <span data-stat="spells-y2">11</span>/<span data-stat="spells-y3">11</span>/<span data-stat="spells-y4">10</span> per Year). Existing ids, numbers and behaviour were left alone so saves keep working. The brief for the new spells was
+    "new kinds of play, not stat variants", and nearly all of them needed no new engine feature. They combine four things the
+    engine already had: <code>bonusVs</code> (with <code>consume</code>) on a status, the <code>summon</code> data, the
+    <code>onCast</code> escape hatch and <code>ctx.runAttack</code>.</p>
+
+  <table>
+    <thead><tr><th>Shape</th><th>How it is built</th><th>Examples</th></tr></thead>
+    <tbody>
+      <tr><td><dfn>Trap</dfn> or <dfn>ward</dfn></td>
+        <td>A stationary field that stays dormant until a monster is in its zone. Two ways to build one. A plain <code>summon</code> with an <code>aoe_self</code> attack lets the engine's <code>updateSummon</code> wake it (Warding Glyph, like Wall of Fire); its search reach is the area's half-diagonal, a little wider than the rectangle. A hard "step on it" trigger casts through <code>onCast</code> instead and tests the exact rectangle with <code>monsters.inRect</code> (the Shadow, Ice, Fire and Apprentice versions; Lightning's <code>plantField</code> keeps the <code>summon</code> data for numbers and art and does the exact test itself).</td>
+        <td>Cinder Mine (<code>fire_cinder_mine</code>), Rime Snare (<code>ice_rime_snare</code>), Grounding Seal (<code>ltn_grounding_seal</code>), Warding Glyph (<code>holy_glyph</code>), Grave Mine (<code>shd_grave_mine</code>), Practice Ward (<code>app_practice_ward</code>)</td></tr>
+      <tr><td>Mark and combo payoff</td>
+        <td>A cheap spell applies a status, and a second spell declares <code>bonusVs: { status, mult, consume }</code> on that status, so the order you cast in matters. <code>consume: true</code> removes the status when the bonus is paid.</td>
+        <td>Ion Brand then Short Circuit (shock), Cold Snap (chill), Bitter Harvest (poison), Doom Seal and Hex Relay (curse), Verdict (stun), Flashover (burn), Seal Break (<code>app_seal_break</code>, chill)</td></tr>
+      <tr><td>HP and MP trade</td>
+        <td>An <code>onCast</code> that pays HP through <code>progression.loseHp</code> but never the last point of it, then restores MP in proportion to what was actually paid, and bails out if a listener killed the caster.</td>
+        <td>Blood Dynamo (<code>ltn_blood_dynamo</code>), Blood Tithe (<code>shd_blood_tithe</code>), Vital Ink (<code>app_vital_ink</code>), Martyr's Vow (<code>holy_martyr</code>)</td></tr>
+      <tr><td>Damaging dash</td>
+        <td>The movement code of <a href="#skills-movement">Movement</a> plus damage along the path the player <em>actually</em> travelled: <code>player.blink()</code> clamps at walls, so the spell measures the real displacement and passes it to <code>runAttack</code> as the range and area.</td>
+        <td>Arc Skate (<code>ltn_arc_skate</code>), Fracture Route (<code>ice_fracture_route</code>), Umbra Passage (<code>shd_umbra_passage</code>), Dawn Rush (<code>holy_dawn_rush</code>), Backdraft (<code>fire_backdraft</code>), Quill Step (<code>app_quill_step</code>)</td></tr>
+      <tr><td>Channel</td>
+        <td>Not a new attack pattern: a fixed number of short-interval hits, either one multi-hit <code>AttackSpec</code> or a timer that calls <code>runAttack</code> several times. Some end early if the caster moves (Tesla Channel, Hail Loom, which also breaks when you take damage) or is knocked back (Flamethrower); Dirge Channel is a following engine summon that lives 2.6 s.</td>
+        <td>Flamethrower, Tesla Channel, Hail Loom (<code>ice_hail_loom</code>), Dirge Channel (<code>shd_dirge_channel</code>), Ray of Dawn (<code>holy_dawn_ray</code>)</td></tr>
+      <tr><td>Reactive or stored buff</td>
+        <td>A timed effect that listens to <code>player:damaged</code> and answers a blow, or a buff that is cashed in for a burst.</td>
+        <td>Tempest Reprisal (<code>ltn_tempest_reprisal</code>), Retribution (<code>holy_retribution</code>), Sanctuary (<code>holy_sanctuary</code>), Vent Heat (<code>fire_vent_heat</code>)</td></tr>
+    </tbody>
+  </table>
+
+  <h4 id="skills-phase9-lifetime">One lifetime rule, five helpers</h4>
+  <p>The hard part is not the damage, it is the cleanup. An effect that an <code>onCast</code> starts for itself (a timer, a
+    listener, a sprite) is not on the engine's Scheduler, so nothing cancels it when the player changes map, dies or the scene
+    shuts down (see the advanced block above for the Consecration history). Phase 9 spells all follow one rule:</p>
+  <pre class="mermaid">flowchart LR
+  CAST["onCast starts an effect"] --> OWN["owned by (scene, skill id) or a slot"]
+  OWN --> A["timer expires"]
+  OWN --> B["map:changed"]
+  OWN --> C["player:died"]
+  OWN --> D["scene SHUTDOWN"]
+  OWN --> E["recast replaces it"]
+  A --> STOP["stop(): remove timers and listeners, destroy the visual"]
+  B --> STOP
+  C --> STOP
+  D --> STOP
+  E --> STOP</pre>
+  <p>Each School's author wrote its own small helper with that shape. They are deliberately not one shared module: the
+    Schools were built in parallel by different agents, each inside its own folder.</p>
+  <table>
+    <thead><tr><th>Helper</th><th>Used by</th><th>What it gives you</th></tr></thead>
+    <tbody>
+      <tr><td><a data-src="src/skills/fire/persist.ts#L12-L38"><code>persistent(ctx, step, cleanup)</code></a> in <code>fire/persist.ts</code></td>
+        <td>Cinder Mine, Flamethrower, Kindling Brand, Wandering Sun</td>
+        <td>Runs <code>step(dt)</code> every scene UPDATE (delta clamped to 100 ms) until it returns <code>false</code>; aborts without stepping if the player is dead or the map changed. <code>cleanup(aborted)</code> runs exactly once. Returns an abort function. It also exports <code>groundAt</code>, <code>centerOf</code> and <code>fadeOut</code>.</td></tr>
+      <tr><td><a data-src="src/skills/holy/phase9.ts#L36-L107"><code>persist(ctx, slot, opts)</code></a> in <code>holy/phase9.ts</code></td>
+        <td>Martyr's Vow, Retribution, Sanctuary, Ray of Dawn</td>
+        <td>One instance per named slot (a recast ends the old one with reason <code>replace</code>). Options for a tick period, an <code>onDamaged</code> hook fed from <code>player:damaged</code>, an <code>onEnd(reason)</code> hook (<code>expire</code>, <code>break</code>, <code>replace</code>, <code>map</code>, <code>death</code>, <code>shutdown</code>) and a visual that follows the player.</td></tr>
+      <tr><td><a data-src="src/skills/shadow/lifetime.ts#L8-L57"><code>spellLifetime(ctx, durationMs)</code></a> in <code>shadow/lifetime.ts</code></td>
+        <td>Grave Mine, Doom Seal, Soul Ward</td>
+        <td>One field per skill and scene (a <code>WeakMap</code> keyed by the scene). Returns <code>alive()</code>, <code>after(ms, fn)</code> (a timer that checks <code>alive()</code> and catches errors), <code>stop()</code> and <code>own(visual)</code>, so every timer and sprite it created is torn down together.</td></tr>
+      <tr><td><a data-src="src/skills/lightning/spellbookMechanics.ts#L17-L49"><code>lifetime()</code></a> and <a data-src="src/skills/lightning/spellbookMechanics.ts#L52-L71"><code>plantField()</code></a> in <code>lightning/spellbookMechanics.ts</code></td>
+        <td>Grounding Seal, Storm Circuit, Tesla Channel, Tempest Reprisal</td>
+        <td>The same shape with <code>every(delay, fn)</code> for repeating pulses. <code>plantField</code> is the exact-rectangle wake-up for a ward, with an option that makes it pulse only while the caster stands inside it.</td></tr>
+      <tr><td><a data-src="src/skills/ice/spellbook.ts#L15-L48"><code>worldEffect()</code></a> in <code>ice/spellbook.ts</code></td>
+        <td>Rime Snare, Rime Brand, Rime Recall</td>
+        <td>Owns a visual and a per-frame tick callback for one effect per skill and scene, and exposes <code>stop</code> so a second cast (Rime Recall) can find and consume the first. Hail Loom's channel in the same file wires its own timer, listeners and visual by hand instead.</td></tr>
+    </tbody>
+  </table>
+  <p>Year 1's Practice Ward has its own copy in <a data-src="src/skills/apprentice/ward.ts#L9-L50">apprentice/ward.ts</a>,
+    because the Apprentice spells were written before the School helpers existed.</p>
+
+  <p>Here is the smallest complete example, Shadow's Grave Mine. The engine's <code>summon</code> data holds the numbers
+    and the art key, and <code>onCast</code> polls an exact trigger rectangle every 100 ms through the lifetime scope
+    (<a data-src="src/skills/shadow/spellbook.ts#L32-L46">shadow/spellbook.ts:32</a>):</p>
+  <pre><code class="lang-ts">function castMine(ctx: SkillContext, lv: number): void {
+  if (!living(ctx)) return;
+  const p = ctx.services.player;
+  const x = p.x + p.facing * 90, y = p.y - 34, facing = p.facing;
+  const scope = spellLifetime(ctx, 8000);
+  scope.own(playVfx(ctx.scene, 'shd_grave_mine', { x, y, groundY: p.y, facing, lv, durationMs: 8000 }));
+  const rect = new Phaser.Geom.Rectangle(x - 90, y - 50, 180, 100);
+  const check = () => {
+    if (ctx.services.monsters.inRect(rect).some(m => m.alive)) {
+      ctx.runAttack(MINE, { x, y, facing });
+      scope.stop();
+    } else scope.after(100, check);
+  };
+  scope.after(100, check);
+}</code></pre>
+
+  <details class="advanced"><summary>Advanced: invariants for a persistent spell, and where the helpers differ</summary>
+    <ul>
+      <li><strong>Never act while dead or on another map.</strong> Every helper re-checks <code>progression.isDead()</code>
+        (and, in most, <code>player.state</code>) and that <code>currentMap()</code> is still the map the spell was cast
+        on, before each tick. Most HP trades check again after <code>loseHp</code>, because that call emits events
+        synchronously and a listener may have killed the player.</li>
+      <li><strong>Pay HP up to, never including, the last point.</strong> Blood Dynamo, Blood Tithe, Vital Ink and
+        Martyr's Vow cap the payment at <code>hp - 1</code> and give back MP in proportion to what was really paid.</li>
+      <li><strong>Where ownership lives differs.</strong> Shadow, Lightning and Ice key their registry by scene in a
+        <code>WeakMap</code>, so a new scene never inherits an old effect. Holy keeps a module-level
+        <code>Map</code> keyed by slot, and Fire keeps module-level arrays (<code>mines</code>, <code>brands</code>)
+        plus one <code>persistent()</code> loop that serves all of them. Both rely on the SHUTDOWN and
+        <code>map:changed</code> exits to empty themselves.</li>
+      <li><strong>First line is synchronous.</strong> Wards and mines call <code>runAttack</code> inside the tick that
+        detected the monster and end themselves in that same tick, so a damage callback cannot re-trigger the same
+        trap. A line the attack schedules later is on the engine's Scheduler, which <code>clearWorld</code>
+        cancels on its own.</li>
+      <li><strong>Reading <code>player:damaged</code> is a race.</strong> Combat emits the event <em>before</em> it
+        removes the HP. Sanctuary tops HP up before the blow lands and the rest right after (<code>afterHit</code>);
+        Tempest Reprisal declines to retaliate when the blow would be lethal.</li>
+      <li><strong>Adding another one.</strong> Reuse the helper of the School you are in, give the effect a unique
+        slot or skill id, and check every exit in the diagram above. The guide's spell tables and the Spellbook tooltips
+        read the plain <code>SkillDef</code> data, so keep the numbers in <code>attack</code> or
+        <code>summon</code> and use <code>onCast</code> only for the behaviour.</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
   <h3 id="skills-combat">Combat math</h3>
 
   <p>ARCHITECTURE.md gives the damage formula for one hit line:</p>
@@ -823,7 +942,7 @@ const HIT_VFX_PER_WINDOW = 14;</code></pre>
     animation, aggro, and death followed by <code>monster:killed</code> (see <a href="#monsters">Monsters</a>).</p>
 
   <figure data-chart="school-budgets"><figcaption>Every attack and summon at max level: damage % × hit lines per target
-    per cast, by School and Year (log scale). The ceiling roughly doubles each Year. Year 1 sits between 85% and 184%,
+    per cast, by School and Year (log scale). The ceiling climbs every Year. Year 1 sits between 40% and 184% (the low end is the Practice Ward, a stun field),
     and Year-4 ultimates go past 1,000% (Supernova: 520% × 3 lines = 1,560%; Judgment: 330% × 4 = 1,320%). Two kinds of
     point need care. Rain values are <em>per impact</em> and read low: one target can be hit by several of Blizzard's
     36 or Thunderstorm's 24 impacts. Summons (hollow rings) read high: their value is one attack times the number of
@@ -941,9 +1060,19 @@ const HIT_VFX_PER_WINDOW = 14;</code></pre>
       <tr><td>Overload (Lightning)</td><td>shock</td><td>×2</td><td>no</td></tr>
       <tr><td>Death Scythe (Shadow)</td><td>curse</td><td>×1.6</td><td>no</td></tr>
       <tr><td>Oblivion Lance (Shadow)</td><td>poison</td><td>×1.25</td><td>no</td></tr>
+      <tr><td>Seal Break (Year 1)</td><td>chill</td><td>×1.7</td><td>yes</td></tr>
+      <tr><td>Cold Snap (Ice)</td><td>chill</td><td>×2</td><td>yes</td></tr>
+      <tr><td>Short Circuit (Lightning)</td><td>shock</td><td>×1.8</td><td>yes</td></tr>
+      <tr><td>Verdict (Holy)</td><td>stun</td><td>×1.8</td><td>yes</td></tr>
+      <tr><td>Bitter Harvest (Shadow)</td><td>poison</td><td>×2</td><td>yes</td></tr>
+      <tr><td>Hex Relay (Shadow)</td><td>curse</td><td>×1.8</td><td>yes</td></tr>
+      <tr><td>Flashover (Fire)</td><td>burn</td><td>×1.3</td><td>no</td></tr>
     </tbody>
   </table>
-  <p>Consuming bonuses are the big detonations, and you have to set them up again. Non-consuming ones reward keeping a
+  <p>The first seven rows are the original combos; the rest came with Phase 9, which gave every School a new payoff.
+    More of them hide inside custom casts: Doom Seal's collapse (curse ×1.75), Wandering Sun's collapse (burn ×1.4) and
+    Tempest Reprisal's retaliation (shock ×1.8) consume their status too, and Dirge Channel's beams (curse ×1.4) do not.
+    Consuming bonuses are the big detonations, and you have to set them up again. Non-consuming ones reward keeping a
     debuff on the target. Removing a freeze plays the shell's shatter effect, so Shatter looks right without its own
     code.</p>
 
@@ -1010,7 +1139,7 @@ const HIT_VFX_PER_WINDOW = 14;</code></pre>
       <li><strong>Extend the contract.</strong> Add the name to <code>AttackPattern</code> in
         <a data-src="src/core/types.ts#L126">types.ts:126</a> (a lead-owned file), and any new options as an
         <em>optional</em> sub-object on <code>AttackSpec</code>, in the style of <code>chain</code> and
-        <code>rain</code>, so all 130 existing specs still type-check.</li>
+        <code>rain</code>, so all <span data-stat="spells">174</span> existing specs still type-check.</li>
       <li><strong>Add a <code>run…</code> method</strong> and a <code>case</code> in <code>run()</code>. Find monsters only
         through <code>live()</code>, <code>frontNearest</code>, <code>nearestAny</code> or <code>inRect</code> (never
         <code>monsters.all()</code>), and deal damage only through <code>strike()</code>. Then multi-hit,

@@ -157,6 +157,37 @@ export function spellsByYear(skills: readonly SkillDef[], jobs: readonly JobDef[
   return [...rows.values()];
 }
 
+// ---- prose numbers (data-stat) --------------------------------------------------------
+
+/** Numbers the section prose can pull from the game's data: `<span data-stat="spells">174</span>` (names in names.ts). */
+export function spellStats(skills: readonly SkillDef[], jobs: readonly JobDef[]): Record<string, number> {
+  const rows = spellsByYear(skills, jobs);
+  const total = (r: YearRow) => KINDS.reduce((a, k) => a + r.counts[k], 0);
+  const schools = GROUPS.filter((g) => g !== "core");
+  const perYear = (y: number) => schools.map((g) => total(rows.find((r) => r.group === g && r.year === y)!));
+  // Every School has the same shape; if one ever differs the prose is wrong for it, so report the largest.
+  const most = (xs: number[]) => Math.max(...xs);
+  const byId = new Map(jobs.map((j) => [j.id as string, j]));
+  const levels = new Map<Group, number>(GROUPS.map((g) => [g, 0]));
+  for (const sk of skills) {
+    const at = skillPlace(sk, byId);
+    if (at) levels.set(at.group, levels.get(at.group)! + sk.maxLevel);
+  }
+  // Arcane Bolt's first level is free (newPlayerState), so it is not purchasable.
+  const lineage = schools.map((g) => levels.get("core")! - 1 + levels.get(g)!);
+  const perSchool = schools.map((_, i) => perYear(2)[i] + perYear(3)[i] + perYear(4)[i]);
+  return {
+    spells: skills.length,
+    "spells-core": total(rows.find((r) => r.group === "core")!),
+    "spells-school": most(perSchool),
+    "spells-y2": most(perYear(2)),
+    "spells-y3": most(perYear(3)),
+    "spells-y4": most(perYear(4)),
+    "levels-min": Math.min(...lineage),
+    "levels-max": Math.max(...lineage),
+  };
+}
+
 // ---- school-budgets ---------------------------------------------------------------
 
 export interface BudgetPoint {
@@ -292,15 +323,18 @@ export function monsterHp(monsters: readonly MonsterDef[], fieldBossIds: Readonl
 
 // ---- map-graph ------------------------------------------------------------------
 
-export interface MapNode { id: string; name: string; region: string; theme: string; range: [number, number]; safe: boolean; width: number; height: number; monsters: string[]; npcs: number; portals: number }
+export interface MapNode { id: string; name: string; region: string; theme: string; range: [number, number]; safe: boolean; width: number; height: number; monsters: string[]; npcs: number; portals: number;
+  /** A boss spawns here, or it spawns nothing but is not a town (the Trial Hall arena). */ arena: boolean }
 export interface MapEdge { a: string; b: string; portals: string[]; oneWay: boolean }
 
 /** Nodes in MAPS order; one edge per pair of maps joined by portals (both directions merged). */
 export function mapGraph(maps: readonly MapDef[], monsters: readonly MonsterDef[]): { nodes: MapNode[]; edges: MapEdge[] } {
   const names = new Map(monsters.map((m) => [m.id, m.name]));
+  const bosses = new Set(monsters.filter((m) => m.boss).map((m) => m.id));
   const nodes: MapNode[] = maps.map((m) => ({
     id: m.id, name: m.name, region: m.region, theme: m.theme, range: m.levelRange, safe: !!m.safe, width: m.width, height: m.height,
     monsters: [...new Set(m.spawns.map((s) => names.get(s.monsterId) ?? s.monsterId))], npcs: m.npcs.length, portals: m.portals.length,
+    arena: !m.safe && (m.spawns.length === 0 || m.spawns.some((s) => bosses.has(s.monsterId))),
   }));
   const edges = new Map<string, MapEdge>();
   for (const m of maps) {

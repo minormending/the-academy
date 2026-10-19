@@ -234,7 +234,7 @@
 
   <p>A <dfn>one-way platform</dfn> can be jumped up through from below and stood on from above. The map loader
     builds each one as a thin static body whose only colliding face is the top
-    (<a data-src="src/world/MapLoader.ts#L231">MapLoader.ts:231</a>):</p>
+    (<a data-src="src/world/MapLoader.ts#L238">MapLoader.ts:238</a>):</p>
   <pre><code class="lang-ts">    for (const p of this.def.platforms) {
       const w = Math.max(1, p.x2 - p.x1);
       if (p.oneWay) {
@@ -248,7 +248,7 @@
         z.setData('platform', p);
       }
     }</code></pre>
-  <p>Source: <a data-src="src/world/MapLoader.ts#L233">MapLoader.ts:233</a>. <code>ONE_WAY_BODY_H</code> is 12 px.
+  <p>Source: <a data-src="src/world/MapLoader.ts#L240">MapLoader.ts:240</a>. <code>ONE_WAY_BODY_H</code> is 12 px.
     Solid ground is a column from its surface to 200 px below the map, so nothing can fall under it. Walls and two
     off-map edge walls go into the same <code>solids</code> group.</p>
 

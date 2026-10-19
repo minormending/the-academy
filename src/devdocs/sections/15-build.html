@@ -127,9 +127,9 @@
 
   <h3 id="build-pages">GitHub Pages workflow</h3>
   <p>
-    Every push to <code>main</code> typechecks, builds and deploys all three pages
+    Every push to <code>main</code> runs the tests, typechecks, builds and deploys all three pages
     (<a data-src=".github/workflows/pages.yml#L6">.github/workflows/pages.yml</a>). It is the standard two-job Pages
-    workflow: <code>build</code> uploads <code>dist/</code> as a Pages artifact, <code>deploy</code> publishes it.
+    workflow: <code>build</code> tests and bundles the game, then uploads <code>dist/</code> as a Pages artifact, and <code>deploy</code> publishes it. A failing test stops the deploy, so the live site is always a commit that passed (see <a href="#build-tests">Unit tests</a>).
   </p>
   <pre><code class="lang-yaml">on:
   push:
@@ -156,6 +156,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Test
+        run: |
+          npm run typecheck:tests
+          npm test
       - name: Typecheck and bundle
         run: npm run build
       - uses: actions/configure-pages@v6
@@ -177,6 +181,40 @@ jobs:
       two <code>.ts</code> files. That file is bundled by Vite's config loader (esbuild), so it does not depend on Node's
       own TypeScript support. Running <code>node src/devdocs/check.mjs</code> by hand does: it needs Node 22.6 or newer.</p>
   </aside>
+
+  <h3 id="build-tests">Unit tests</h3>
+  <p>
+    <code>npm test</code> runs a <a data-src="vitest.config.ts">Vitest</a> suite from <code>tests/</code>, and
+    <code>npm run typecheck:tests</code> typechecks it with <a data-src="tsconfig.test.json">tsconfig.test.json</a>
+    (the ordinary <code>tsc --noEmit</code> only covers <code>src/</code>). The tests are not about Phaser rendering. They
+    check that the <em>data</em> the game and these docs are built from hangs together, so a bad edit is caught before
+    anyone plays it:
+  </p>
+  <ul>
+    <li><a data-src="tests/skills.test.ts">skills</a>: every skill's id, job, prerequisites, attack spec and numbers at every level.
+      <a data-src="tests/vfx.test.ts">vfx</a>: every VFX key a spell names is registered (an unregistered key does not crash,
+      it silently plays a white puff).</li>
+    <li><a data-src="tests/world.test.ts">world</a>: every id that monsters, items, quests, maps, NPCs and shops point at
+      exists. <a data-src="tests/graduation.test.ts">graduation</a>: every School can be finished, and its exam items drop
+      somewhere reachable.</li>
+    <li><a data-src="tests/balance.test.ts">balance</a>, <a data-src="tests/stats.test.ts">stats</a>,
+      <a data-src="tests/save.test.ts">save</a>, <a data-src="tests/bindings.test.ts">bindings</a> and
+      <a data-src="tests/keytext.test.ts">keytext</a>: the reference curves, the derived-stat formula, save repair and
+      round trips, key rebinding, and the <code>{key:action}</code> placeholders in player-facing text.</li>
+  </ul>
+  <p>
+    Phaser touches <code>window</code> when it is imported, so Node cannot load it. Vitest aliases every
+    <code>import 'phaser'</code> to a small stub (<a data-src="tests/support/phaser-stub.ts">phaser-stub.ts</a>): the
+    event emitter is real and everything else is an inert proxy, which is just enough for the data, the VFX registration
+    and the pure systems to load. Anything that needs a real scene belongs in the browser, not here.
+  </p>
+  <details class="advanced"><summary>Advanced: what the tests do not cover</summary>
+    <p>The stub makes the suite fast and dependency-free, but it also means a spell's <code>onCast</code> body, the
+      lifetime helpers described in <a href="#skills-phase9">Phase 9</a> and anything else that needs a live scene is
+      only checked by playing the game. The data sweeps are the safety net for content; the physics and the cast flow still
+      need the browser. The handbook's own validator (<code>src/guide/validate.ts</code>) and the docs checker
+      (<code>node src/devdocs/check.mjs</code>) run separately and are not part of the Vitest run.</p>
+  </details>
 
   <h3 id="build-artifact">The one-file Artifact build</h3>
   <p>
@@ -222,9 +260,9 @@ writeFileSync('dist/academy.html', page);</code></pre>
   <ul>
     <li><strong>Fragments</strong> live in <code>src/devdocs/sections/</code> and are bundled as raw strings. The shell
       parses them with a <code>&lt;template&gt;</code>, numbers the headings, and builds the contents and search index
-      from what it finds (<a data-src="src/devdocs/main.ts#L432">main.ts:432</a>).</li>
+      from what it finds (<a data-src="src/devdocs/main.ts#L476">main.ts:476</a>).</li>
     <li><strong>Source links</strong> are plain <code>&lt;a data-src="src/core/balance.ts#L7"&gt;</code>; the shell
-      turns them into GitHub links on <code>main</code> (<a data-src="src/devdocs/main.ts#L96">enhance()</a>).</li>
+      turns them into GitHub links on <code>main</code> (<a data-src="src/devdocs/main.ts#L99">enhance()</a>).</li>
     <li><strong>Diagrams</strong> are Mermaid source in <code>&lt;pre class="mermaid"&gt;</code>. Mermaid is not an npm
       dependency: <a data-src="src/devdocs/mermaid.ts#L11">mermaid.ts</a> imports a pinned ESM build from jsDelivr at
       runtime, on this page only, when the first diagram nears the viewport. If the CDN is unreachable each diagram
@@ -259,7 +297,7 @@ writeFileSync('dist/academy.html', page);</code></pre>
     },</code></pre>
   <ul>
     <li><code>virtual:devdocs-source</code>: lines and files per <code>src/</code> folder and the import statements
-      between folders (a few hundred bytes of JSON instead of the 38,000 lines of source).</li>
+      between folders (a few hundred bytes of JSON instead of the <span data-stat="lines-total">44,000</span> lines of source).</li>
     <li><code>virtual:devdocs-files</code>: the line count of every text file in the repository, imported only in dev so
       the page can check that every <code>data-src</code> path exists and its <code>#L</code> line is in range.</li>
   </ul>

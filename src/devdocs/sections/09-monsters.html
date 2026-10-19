@@ -21,7 +21,7 @@
   </p>
 
   <h3 id="monsters-def">MonsterDef and where the numbers come from</h3>
-  <p>The contract (<a data-src="src/core/types.ts#L303">types.ts:303</a>):</p>
+  <p>The contract (<a data-src="src/core/types.ts#L304">types.ts:304</a>):</p>
   <pre><code class="lang-ts">export type MonsterBehavior = 'walker' | 'hopper' | 'flyer' | 'stationary' | 'boss';
 
 export interface MonsterDef {
@@ -100,18 +100,24 @@ export interface MonsterDef {
       <tr><td>Moss Snail</td><td>1</td><td>Whisperwood</td><td>walker, passive</td><td>62</td><td>3</td><td>10</td><td>–</td></tr>
       <tr><td>Puff Slime</td><td>3</td><td>Whisperwood</td><td>hopper, passive</td><td>106</td><td>10</td><td>20</td><td>–</td></tr>
       <tr><td>Cap Shroom</td><td>6</td><td>Whisperwood, Shroom Hollow</td><td>walker</td><td>185</td><td>25</td><td>35</td><td>–</td></tr>
-      <tr><td>Thorn Shroom</td><td>9</td><td>Shroom Hollow</td><td>walker</td><td>265</td><td>42</td><td>56</td><td>–</td></tr>
+      <tr><td>Thorn Shroom</td><td>9</td><td>Shroom Hollow, Moonlit Marsh</td><td>walker</td><td>265</td><td>42</td><td>56</td><td>–</td></tr>
+      <tr><td>Bog Toad</td><td>12</td><td>Moonlit Marsh</td><td>hopper</td><td>526</td><td>55</td><td>59</td><td>weak lightning · immune poison</td></tr>
       <tr><td>Stump Golem</td><td>13</td><td>Shroom Hollow</td><td>walker</td><td>623</td><td>74</td><td>74</td><td>weak shadow</td></tr>
+      <tr><td>Will-o'-Wisp</td><td>15</td><td>Moonlit Marsh</td><td>flyer</td><td>549</td><td>67</td><td>76</td><td>weak holy · resist fire · immune burn, poison</td></tr>
       <tr><td>Frost Bat</td><td>16</td><td>Frostfang Cliffs</td><td>flyer</td><td>581</td><td>73</td><td>72</td><td>weak fire, lightning</td></tr>
       <tr><td>Snow Yeti</td><td>20</td><td>Frostfang Cliffs</td><td>walker</td><td>905</td><td>110</td><td>98</td><td>weak fire, shadow</td></tr>
-      <tr><td>Ice Wisp</td><td>23</td><td>Frostfang Cliffs</td><td>flyer</td><td>831</td><td>113</td><td>118</td><td>weak fire, holy · resist ice · immune freeze</td></tr>
+      <tr><td>Ice Wisp</td><td>23</td><td>Frostfang Cliffs, Glacier Grotto</td><td>flyer</td><td>831</td><td>113</td><td>118</td><td>weak fire, holy · resist ice · immune freeze</td></tr>
+      <tr><td>Crystal Crab</td><td>24</td><td>Glacier Grotto</td><td>walker</td><td>1,168</td><td>129</td><td>122</td><td>weak lightning · resist ice · immune chill</td></tr>
       <tr><td>Ember Imp</td><td>26</td><td>Cinder Caverns</td><td>hopper</td><td>1,342</td><td>102</td><td>125</td><td>weak ice · resist fire</td></tr>
+      <tr><td>Frost Shade</td><td>28</td><td>Glacier Grotto</td><td>flyer</td><td>1,357</td><td>130</td><td>147</td><td>weak fire · resist ice · immune freeze, poison</td></tr>
       <tr><td>Lava Salamander</td><td>30</td><td>Cinder Caverns</td><td>walker</td><td>1,786</td><td>128</td><td>150</td><td>weak ice, shadow · resist fire · immune burn</td></tr>
+      <tr><td>Animated Tome</td><td>34</td><td>The Restricted Stacks</td><td>flyer</td><td>1,624</td><td>149</td><td>161</td><td>weak fire · immune poison</td></tr>
       <tr><td>Magma Golem</td><td>34</td><td>Cinder Caverns</td><td>walker</td><td>2,484</td><td>173</td><td>193</td><td>weak ice · resist fire</td></tr>
       <tr><td>Storm Harpy</td><td>37</td><td>Stormspire Peak</td><td>flyer</td><td>1,738</td><td>151</td><td>175</td><td>weak lightning, shadow</td></tr>
+      <tr><td>Ink Golem</td><td>40</td><td>The Restricted Stacks</td><td>walker</td><td>4,174</td><td>211</td><td>226</td><td>weak holy · resist shadow · immune poison</td></tr>
       <tr><td>Crag Golem</td><td>40</td><td>Stormspire Peak</td><td>walker</td><td>4,341</td><td>211</td><td>226</td><td>weak lightning · resist holy</td></tr>
       <tr><td>Thunder Drake</td><td>43</td><td>Stormspire Peak</td><td>flyer</td><td>3,396</td><td>229</td><td>222</td><td>weak ice, holy · resist lightning</td></tr>
-      <tr><td>Void Wisp</td><td>46</td><td>Arcane Sanctum</td><td>flyer</td><td>3,240</td><td>210</td><td>215</td><td>weak holy · resist shadow</td></tr>
+      <tr><td>Void Wisp</td><td>46</td><td>Arcane Sanctum, The Restricted Stacks</td><td>flyer</td><td>3,240</td><td>210</td><td>215</td><td>weak holy · resist shadow</td></tr>
       <tr><td>Lich Archon</td><td>48</td><td>Arcane Sanctum</td><td>boss</td><td>793,800</td><td>9,200</td><td>280</td><td>weak holy · resist shadow</td></tr>
     </tbody>
   </table>
@@ -120,8 +126,8 @@ export interface MonsterDef {
     <code>CombatSystem.tryApplyStatus</code> before rolling, and again in <code>Monster.applyStatus</code>. Every School has
     something it is good against: undead and void creatures are weak to holy, the volcano to ice, the snow to fire.</p>
   <figure data-chart="monster-levels"><figcaption>Every monster's level against the map it spawns in, with each map's
-    level range. Monsters climb in steps inside each range; Cap Shroom (6) is the one that also appears below its range,
-    in Shroom Hollow (8–15). Each field boss sits at the top of its zone (8, 14, 24, 34, 44), and the Lich Archon at 48
+    level range. Monsters climb in steps inside each range. Three appear outside theirs: Cap Shroom (6) in Shroom Hollow (8–15), Thorn Shroom (9) in the Moonlit Marsh (12–18)
+    and Void Wisp (46) in the Restricted Stacks (32–42). Each field boss sits at the top of its zone (8, 14, 24, 34, 44), and the Lich Archon at 48
     in the 45–50 Sanctum.</figcaption></figure>
   <figure data-chart="monster-hp"><figcaption>Monster HP against <code>refMonsterHp</code> (log scale). Normal monsters
     hug the curve: the first few sit visibly under it (Moss Snail 62 against a reference of 83) and the golems above it

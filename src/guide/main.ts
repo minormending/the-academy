@@ -9,7 +9,7 @@ import { renderAllPending, renderBlock } from './blocks';
 import { buildGuide, type Guide } from './context';
 import { h } from './dom';
 import { contents, cover, howToPlay, partsOf } from './front';
-import { assignmentsSection, atlas, bestiary, itemsSection, progressionSection, staffSection, studentLife, trialHall, type RefSection } from './reference';
+import { assignmentsSection, atlas, bestiary, honorsSection, itemsSection, progressionSection, staffSection, studentLife, trialHall, type RefSection } from './reference';
 import { coreSection, schoolsSection } from './schools';
 import { anchor, schoolName, sectionHeading } from './ui';
 import { validate } from './validate';
@@ -150,7 +150,7 @@ async function boot() {
   const g = buildGuide(WALKTHROUGH);
   const refs: RefSection[] = [
     coreSection(g), schoolsSection(g), bestiary(g), atlas(g), staffSection(g), itemsSection(g), trialHall(g),
-    studentLife(g), assignmentsSection(g), progressionSection(),
+    studentLife(g), honorsSection(), assignmentsSection(g), progressionSection(),
   ];
   const problems = validate(g, WALKTHROUGH);
   if (problems.length) console.warn(`[guide] ${problems.length} problem(s):\n${problems.join('\n')}`);

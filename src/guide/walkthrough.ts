@@ -65,7 +65,7 @@ export const WALKTHROUGH: Section[] = [
   {
     id: 'y2-declared', part: Y2, title: 'Your first School spells',
     blocks: [
-      { p: 'Declaring makes you a Year 2 student with your School\'s first title and bonus SP. Open the spellbook ({key:skills}) and spend it: every School\'s Year 2 page has two or three roots, so you can pick a direction right away. Each School in [[the Five Schools|#schools]] ends with suggested builds that fit real SP budgets.' },
+      { p: 'Declaring makes you a Year 2 student with your School\'s first title and bonus SP. Open the spellbook ({key:skills}) and spend it: every School\'s Year 2 page has several spells with no prerequisite at all, so you can pick a direction right away. Traps, marks and combo spells show up here too: a spell that cashes in a status says so in its effects ("removes it"). Each School in [[the Five Schools|#schools]] ends with suggested builds that fit real SP budgets.' },
       { p: 'Tilda now stocks your School\'s staff, and the ones for other Schools stay off her racks. A School staff adds that element\'s damage on top of Magic ATK.' },
       { shop: 'tilda' },
     ],
@@ -81,6 +81,14 @@ export const WALKTHROUGH: Section[] = [
     ],
   },
   {
+    id: 'y2-moonlit-marsh', part: Y2, title: 'The Moonlit Marsh (optional)',
+    blocks: [
+      { p: 'Not every practicum is on the main road. A side path off Shroom Hollow\'s upper ledges leads to the **Moonlit Marsh** (levels {zlv:moonlit_marsh}), a night-study bog of hummocks and rope-linked ledges. Bog Toads hop the ground, Thorn Shrooms squat beside them and Will-o\'-Wisps drift over the upper ledges. Wisps shrug off fire and poison; Holy and Lightning do the work. You return by the same portal.' },
+      { zone: 'moonlit_marsh' },
+      { quests: ['q_finn_lanterns'], title: 'Assignment' },
+    ],
+  },
+  {
     id: 'y2-frostfang', part: Y2, title: 'Frostfang Cliffs',
     blocks: [
       { p: 'Frostfang Cliffs (levels {zlv:frostfang_cliffs}) is a long climb of cliff steps and ice ledges. Frost Bats flit along the lower ledges, Snow Yetis hold the ground, and Ice Wisps drift on the upper ledges. Fire is welcome everywhere here.' },
@@ -92,6 +100,14 @@ export const WALKTHROUGH: Section[] = [
       { quest: 'story_pages_in_snow' },
       { boss: 'frostfang_alpha' },
       { quest: 'q_bounty_frostfang_alpha' },
+    ],
+  },
+  {
+    id: 'y2-glacier-grotto', part: Y2, title: 'The Glacier Grotto (optional)',
+    blocks: [
+      { p: 'A cave mouth on the ice step in Frostfang Cliffs leads down to the **Glacier Grotto** (levels {zlv:glacier_grotto}), blue ice under the range. Crystal Crabs scuttle the floor and steps, Ice Wisps and Frost Shades haunt the ledges above. Crabs are weak to Lightning and resist frost, so Cryomancers bring a second spell. You return by the same portal.' },
+      { zone: 'glacier_grotto' },
+      { quests: ['q_glacius_geodes'], title: 'Assignment' },
     ],
   },
   {
@@ -130,6 +146,14 @@ export const WALKTHROUGH: Section[] = [
       { zone: 'stormspire_peak' },
       { training: [35, 46] },
       { quest: 'story_crack_in_seal', note: 'Seal Fragments drop from Thunder Drakes, the Void Wisps of the Arcane Sanctum and the Tempest Wyrm. The drakes are the reliable source at this level.' },
+    ],
+  },
+  {
+    id: 'y3-restricted-stacks', part: Y3, title: 'The Restricted Stacks (optional)',
+    blocks: [
+      { p: 'The Academy\'s forbidden library is reached by a portal at the top of the Headmistress\'s tower on the Academy Grounds. Nothing locks it, but the shelves are tuned for levels {zlv:restricted_stacks}. Animated Tomes fly the aisles, Ink Golems hold the floor and Void Wisps float under the vaults. Shadow students bring curses; Fire and Holy shine. You return by the same portal.' },
+      { zone: 'restricted_stacks' },
+      { quests: ['q_maelis_overdue'], title: 'Assignment' },
     ],
   },
   {

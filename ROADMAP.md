@@ -83,3 +83,12 @@ Character creation shipped (a879717, cc02d5e). Then 20 agents were launched on d
 - Fellowship banner wording; Year 5 polish per School (src/skills/<school>/year5.ts, vfx5.ts); Year 5 Honors
 - "Change look" editor (src/ui/appearanceEditor.ts + statsWindow button); creator gamepad/polish; Large text setting
 - Tests: tests/appearance.test.ts (+ mobile); read-only reviews of the appearance, mobile HUD and mobile windows diffs
+- **Integrated and pushed in cc625f5.** Open findings from the reviews (by static reading only):
+  - Hotbar picker on phones (src/ui/window.ts): "Remove from bar" clears the first copy of a potion on any page, not the current page; tapping an occupied slot overwrites it instead of swapping
+  - Esc, or a window hotkey, while the phone map overlay or ☰ panel is open opens the window behind it (UIRoot.ts keyDown/openWindow)
+  - Window z counter in UIRoot never resets and can pass the HUD overlays (z 850/900) after about 750 focus changes
+  - Boss bar keeps its phone/desktop size if the layout flips mid-fight (bossBar.ts)
+  - Phone sheets: the Character window's STR/DEX/INT tooltips have no tap equivalent; mobileUnlearn lacks desktop's lineage guard; a layout flip keeps an arbitrary open window instead of the topmost
+  - Parallax/sky layers at 1.8× zoom and on wide canvases: check a few maps on a phone (MapLoader.ts, ambient.ts); credits star field still assumes 1280 wide
+  - Handbook still says Years 2–4 in builds.ts and front.ts; The Unwritten has no BOSS_NOTES entry
+  - Character Select bakes one sprite sheet per saved look on first render (possible stall with many slots)

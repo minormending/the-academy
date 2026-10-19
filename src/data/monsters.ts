@@ -139,6 +139,112 @@ const lichArchon: MonsterDef = {
   ],
 };
 
+// ───────────────────────────── Field bosses (one rare mini-boss per practicum zone) ─────────────────────────────
+
+/** Spawn / presentation data for a field boss (the AI lives in src/entities/monsters/fieldBosses.ts). */
+export interface FieldBossInfo {
+  id: string;
+  /** Map the boss roams (its spawn entry lives in that map's `spawns`). */
+  mapId: string;
+  /** "A Shroom Monarch has appeared!" — '' for proper names ("Magmaw has appeared!"). */
+  article: 'A' | 'An' | '';
+  /** Banner / log accent colour (CSS). */
+  color: string;
+}
+
+export const FIELD_BOSSES: Record<string, FieldBossInfo> = {
+  mossback_matriarch: { id: 'mossback_matriarch', mapId: 'whisperwood', article: 'A', color: '#b8f07a' },
+  shroom_monarch: { id: 'shroom_monarch', mapId: 'shroom_hollow', article: 'A', color: '#ffb04a' },
+  frostfang_alpha: { id: 'frostfang_alpha', mapId: 'frostfang_cliffs', article: 'A', color: '#9fe6ff' },
+  magmaw: { id: 'magmaw', mapId: 'cinder_caverns', article: '', color: '#ff7a2a' },
+  tempest_wyrm: { id: 'tempest_wyrm', mapId: 'stormspire_peak', article: 'A', color: '#d8b4ff' },
+};
+
+export function isFieldBoss(id: string): boolean { return Object.prototype.hasOwnProperty.call(FIELD_BOSSES, id); }
+
+/** "A Shroom Monarch" / "Magmaw" — used in the spawn banner and logs. */
+export function fieldBossTitle(def: MonsterDef): string {
+  const a = FIELD_BOSSES[def.id]?.article ?? 'A';
+  return a ? `${a} ${def.name}` : def.name;
+}
+
+interface FieldBossSpec {
+  id: string;
+  name: string;
+  level: number;
+  /** × refMonsterHp (40–60). */
+  hpMul: number;
+  /** × refMonsterExp (15–20). */
+  expMul: number;
+  touchMul: number;
+  speed: number;
+  size: { w: number; h: number };
+  weak: Element[];
+  resist: Element[];
+  immune?: StatusKind[];
+  trophy: string;
+  accessory: string;
+  /** Zone etc item spilled in a pile. */
+  etc: string;
+  extraDrops?: DropEntry[];
+}
+
+function fieldBoss(s: FieldBossSpec): MonsterDef {
+  const lv = s.level;
+  const pots = potionDrops(lv).map(d => ({ ...d, chance: Math.min(1, d.chance * 6), min: (d.min ?? 1) + 1, max: (d.max ?? 1) + 2 }));
+  return {
+    id: s.id,
+    name: s.name,
+    level: lv,
+    hp: Math.round(refMonsterHp(lv) * s.hpMul),
+    exp: Math.round(refMonsterExp(lv) * s.expMul),
+    mesos: [Math.round(lv * 90 + 200), Math.round(lv * 140 + 400)],
+    touchDamage: Math.round(refMonsterTouch(lv) * s.touchMul),
+    def: Math.round(lv * 0.6),
+    speed: s.speed,
+    size: s.size,
+    behavior: 'boss',
+    aggressive: true,
+    boss: true,
+    weak: s.weak,
+    resist: s.resist,
+    immune: s.immune,
+    drops: [
+      { itemId: s.trophy, chance: 1, min: 1, max: 1 },
+      { itemId: s.accessory, chance: 0.22 },
+      { itemId: s.etc, chance: 1, min: 3, max: 6 },
+      ...pots,
+      ...equipDrops(lv).map(d => ({ ...d, chance: Math.min(0.5, d.chance * 6) })),
+      ...(s.extraDrops ?? []),
+    ],
+  };
+}
+
+// School matchups (each School has at least one favourable mini-boss):
+//   fire → Shroom Monarch, Frostfang Alpha · ice → Magmaw, Tempest Wyrm · lightning → Frostfang Alpha ·
+//   holy → Shroom Monarch, Tempest Wyrm · shadow → Magmaw. The Matriarch (lv 8) is fought before Schools exist.
+const FIELD_BOSS_DEFS: MonsterDef[] = [
+  fieldBoss({ id: 'mossback_matriarch', name: 'Mossback Matriarch', level: 8, hpMul: 28, expMul: 18, touchMul: 1.0,
+    speed: 46, size: { w: 92, h: 66 }, weak: ['fire'], resist: ['ice'],
+    trophy: 'trophy_mossback_matriarch', accessory: 'matriarch_ring', etc: 'snail_shell',
+    extraDrops: [{ itemId: 'slime_jelly', chance: 0.8, min: 2, max: 4 }] }),
+  fieldBoss({ id: 'shroom_monarch', name: 'Shroom Monarch', level: 14, hpMul: 45, expMul: 18, touchMul: 1.05,
+    speed: 54, size: { w: 92, h: 104 }, weak: ['fire', 'holy'], resist: ['shadow'], immune: ['poison'],
+    trophy: 'trophy_shroom_monarch', accessory: 'monarch_signet', etc: 'shroom_cap',
+    extraDrops: [{ itemId: 'thorn_spore', chance: 0.9, min: 2, max: 5 }] }),
+  fieldBoss({ id: 'frostfang_alpha', name: 'Frostfang Alpha', level: 24, hpMul: 50, expMul: 18, touchMul: 1.2,
+    speed: 82, size: { w: 92, h: 128 }, weak: ['fire', 'lightning'], resist: ['ice'], immune: ['chill'],
+    trophy: 'trophy_frostfang_alpha', accessory: 'alpha_fang_necklace', etc: 'yeti_fur',
+    extraDrops: [{ itemId: 'yeti_bone', chance: 0.9, min: 2, max: 4 }] }),
+  fieldBoss({ id: 'magmaw', name: 'Magmaw', level: 34, hpMul: 55, expMul: 18, touchMul: 1.1,
+    speed: 40, size: { w: 110, h: 160 }, weak: ['ice', 'shadow'], resist: ['fire'], immune: ['burn'],
+    trophy: 'trophy_magmaw', accessory: 'magmaw_gauntlets', etc: 'magma_core' }),
+  fieldBoss({ id: 'tempest_wyrm', name: 'Tempest Wyrm', level: 44, hpMul: 55, expMul: 18, touchMul: 1.2,
+    speed: 120, size: { w: 150, h: 90 }, weak: ['ice', 'holy'], resist: ['lightning'], immune: ['shock'],
+    trophy: 'trophy_tempest_wyrm', accessory: 'wyrmheart_amulet', etc: 'drake_scale',
+    extraDrops: [{ itemId: 'seal_fragment', chance: 0.6, min: 1, max: 2 }] }),
+];
+
 export const MONSTERS: MonsterDef[] = [
   // Early monsters run below the ref HP curve: with the starting 45% mastery the average roll is ~0.73
   // of max, so ref HP would take 5–6 low-level Arcane Bolts instead of the intended 3–4.
@@ -182,4 +288,6 @@ export const MONSTERS: MonsterDef[] = [
     hpMul: 0.85, expMul: 0.95, weak: ['holy'], resist: ['shadow'], etc: 'void_crystal',
     extraDrops: [{ itemId: 'wisp_essence', chance: 0.15 }, { itemId: 'seal_fragment', chance: 0.12 }] }),
   lichArchon,
+  // ── field bosses ──
+  ...FIELD_BOSS_DEFS,
 ];

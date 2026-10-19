@@ -31,6 +31,16 @@ export const MFX = {
   fallback: 'monster_fallback',
 } as const;
 
+/** Field boss attack textures (white/grey ramps tint per boss; generated with the pixel FX). */
+export const BFX = {
+  icicle: 'boss_fx_icicle',
+  glob: 'boss_fx_glob',
+  puddle: 'boss_fx_puddle',
+  cloud: 'boss_fx_cloud',
+  wave: 'boss_fx_wave',
+  rock: 'boss_fx_rock',
+} as const;
+
 export const DROP_TEX = {
   bronze: 'drop_coin_bronze',
   silver: 'drop_coin_silver',
@@ -1860,7 +1870,14 @@ const grid = (key: string, fw: number, fh: number, cols: number, ax: number, ay:
   (...idx: number[]): FrameRef[] => idx.map(i => ({ key, x: (i % cols) * fw, y: Math.floor(i / cols) * fh, w: fw, h: fh, ax, ay }));
 const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 
-interface PixelAnim { frames: FrameRef[]; rate: number }
+interface PixelAnim { frames: FrameRef[]; rate: number; repeat?: number }
+/**
+ * Hard-edged pixel overlay (crown, horns, glow) drawn at 1× onto every frame before scaling, so it shares the
+ * sprite's pixel grid. Anchored per frame: 'peak' = centre of the topmost opaque row (sits on top of the head),
+ * 'front' = topmost pixel of the rightmost opaque column (the snout, art faces right). Bottom-centre of the
+ * overlay goes to anchor + (dx, dy).
+ */
+interface Overlay { rows: string[]; pal: Record<string, number>; at: 'peak' | 'front'; dx?: number; dy?: number; skip?: MonsterAnim[] }
 interface PixelSpec {
   /** Integer scale (defaults to PIXEL_SCALE). */
   scale?: number;
@@ -1876,6 +1893,7 @@ interface PixelSpec {
   /** Source death frames; otherwise a fade + pixel poof is derived. */
   die?: PixelAnim;
   attack?: PixelAnim;
+  overlays?: Overlay[];
 }
 
 function buildPixelSpecs(): Record<string, PixelSpec> {
@@ -1937,7 +1955,106 @@ function buildPixelSpecs(): Record<string, PixelSpec> {
     lich_archon: { scale: 4, flip: true, recolor: gradientMap(RAMP.arcaneFire, { hue: [10, 70], minSat: 0.45, minLum: 0.3 }),
       idle: { frames: wizard(...range(0, 4)), rate: 7 }, move: { frames: wizard(...range(0, 4)), rate: 9 },
       attack: { frames: wizard(...range(5, 14)), rate: 15 } },
+    // ── field bosses (palette swaps of the zone's own sheets at ×3/×4 + 1× pixel overlays) ──
+    mossback_matriarch: { scale: 4,
+      recolor: chain(gradientMap([0x1a2418, 0x34482a, 0x5a7440, 0x8ca460, 0xd0e0a0], { hue: [10, 45], minSat: 0.15 }),
+        hueShift(38, 0.95, 0.85, { hue: [60, 160], minSat: 0.2 })),
+      idle: { frames: snail(14, 15, 16, 15), rate: 3 }, move: { frames: snail(14, 15, 16, 15), rate: 6 },
+      // Shell-spin: side → front → other side → back, a turntable spin of the source's four views.
+      attack: { frames: snail(14, 0, 7, 21), rate: 14, repeat: -1 },
+      overlays: [{ at: 'peak', dy: 2, rows: [
+        '.p...y...p.',
+        'pwp.yoy.pwp',
+        'gpgGgygGgpg',
+        '.GgG.G.GgG.',
+      ], pal: { p: 0xff7ab8, w: 0xffe0f0, y: 0xffe060, o: 0xff9a30, g: 0x6ab04a, G: 0x2e5a26 } }] },
+    shroom_monarch: { scale: 4,
+      recolor: gradientMap([0x3a0618, 0x8a1030, 0xd02848, 0xff7088, 0xffd0dc], { hue: [320, 25], minSat: 0.25 }),
+      idle: { frames: shIdle(0, 1, 2, 3), rate: 5 }, move: { frames: shWalk(...range(0, 9)), rate: 10 },
+      attack: { frames: shGas(...range(0, 9)), rate: 12 }, hit: shIdle(2)[0],
+      overlays: [{ at: 'peak', dy: 3, rows: CROWN_ROWS, pal: CROWN_PAL }] },
+    frostfang_alpha: { scale: 3, flip: true,
+      recolor: gradientMap([0x0e1a38, 0x284a86, 0x5a8ad0, 0xa8d4f4, 0xf4fcff], { hue: [8, 48], minSat: 0.15 }),
+      idle: { frames: wartaur(0, 2), rate: 2 }, move: { frames: wartaur(0, 1, 2, 3), rate: 6 },
+      attack: { frames: wartaur(4, 4, 5, 6, 7, 7), rate: 8 },
+      overlays: [{ at: 'peak', dy: 2, rows: [
+        '....W....',
+        '.W.cWc.W.',
+        'cWccWccWc',
+        'kbbbbbbbk',
+      ], pal: { W: 0xffffff, c: 0x9fe6ff, b: 0x3a8ad0, k: 0x0c2048 } }] },
+    magmaw: { scale: 3, flip: true,
+      recolor: gradientMap([0x140606, 0x2a1210, 0x4a1e14, 0x8a2a10, 0xe0501a, 0xffa030, 0xfff0a0]),
+      idle: golemIdle, move: golemMove, attack: { frames: golem(12, 13, 14, 14, 15, 16, 17, 17), rate: 8 },
+      overlays: [{ at: 'peak', dy: 2, rows: [
+        '...y...',
+        '..yWy..',
+        '.oyWyo.',
+        '.oYWYo.',
+        'roYYYor',
+        '.rooor.',
+      ], pal: { y: 0xffe070, W: 0xffffff, o: 0xff8a1e, Y: 0xfff4b0, r: 0xc8300e }, skip: ['attack'] }] },
+    tempest_wyrm: { scale: 3, flip: true,
+      // Wing membranes → electric yellow; scales → storm violet (brighter than the Thunder Drake so it reads at night).
+      recolor: chain(gradientMap([0x7a5a10, 0xd8b020, 0xfff27a, 0xffffff], { hue: [22, 58], minSat: 0.3, minLum: 0.22 }),
+        gradientMap([0x1c1240, 0x3a2a8a, 0x6656d6, 0xa898ff, 0xece4ff], { hue: [58, 22] })),
+      idle: { frames: dragon(...range(0, 5)), rate: 8 }, move: { frames: dragon(...range(0, 5)), rate: 13 },
+      overlays: [{ at: 'front', dx: -13, dy: 3, rows: [
+        'Y....Y....',
+        '.Y....Y...',
+        '.YW...YW..',
+        '..YW...YW.',
+        '...YW...YW',
+      ], pal: { Y: 0xfff27a, W: 0xffffff } }] },
   };
+}
+
+const CROWN_ROWS = [
+  '.k...k...k.',
+  'kYk.kWk.kYk',
+  'kYYkYYYkYYk',
+  'kYYYYYYYYYk',
+  'kyRyyByyRyk',
+  '.kkkkkkkkk.',
+];
+const CROWN_PAL: Record<string, number> = { k: 0x5a3008, Y: 0xffd447, W: 0xffffff, y: 0xc8901a, R: 0xe8203a, B: 0x3a7aff };
+
+/** Stamp a spec's overlays onto a cut frame (1×, before scaling). Pads the canvas so overlays may stick out. */
+function withOverlays(k: Cut, overlays: Overlay[]): Cut {
+  const PAD = 12;
+  const src = k.cv;
+  const d = src.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, src.width, src.height).data;
+  const solid = (x: number, y: number) => d[(y * src.width + x) * 4 + 3] > 20;
+  const cv = document.createElement('canvas');
+  cv.width = src.width + PAD * 2;
+  cv.height = src.height + PAD * 2;
+  const c = cv.getContext('2d', { willReadFrequently: true })!;
+  c.imageSmoothingEnabled = false;
+  c.drawImage(src, PAD, PAD);
+  for (const ov of overlays) {
+    let ax = -1, ay = -1;
+    if (ov.at === 'peak') {
+      for (let y = 0; y < src.height && ay < 0; y++) {
+        let sx = 0, n = 0;
+        for (let x = 0; x < src.width; x++) if (solid(x, y)) { sx += x; n++; }
+        if (n) { ay = y; ax = Math.round(sx / n); }
+      }
+    } else {
+      for (let x = src.width - 1; x >= 0 && ax < 0; x--) {
+        for (let y = 0; y < src.height; y++) if (solid(x, y)) { ax = x; ay = y; break; }
+      }
+    }
+    if (ax < 0) continue;
+    const w = Math.max(...ov.rows.map(r => r.length)), h = ov.rows.length;
+    const ox = PAD + ax + (ov.dx ?? 0) - Math.floor(w / 2), oy = PAD + ay + (ov.dy ?? 0) - h;
+    ov.rows.forEach((row, y) => [...row].forEach((ch, x) => {
+      const col = ov.pal[ch];
+      if (col === undefined) return;
+      c.fillStyle = css(col);
+      c.fillRect(ox + x, oy + y, 1, 1);
+    }));
+  }
+  return { ...k, cv, ax: k.ax + PAD, ay: k.ay + PAD, box: alphaBox(cv) };
 }
 let PIXEL_SPECS: Record<string, PixelSpec> | null = null;
 
@@ -2028,13 +2145,16 @@ export function paintPixelMonsterSheet(scene: Phaser.Scene, id: string): (Monste
   const S = spec.scale ?? PIXEL_SCALE;
   const flip = !!spec.flip;
   const cache = new Map<string, HTMLCanvasElement | null>();
-  const cut = (f: FrameRef): Cut | null => {
+  const cut = (f: FrameRef, anim: MonsterAnim = 'idle'): Cut | null => {
     const src = srcCanvas(scene, f.key, spec.recolor, cache, id);
-    return src ? cutFrame(src, f, flip, spec.outline) : null;
+    if (!src) return null;
+    const k = cutFrame(src, f, flip, spec.outline);
+    const ovs = spec.overlays?.filter(o => !o.skip?.includes(anim));
+    return ovs?.length ? withOverlays(k, ovs) : k;
   };
-  const cutAll = (fs: FrameRef[]): Cut[] | null => {
+  const cutAll = (fs: FrameRef[], anim: MonsterAnim = 'idle'): Cut[] | null => {
     const out: Cut[] = [];
-    for (const f of fs) { const k = cut(f); if (!k) return null; out.push(k); }
+    for (const f of fs) { const k = cut(f, anim); if (!k) return null; out.push(k); }
     return out;
   };
 
@@ -2056,8 +2176,8 @@ export function paintPixelMonsterSheet(scene: Phaser.Scene, id: string): (Monste
     rows.push({ name: 'die', cuts: DIE_ALPHA.map((a, i) => ({ ...hitBase, alpha: a, light: i === 0 ? 0.35 : 0, poof: poofSrc && i > 0 ? Math.min(POOF_FRAMES - 1, i) : -1 })), rate: 10, repeat: 0 });
   }
   if (spec.attack) {
-    const a = cutAll(spec.attack.frames);
-    if (a) rows.push({ name: 'attack', cuts: a, rate: spec.attack.rate, repeat: 0 });
+    const a = cutAll(spec.attack.frames, 'attack');
+    if (a) rows.push({ name: 'attack', cuts: a, rate: spec.attack.rate, repeat: spec.attack.repeat ?? 0 });
   }
 
   // Body centre (for the poof) relative to the feet, from the hit base frame.
@@ -2115,7 +2235,13 @@ export function paintPixelMonsterSheet(scene: Phaser.Scene, id: string): (Monste
       }
       if (k.poof >= 0 && poofSrc) {
         const pw = POOF_W * S, ph = POOF_H * S;
+        // Clip to the cell: on short sprites the poof reaches below the feet and would bleed into the next row.
+        c.save();
+        c.beginPath();
+        c.rect(fx, fy, W, H);
+        c.clip();
         c.drawImage(poofSrc, k.poof * POOF_W, 0, POOF_W, POOF_H, fx + W / 2 - pw / 2, feetY - bodyUp - Math.floor(ph / 2), pw, ph);
+        c.restore();
       }
       frames.push({ name, x: fx, y: fy, w: W, h: H });
       names.push(name);
@@ -2215,6 +2341,44 @@ function generatePixelFxTextures(scene: Phaser.Scene) {
   addSimple(scene, MFX.aura, pixCanvas(32, 32, 4, (_c, px) => pixRadial(px, 32, [
     [0.25, 0xffffff, 0.5], [0.5, 0xffffff, 0.34], [0.75, 0xffffff, 0.18], [1, 0xffffff, 0.06],
   ])));
+
+  // ── field boss attack textures (original pixel maps) ──
+  addSimple(scene, BFX.icicle, pixCanvas(7, 12, S, (_c, px) => pixMap(px, [
+    'kbcWcbk', 'kbcWcbk', '.kcWck.', '.kcWck.', '.kcWbk.', '.kcWbk.', '..cWb..', '..kWk..', '..kWk..', '..kck..', '...k...', '...k...',
+  ], { k: 0x1c4a86, b: 0x5aa8e8, c: 0xa8e0ff, W: 0xffffff })));
+  addSimple(scene, BFX.glob, pixCanvas(6, 6, S, (_c, px) => pixMap(px, [
+    '.kkkk.', 'kgGWgk', 'kGGGgk', 'kGGGgk', 'kgggdk', '.kkkk.',
+  ], { k: 0x1e4a14, g: 0x7ad04a, G: 0xa8f070, W: 0xf0ffd0, d: 0x4a9a2a })));
+  // Puddle / cloud / wave / rock are grey ramps so each boss tints them (slime green, spores, frost, embers…).
+  addSimple(scene, BFX.puddle, pixCanvas(28, 6, S, (_c, px) => pixMap(px, [
+    '.....aaaaaaaaaaaaaaaaaa.....',
+    '..aaabbbbbbbbbbbbbbbbbbaaa..',
+    '.abbbbccbbbbbbcccbbbbbbbbba.',
+    'abbbbcWWcbbbbbbbbbbbccbbbbba',
+    '.abbbbbbbbbbbbbbbbbbbbbbbba.',
+    '...aaaaaaaaaaaaaaaaaaaaaa...',
+  ], { a: [0x9a9a9a, 0.9], b: [0xc8c8c8, 0.85], c: [0xeeeeee, 0.9], W: 0xffffff })));
+  addSimple(scene, BFX.cloud, pixCanvas(18, 12, S, (_c, px) => pixMap(px, [
+    '......aaaa........',
+    '....aabbbbaa.aa...',
+    '...abbccccbbabba..',
+    '..abccWWccbbbcba..',
+    '.aabccccccccbccba.',
+    'abbbccccccccccbbba',
+    'abcccccWccccccccba',
+    'abbccccccccccccbba',
+    '.abbbccccccccbbba.',
+    '..aabbbbbbbbbbaa..',
+    '....aaaaaaaaaa....',
+    '..................',
+  ], { a: [0x8a8a8a, 0.55], b: [0xb8b8b8, 0.7], c: [0xdedede, 0.75], W: [0xffffff, 0.85] })));
+  addSimple(scene, BFX.wave, pixCanvas(8, 14, S, (_c, px) => pixMap(px, [
+    '....a...', '...ab...', '...abc..', '..abcc..', '..abcW..', '.abbcWc.', '.abcWWc.',
+    'abbcWWcc', 'abccWWWc', 'abccWWWc', 'abbcccWc', 'aabbcccc', '.aabbbcc', '..aaaabb',
+  ], { a: [0x8a8a8a, 0.6], b: [0xb8b8b8, 0.8], c: [0xe0e0e0, 0.9], W: 0xffffff })));
+  addSimple(scene, BFX.rock, pixCanvas(5, 5, S, (_c, px) => pixMap(px, [
+    '.aab.', 'abbcb', 'abccb', 'aabbb', '.aaa.',
+  ], { a: 0x6a6a6a, b: 0xa8a8a8, c: 0xe8e8e8 })));
 
   // Coins: zaphgames 16×16 spin sheet (rows gold / silver / bronze) → 12×12 crops ×2, 8 frames each.
   const coinSrc = sourceImage(scene, MSRC.coins);

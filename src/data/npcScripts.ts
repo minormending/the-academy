@@ -5,7 +5,7 @@ import type { DialogOption, GameServices, JobId, QuestDef } from '../core/types'
 import { bus } from '../core/events';
 import { Registry } from '../core/registry';
 import { BRANCH_ROOT_JOB, SCHOOLS, SCHOOL_NAME, SCHOOL_PROFESSOR, isSchool, yearOfTier, type School } from './jobs';
-import { JOB_ADVANCEMENT_QUESTS, JOB_QUEST_IDS } from './quests';
+import { FIELD_BOUNTY_QUEST_IDS, JOB_ADVANCEMENT_QUESTS, JOB_QUEST_IDS } from './quests';
 import type { Progression } from '../systems/Progression';
 
 interface Ctx {
@@ -467,7 +467,33 @@ const FINN_TIPS = [
   'Put potions on your hotbar! Keys 1 and 2 are perfect for them.',
   'Ropes and ladders: walk up to one and press Up to climb.',
   'Every School has favourite targets. Spells hit 50% harder on a weakness — and half as hard on a resistance.',
+  'Every practicum zone has one big troublemaker that shows up now and then. When the ground starts flashing red, MOVE — then make it pay. I post Field Bounties for each of them.',
 ];
+
+/** Field Bounties Finn will re-post once you've handed the last one in (they are repeatable). */
+function bountyRenewOptions(c: Ctx, back: () => void): DialogOption[] {
+  const out: DialogOption[] = [];
+  for (const qid of FIELD_BOUNTY_QUEST_IDS) {
+    const q = Registry.quest(qid);
+    if (!q || c.p.questStatus(qid) !== 'turned_in' || c.p.state.level < q.minLevel) continue;
+    out.push(go(`[Field Bounty] ${q.name.replace(/^Field Bounty: /, '')} (again)`, () => {
+      // Objectives as a fresh bounty would show them (without the old turned-in counts).
+      const old = c.p.state.quests[qid];
+      delete c.p.state.quests[qid];
+      const objectives = objectivesText(c.p, q);
+      if (old) c.p.state.quests[qid] = old;
+      say(c, `${pick(['Back for more? It\'s been seen again.', 'The board never stays empty for long.', 'Same beast, fresh bounty. Ready?'])}\n\n${q.description}\n\n${objectives}\n${rewardsText(q)}`, [
+        go('Accept', () => {
+          delete c.p.state.quests[qid]; // re-post: the bounty becomes acceptable again
+          c.p.acceptQuest(qid);
+          say(c, 'Bounty posted in your name. Bring back the trophy!', [bye('On it.')]);
+        }),
+        go('Not right now.', () => { back(); }),
+      ]);
+    }));
+  }
+  return out;
+}
 let lastFinnTip = -1;
 
 function scoutFinn(c: Ctx) {
@@ -480,7 +506,7 @@ function scoutFinn(c: Ctx) {
     lastFinnTip = i;
     say(c, FINN_TIPS[i], [go('Another tip?', tips), go('Back', home), bye('Thanks!')]);
   };
-  const quests = questOptions(c, home);
+  const quests = [...questOptions(c, home), ...bountyRenewOptions(c, home)];
   say(c, pick([
     'Prefect Finn, field practicums. Whisperwood is our classroom — stay on the path, mind the slimes, and don\'t eat the mushrooms.',
     'Shh — you hear that? Snails. Hundreds of them. Okay, maybe twelve. Practicum credit if you help?',

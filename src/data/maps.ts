@@ -11,6 +11,8 @@
 import type { MapDef, PlatformDef, PortalDef, RopeDef, SpawnDef, WallDef } from '../core/types';
 
 const RESPAWN = 7000;
+/** Field boss respawn after death (A6 jitters it ±20% → ~8–12 min). */
+const FIELD_BOSS_RESPAWN = 600000;
 
 const ground = (x1: number, x2: number, y: number): PlatformDef => ({ x1, x2, y, oneWay: false });
 const plat = (x1: number, x2: number, y: number): PlatformDef => ({ x1, x2, y, oneWay: true });
@@ -83,6 +85,8 @@ const whisperwood: MapDef = (() => {
       span('moss_snail', 420, 1440, G, 3), span('moss_snail', 1760, 3000, G, 2), on('moss_snail', A, 1), on('moss_snail', D, 1),
       on('puff_slime', B, 1), on('puff_slime', C, 2), on('puff_slime', E, 1), on('puff_slime', F, 1),
       on('cap_shroom', I, 1), on('cap_shroom', J, 1), on('cap_shroom', M, 1), on('cap_shroom', N, 1),
+      // Field boss (A6): widest wall-free ground span, clear of both portals. Timed spawn, see MonsterManager.
+      span('mossback_matriarch', 1740, 2950, G, 1, FIELD_BOSS_RESPAWN),
     ],
     npcs: [{ npcId: 'scout_finn', x: 240, y: G, facing: 1 }],
   };
@@ -111,6 +115,7 @@ const shroom_hollow: MapDef = (() => {
       span('thorn_shroom', 1300, 2460, G, 3), on('thorn_shroom', Hh, 1), on('thorn_shroom', K, 1), on('thorn_shroom', L, 1),
       span('stump_golem', 2740, 3400, G, 2), on('stump_golem', M, 1), on('stump_golem', P, 1), on('stump_golem', Q, 1), on('stump_golem', R, 1),
       on('thorn_shroom', C, 1),
+      span('shroom_monarch', 1300, 2460, G, 1, FIELD_BOSS_RESPAWN),
     ],
     npcs: [],
   };
@@ -142,6 +147,7 @@ const frostfang_cliffs: MapDef = (() => {
       span('snow_yeti', 200, 860, G, 2), span('snow_yeti', 1600, 2560, G, 3), span('snow_yeti', 2950, 3600, G, 2),
       on('frost_bat', A, 1), on('frost_bat', D, 1), on('frost_bat', Gp, 2), on('frost_bat', K, 1), on('frost_bat', B, 1),
       on('ice_wisp', I, 1), on('ice_wisp', J, 1), on('ice_wisp', L, 1), on('ice_wisp', N, 1), on('ice_wisp', O, 1), on('ice_wisp', P, 1), on('ice_wisp', S, 1),
+      span('frostfang_alpha', 1580, 2560, G, 1, FIELD_BOSS_RESPAWN),
     ],
     npcs: [],
   };
@@ -172,6 +178,7 @@ const cinder_caverns: MapDef = (() => {
       span('ember_imp', 200, 1250, G, 3), on('ember_imp', A, 1), on('ember_imp', B, 1), on('ember_imp', E, 1),
       span('lava_salamander', 1600, 2650, G, 3), on('lava_salamander', C, 1), on('lava_salamander', F, 1), on('lava_salamander', I, 1), on('lava_salamander', J, 1), on('lava_salamander', K, 1),
       span('magma_golem', 3050, 3800, G, 2), on('magma_golem', L, 1), on('magma_golem', O, 1), on('magma_golem', R, 1), on('magma_golem', Q, 1), on('magma_golem', V, 1),
+      span('magmaw', 1580, 2660, G, 1, FIELD_BOSS_RESPAWN),
     ],
     npcs: [],
   };
@@ -205,6 +212,7 @@ const stormspire_peak: MapDef = (() => {
       span('crag_golem', 250, 1550, G, 3), span('crag_golem', 2050, 3400, G, 3), on('crag_golem', B, 1), span('crag_golem', 1640, 1960, plateau.y, 1), on('crag_golem', D, 1),
       on('storm_harpy', A, 1), on('storm_harpy', E, 1), on('storm_harpy', F, 1), on('storm_harpy', Gp, 1), on('storm_harpy', I, 1), on('storm_harpy', M, 1),
       on('thunder_drake', K, 1), on('thunder_drake', L, 1), on('thunder_drake', Q, 1), on('thunder_drake', R, 1), on('thunder_drake', T, 1), on('thunder_drake', U, 1), on('thunder_drake', Wp, 1),
+      span('tempest_wyrm', 2040, 3350, G, 1, FIELD_BOSS_RESPAWN),
     ],
     npcs: [],
   };

@@ -5,9 +5,16 @@ import { bus } from '../core/events';
 import { Registry } from '../core/registry';
 import { Monster, type MonsterSpawnOptions } from '../entities/Monster';
 import { LichArchon } from '../entities/monsters/LichArchon';
+import { FIELD_BOSS_CLASSES } from '../entities/monsters/fieldBosses';
+import { FIELD_BOSSES, fieldBossTitle, isFieldBoss } from '../data/monsters';
 
 const DEFAULT_RESPAWN_MS = 7000;
 const BOSS_RESPAWN_MS = 300000;
+/** Field boss respawn after death when its spawn entry has no respawnMs; jittered ±20% (→ ~8–12 min). */
+const FIELD_BOSS_RESPAWN_MS = 600000;
+
+/** Per-map field boss timer (session-scoped: survives map changes, not saves). */
+interface FieldBossTimer { nextAt: number; alive: boolean }
 
 export class MonsterManager implements IMonsterManager {
   private list: Monster[] = [];
@@ -17,6 +24,13 @@ export class MonsterManager implements IMonsterManager {
   private groupOf = new Map<number, number>();
   private gen = 0;
   private warned = false;
+  private fieldBoss = new Map<string, FieldBossTimer>();
+  /** uid of the current map's living field boss → its spawn-entry index. */
+  private fieldBossUid = new Map<number, number>();
+  /** First appearance on the first visit to a map (debug: shorten in the console). */
+  fieldBossFirstDelayMs = 180000;
+  /** Re-entering a map whose boss was due / still alive: it shows up after this. */
+  fieldBossReturnDelayMs = 10000;
 
   constructor(private scene: Phaser.Scene, private services: GameServices) {
     bus.on('monster:killed', ({ monster }) => this.onKilled(monster));
@@ -62,6 +76,7 @@ export class MonsterManager implements IMonsterManager {
     this.gen++;
     if (map.def.safe) return;
     (map.def.spawns ?? []).forEach((sp, i) => {
+      if (isFieldBoss(sp.monsterId)) { this.scheduleFieldBoss(i); return; }
       for (let k = 0; k < sp.count; k++) this.spawnInGroup(i, false);
     });
   }
@@ -69,7 +84,14 @@ export class MonsterManager implements IMonsterManager {
   spawn(monsterId: string, x: number, y: number): IMonster | null {
     const def = Registry.monster(monsterId);
     if (!def || !this.map) return null;
-    return this.create(def, x, y, { fadeIn: true });
+    const m = this.create(def, x, y, { fadeIn: true });
+    if (m && isFieldBoss(def.id)) {
+      // Debug / scripted spawn of the map's own field boss counts as its natural appearance.
+      const i = (this.map.def.spawns ?? []).findIndex(sp => sp.monsterId === def.id);
+      if (i >= 0) this.adoptFieldBoss(m, i);
+      this.announceFieldBoss(def);
+    }
+    return m;
   }
 
   update(time: number, delta: number) {
@@ -91,6 +113,7 @@ export class MonsterManager implements IMonsterManager {
     for (const m of this.list) { try { m.destroy(); } catch { /* ignore */ } }
     this.list = [];
     this.groupOf.clear();
+    this.fieldBossUid.clear();
     this.map = null;
   }
 
@@ -99,9 +122,12 @@ export class MonsterManager implements IMonsterManager {
   private create(def: MonsterDef, x: number, y: number, opts: MonsterSpawnOptions): Monster | null {
     if (!this.map) return null;
     try {
-      const m = def.behavior === 'boss' || def.id === 'lich_archon'
-        ? new LichArchon(this.scene, this.services, def, x, y, this.map, opts)
-        : new Monster(this.scene, this.services, def, x, y, this.map, opts);
+      const FB = FIELD_BOSS_CLASSES[def.id];
+      const m = FB
+        ? new FB(this.scene, this.services, def, x, y, this.map, opts)
+        : def.behavior === 'boss' || def.id === 'lich_archon'
+          ? new LichArchon(this.scene, this.services, def, x, y, this.map, opts)
+          : new Monster(this.scene, this.services, def, x, y, this.map, opts);
       this.list.push(m);
       return m;
     } catch (e) {
@@ -131,7 +157,85 @@ export class MonsterManager implements IMonsterManager {
     return n;
   }
 
+  // ─────────────────────────── field bosses ───────────────────────────
+
+  /** Timer state per map for debugging: `{ mapId: { inMs, alive } }`. */
+  fieldBossTimers(): Record<string, { inMs: number; alive: boolean }> {
+    const now = this.scene.time.now, out: Record<string, { inMs: number; alive: boolean }> = {};
+    for (const [id, t] of this.fieldBoss) out[id] = { inMs: Math.max(0, Math.round(t.nextAt - now)), alive: t.alive };
+    return out;
+  }
+
+  /** On map bind: first visit → in ~3 min; returning while it was due/alive → shortly; else the remaining respawn. */
+  private scheduleFieldBoss(i: number) {
+    const map = this.map;
+    const sp = map?.def.spawns?.[i];
+    if (!map || !sp) return;
+    const now = this.scene.time.now;
+    let t = this.fieldBoss.get(map.def.id);
+    if (!t) { t = { nextAt: now + this.fieldBossFirstDelayMs, alive: false }; this.fieldBoss.set(map.def.id, t); }
+    else if (t.alive || t.nextAt <= now) { t.nextAt = now + this.fieldBossReturnDelayMs; t.alive = false; }
+    this.armFieldBossTimer(i, Math.max(0, t.nextAt - now));
+  }
+
+  private armFieldBossTimer(i: number, ms: number) {
+    const gen = this.gen;
+    const timer = this.scene.time.delayedCall(ms, () => {
+      this.timers = this.timers.filter(x => x !== timer);
+      if (gen !== this.gen || !this.map) return;
+      this.spawnFieldBoss(i);
+    });
+    this.timers.push(timer);
+  }
+
+  private spawnFieldBoss(i: number) {
+    const map = this.map;
+    const sp = map?.def.spawns?.[i];
+    if (!map || !sp) return;
+    const def = Registry.monster(sp.monsterId);
+    if (!def) return;
+    const existing = this.list.find(m => m.alive && m.def.id === def.id);
+    if (existing) { this.adoptFieldBoss(existing, i); return; }
+    const x1 = Math.min(sp.x1, sp.x2), x2 = Math.max(sp.x1, sp.x2);
+    // Appear in the middle part of the span (well away from the portals at the ends).
+    const x = x1 + (x2 - x1) * (0.3 + Math.random() * 0.4);
+    const m = this.create(def, x, sp.y - 1, { band: { x1, x2, y: sp.y }, fadeIn: true });
+    if (!m) return;
+    this.adoptFieldBoss(m, i);
+    this.announceFieldBoss(def);
+  }
+
+  private adoptFieldBoss(m: IMonster, i: number) {
+    if (!this.map) return;
+    this.fieldBossUid.set(m.uid, i);
+    const t = this.fieldBoss.get(this.map.def.id) ?? { nextAt: 0, alive: true };
+    t.alive = true;
+    t.nextAt = Infinity;
+    this.fieldBoss.set(this.map.def.id, t);
+  }
+
+  private announceFieldBoss(def: MonsterDef) {
+    const color = FIELD_BOSSES[def.id]?.color ?? '#ffd36b';
+    const who = fieldBossTitle(def);
+    try { bus.emit('ui:banner', { text: `${who} has appeared!`, sub: `Lv.${def.level} field boss`, color }); } catch { /* ignore */ }
+    try { bus.emit('ui:log', { text: `${who} has appeared somewhere in ${this.map?.def.name ?? 'the area'}!`, color }); } catch { /* ignore */ }
+    try { this.services.audio?.play('boss_roar'); } catch { /* ignore */ }
+    try { this.scene.cameras.main.shake(300, 0.004); } catch { /* ignore */ }
+  }
+
+  private onFieldBossKilled(i: number) {
+    const map = this.map;
+    if (!map) return;
+    const sp = map.def.spawns?.[i];
+    const base = sp?.respawnMs ?? FIELD_BOSS_RESPAWN_MS;
+    const ms = Math.round(base * (0.8 + Math.random() * 0.4));
+    this.fieldBoss.set(map.def.id, { nextAt: this.scene.time.now + ms, alive: false });
+    this.armFieldBossTimer(i, ms);
+  }
+
   private onKilled(monster: IMonster) {
+    const fb = this.fieldBossUid.get(monster.uid);
+    if (fb !== undefined) { this.fieldBossUid.delete(monster.uid); this.onFieldBossKilled(fb); return; }
     const group = this.groupOf.get(monster.uid);
     this.groupOf.delete(monster.uid);
     if (group === undefined || !this.map) return;

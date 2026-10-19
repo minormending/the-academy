@@ -6,6 +6,7 @@ import { DEPTH } from '../../core/constants';
 import { MFX } from '../../art/monsterArt';
 import { Monster, type MonsterSpawnOptions } from '../Monster';
 import { platformUnder } from './ground';
+import { BossBar, LICH_BAR_STYLE } from './bossBar';
 
 type BossState = 'dormant' | 'idle' | 'volley' | 'slam' | 'teleport' | 'summon';
 
@@ -30,10 +31,7 @@ export class LichArchon extends Monster {
   private adds = new Set<number>();
   private charge: Phaser.GameObjects.Image | null = null;
   private aura: Phaser.GameObjects.Image | null = null;
-  private bar: Phaser.GameObjects.Container | null = null;
-  private barFill: Phaser.GameObjects.Graphics | null = null;
-  private barText: Phaser.GameObjects.Text | null = null;
-  private barShownHp = -1;
+  private bar: BossBar | null = null;
   private offKilled: (() => void) | null = null;
 
   constructor(scene: Phaser.Scene, services: GameServices, def: MonsterDef, x: number, y: number, map: IMapInstance, opts: MonsterSpawnOptions = {}) {
@@ -41,8 +39,9 @@ export class LichArchon extends Monster {
     this.offKilled = bus.on('monster:killed', ({ monster }) => { this.adds.delete(monster.uid); });
   }
 
-  private get orbDmg() { return Math.round(this.def.touchDamage * 0.85); }
-  private get slamDmg() { return Math.round(this.def.touchDamage * 1.5); }
+  // Active attacks respect curse (outgoingDamageMult) just like contact damage does.
+  private get orbDmg() { return Math.max(1, Math.round(this.def.touchDamage * 0.85 * this.outgoingDamageMult())); }
+  private get slamDmg() { return Math.max(1, Math.round(this.def.touchDamage * 1.5 * this.outgoingDamageMult())); }
 
   // ─────────────────────────── hooks ───────────────────────────
 
@@ -60,9 +59,8 @@ export class LichArchon extends Monster {
     this.redrawBar(true);
     try { bus.emit('ui:log', { text: 'The Lich Archon crumbles into dust!', color: '#e7c6ff' }); } catch { /* ignore */ }
     try { this.scene.cameras.main.shake(400, 0.008); this.scene.cameras.main.flash(300, 200, 150, 255); } catch { /* ignore */ }
-    const bar = this.bar;
+    this.bar?.fadeOut(600);
     this.bar = null;
-    if (bar) this.scene.tweens.add({ targets: bar, alpha: 0, duration: 900, delay: 600, onComplete: () => bar.destroy() });
   }
 
   protected onDestroy() {
@@ -416,38 +414,11 @@ export class LichArchon extends Monster {
 
   private createBar() {
     if (this.bar) return;
-    const cam = this.scene.cameras.main;
-    const w = 460;
-    const cx = cam.width / 2, cy = 34;
-    const bg = this.scene.add.graphics();
-    bg.fillStyle(0x0a0614, 0.85).fillRoundedRect(-w / 2 - 6, -12, w + 12, 30, 8);
-    bg.lineStyle(2, 0xc89bff, 0.9).strokeRoundedRect(-w / 2 - 6, -12, w + 12, 30, 8);
-    bg.fillStyle(0x2a0a1a, 1).fillRect(-w / 2, 2, w, 10);
-    this.barFill = this.scene.add.graphics();
-    const name = this.scene.add.text(-w / 2, -9, `Lv.${this.def.level}  ${this.def.name}`, {
-      fontFamily: 'Trebuchet MS, sans-serif', fontSize: '12px', color: '#f3e6ff', fontStyle: 'bold',
-    }).setOrigin(0, 0).setShadow(1, 1, '#000', 2);
-    this.barText = this.scene.add.text(w / 2, -9, '', {
-      fontFamily: 'Trebuchet MS, sans-serif', fontSize: '11px', color: '#ffd6f4',
-    }).setOrigin(1, 0).setShadow(1, 1, '#000', 2);
-    this.bar = this.scene.add.container(cx, cy, [bg, this.barFill, name, this.barText])
-      .setScrollFactor(0).setDepth(1000).setAlpha(0);
-    this.scene.tweens.add({ targets: this.bar, alpha: 1, duration: 400 });
+    this.bar = new BossBar(this.scene, `Lv.${this.def.level}  ${this.def.name}`, LICH_BAR_STYLE);
     this.redrawBar(true);
   }
 
   private redrawBar(force: boolean) {
-    if (!this.bar || !this.barFill) return;
-    if (!force && this.barShownHp === this.hp) return;
-    this.barShownHp = this.hp;
-    const w = 460;
-    const pct = Phaser.Math.Clamp(this.hp / this.maxHp, 0, 1);
-    const g = this.barFill;
-    g.clear();
-    g.fillStyle(this.enraged ? 0xff3a8a : 0xb04aff, 1).fillRect(-w / 2, 2, w * pct, 10);
-    g.fillStyle(0xffffff, 0.3).fillRect(-w / 2, 2, w * pct, 3);
-    g.lineStyle(1, 0xffffff, 0.25);
-    for (let i = 1; i < 10; i++) g.lineBetween(-w / 2 + (w * i) / 10, 2, -w / 2 + (w * i) / 10, 12);
-    this.barText?.setText(`${Math.ceil(this.hp).toLocaleString()} / ${this.maxHp.toLocaleString()}  (${(pct * 100).toFixed(1)}%)`);
+    this.bar?.update(this.hp, this.maxHp, this.enraged, force);
   }
 }

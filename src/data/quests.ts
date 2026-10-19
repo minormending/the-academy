@@ -22,6 +22,36 @@ export const JOB_ADVANCEMENT_QUESTS: Partial<Record<JobId, string>> = {
 
 export const JOB_QUEST_IDS = new Set(Object.values(JOB_ADVANCEMENT_QUESTS));
 
+/** Field Bounties: one per practicum mini-boss. Quest id `q_bounty_<bossId>`; hand in the boss trophy `trophy_<bossId>`. */
+interface FieldBounty { boss: string; name: string; zone: string; level: number; flavor: string; mesos: number; items: { itemId: string; qty: number }[] }
+const FIELD_BOUNTIES: FieldBounty[] = [
+  { boss: 'mossback_matriarch', name: 'Mossback Matriarch', zone: 'Whisperwood', level: 8, mesos: 1500,
+    flavor: 'An ancient snail the size of a cart has been spotted in Whisperwood — she spins her shell like a millstone and spits slime that eats through boots.',
+    items: [{ itemId: 'red_potion', qty: 20 }, { itemId: 'blue_potion', qty: 15 }] },
+  { boss: 'shroom_monarch', name: 'Shroom Monarch', zone: 'Shroom Hollow', level: 14, mesos: 2600,
+    flavor: 'The mushrooms of Shroom Hollow have crowned a king. When he jumps, the ground ripples; when he breathes, the air turns to spores.',
+    items: [{ itemId: 'orange_potion', qty: 20 }, { itemId: 'blue_potion', qty: 20 }] },
+  { boss: 'frostfang_alpha', name: 'Frostfang Alpha', zone: 'Frostfang Cliffs', level: 24, mesos: 4500,
+    flavor: 'The yetis of Frostfang have an alpha, and it has noticed our survey team. Its roar shakes icicles loose from the cliffs — watch the ground for their shadows.',
+    items: [{ itemId: 'orange_potion', qty: 30 }, { itemId: 'mana_elixir', qty: 10 }] },
+  { boss: 'magmaw', name: 'Magmaw', zone: 'Cinder Caverns', level: 34, mesos: 7500,
+    flavor: 'Something huge is walking the Cinder Caverns, and the lava follows it. Magmaw swings slow and hits like a landslide — and it gets angrier as it cracks.',
+    items: [{ itemId: 'white_potion', qty: 20 }, { itemId: 'mana_elixir', qty: 15 }] },
+  { boss: 'tempest_wyrm', name: 'Tempest Wyrm', zone: 'Stormspire Peak', level: 44, mesos: 12000,
+    flavor: 'A storm drake is circling the Stormspire observatory and calling lightning down on anything that moves. Read the sky, then answer it.',
+    items: [{ itemId: 'white_potion', qty: 30 }, { itemId: 'elixir', qty: 5 }] },
+];
+export const FIELD_BOUNTY_QUEST_IDS: string[] = FIELD_BOUNTIES.map(b => `q_bounty_${b.boss}`);
+
+function bountyQuest(b: FieldBounty): QuestDef {
+  return {
+    id: `q_bounty_${b.boss}`, name: `Field Bounty: ${b.name}`, giver: 'scout_finn', minLevel: Math.max(1, b.level - 2),
+    description: `${b.flavor} It only shows itself now and then (a few minutes after you arrive, and again some time after it falls). Take this bounty BEFORE the hunt, defeat it in ${b.zone}, and bring Prefect Finn its trophy.`,
+    objectives: [{ kind: 'kill', monsterId: b.boss, count: 1 }, { kind: 'collect', itemId: `trophy_${b.boss}`, count: 1 }],
+    rewards: { exp: xp(b.level, 0.5), mesos: b.mesos, items: b.items },
+  };
+}
+
 /** Rewards are identical for every school's exam of the same Year. */
 const YEAR3_REWARDS: QuestDef['rewards'] = { exp: xp(25, 0.3), mesos: 3000, items: [{ itemId: 'orange_potion', qty: 20 }] };
 const YEAR4_REWARDS: QuestDef['rewards'] = { exp: xp(40, 0.3), mesos: 12000, items: [{ itemId: 'elixir', qty: 5 }] };
@@ -152,6 +182,8 @@ export const QUESTS: QuestDef[] = [
     objectives: [{ kind: 'kill', monsterId: 'void_wisp', count: 25 }, { kind: 'collect', itemId: 'void_crystal', count: 10 }],
     rewards: { exp: xp(46, 0.4), mesos: 25000, items: [{ itemId: 'power_elixir', qty: 5 }] },
   },
+  // ───────────── Field Bounties (Prefect Finn; repeatable — Finn re-posts a bounty after it is handed in) ─────────────
+  ...FIELD_BOUNTIES.map(b => bountyQuest(b)),
   {
     id: 'q_maelis_archon', name: 'Final Thesis: The Lich Archon', giver: 'elder_maelis', minLevel: 46,
     description: 'At the heart of the Sanctum, the Lich Archon hoards magic stolen from generations of students. Defeat it and bring the Headmistress its Sigil.',

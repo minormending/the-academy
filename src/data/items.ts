@@ -123,4 +123,23 @@ export const ITEMS: ItemDef[] = [
     'ring', 30, 30000, [add('matk', 4), add('maxMp', 60), add('mpRegen', 6)]),
   equip('arcane_amulet', 'Arcane Amulet', 'A star of living arcana on a silver chain.', { glyph: 'amulet', color: 0xc0c8d0, color2: 0xc89bff },
     'amulet', 35, 45000, [add('matk', 5), add('def', 4), add('maxHp', 50), add('maxMp', 60)]),
+
+  // ───────────── Field boss trophies (Prefect Finn's Field Bounties) ─────────────
+  etc('trophy_mossback_matriarch', 'Matriarch\'s Ancient Shell', 'A shell older than the Academy, still wearing its little garden. Proof for a Field Bounty.', { glyph: 'shell', color: 0x7a9a5a, color2: 0xff9ad0 }, 900, 10),
+  etc('trophy_shroom_monarch', 'Monarch\'s Crown Cap', 'The Shroom Monarch\'s cap, crown still attached. It smells regal. And damp.', { glyph: 'mushroom', color: 0xd8344a, color2: 0xffd447 }, 1800, 10),
+  etc('trophy_frostfang_alpha', 'Alpha\'s Frost Fang', 'A fang as long as your forearm, rimed in ice that never melts.', { glyph: 'bone', color: 0xe8f6ff, color2: 0x4fd6ff }, 3200, 10),
+  etc('trophy_magmaw', 'Heart of Magmaw', 'Still beating. Slowly. Like a forge that remembers being angry.', { glyph: 'gem', color: 0xff5a1f, color2: 0xfff07a }, 5000, 10),
+  etc('trophy_tempest_wyrm', 'Tempest Wyrm Horn', 'It crackles whenever someone in the room tells a lie.', { glyph: 'crystal', color: 0x8f6bd8, color2: 0xfff066 }, 7000, 10),
+
+  // ───────────── Field boss accessories (any School; rare) ─────────────
+  equip('matriarch_ring', 'Ring of the Slow Garden', 'Moss grows on it while you sleep. You heal a little; you hurry a little less.', { glyph: 'ring', color: 0x7a9a5a, color2: 0xff9ad0 },
+    'ring', 8, 0, [add('matk', 3), add('maxHp', 40), add('hpRegen', 4), add('speed', -5)], undefined, 1200),
+  equip('monarch_signet', 'Monarch\'s Signet', 'The royal seal of Shroom Hollow. Mushrooms bow when you pass. Critics do not.', { glyph: 'ring', color: 0xffd447, color2: 0xd8344a },
+    'ring', 13, 0, [add('matk', 4), add('maxMp', 40), add('critRate', 0.04)], undefined, 3000),
+  equip('alpha_fang_necklace', 'Alpha Fang Necklace', 'A pack leader\'s fang on a leather cord. Your spells bite harder — and so does the cold.', { glyph: 'amulet', color: 0xe8f6ff, color2: 0x4fd6ff },
+    'amulet', 22, 0, [add('matk', 5), add('critDmg', 0.12), add('maxHp', 60), add('def', 2)], undefined, 7000),
+  equip('magmaw_gauntlets', 'Magmaw Gauntlets', 'Forged from a molten titan\'s knuckles. Warm hands, heavy spells, no high-fives.', { glyph: 'gloves', color: 0x5a2a1e, color2: 0xff8a1e },
+    'gloves', 32, 0, [add('matk', 7), add('dmgAll', 0.05), add('def', 5), add('castSpeed', -0.03)], undefined, 15000),
+  equip('wyrmheart_amulet', 'Wyrmheart Amulet', 'A storm caught in amber. Your feet barely touch the ground, and neither do your cooldowns.', { glyph: 'amulet', color: 0x8f6bd8, color2: 0xfff066 },
+    'amulet', 42, 0, [add('matk', 8), add('castSpeed', 0.05), add('cdr', 0.05), add('speed', 10), add('maxMp', 80)], undefined, 28000),
 ];

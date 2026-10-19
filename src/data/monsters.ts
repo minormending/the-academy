@@ -264,10 +264,10 @@ export const MONSTERS: MonsterDef[] = [
   mk({ id: 'frost_bat', name: 'Frost Bat', level: 16, behavior: 'flyer', speed: 95, size: { w: 40, h: 30 },
     hpMul: 0.82, expMul: 0.95, touchMul: 0.9, weak: ['fire', 'lightning'], etc: 'bat_wing' }),
   mk({ id: 'snow_yeti', name: 'Snow Yeti', level: 20, behavior: 'walker', speed: 70, size: { w: 56, h: 72 },
-    hpMul: 1.05, expMul: 1.15, touchMul: 1.0, defMul: 1.2, weak: ['fire', 'shadow'], etc: 'yeti_fur', etcChance: 0.4,
-    extraDrops: [{ itemId: 'yeti_bone', chance: 0.35 }] }),
+    hpMul: 1.05, expMul: 1.15, touchMul: 1.0, defMul: 1.2, weak: ['fire', 'shadow'], etc: 'yeti_fur', etcChance: 0.55,
+    extraDrops: [{ itemId: 'yeti_bone', chance: 0.5 }] }),
   mk({ id: 'ice_wisp', name: 'Ice Wisp', level: 23, behavior: 'flyer', speed: 78, size: { w: 34, h: 38 },
-    hpMul: 0.85, touchMul: 1.05, weak: ['fire', 'holy'], resist: ['ice'], immune: ['freeze'], etc: 'wisp_essence' }),
+    hpMul: 0.85, touchMul: 1.05, weak: ['fire', 'holy'], resist: ['ice'], immune: ['freeze'], etc: 'wisp_essence', etcChance: 0.55 }),
   // ── cinder_caverns ──
   mk({ id: 'ember_imp', name: 'Ember Imp', level: 26, behavior: 'hopper', speed: 105, size: { w: 36, h: 44 },
     hpMul: 0.9, expMul: 0.95, weak: ['ice'], resist: ['fire'], etc: 'imp_horn' }),

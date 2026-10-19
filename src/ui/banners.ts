@@ -1,6 +1,7 @@
 /** Area-name banner (top) and big centred banners (LEVEL UP!, job advancement) with a queue. */
 import { append, clear, h } from './dom';
 import type { UICtx } from './context';
+import { getBinding, keyLabel } from '../core/bindings';
 
 interface BigSpec { kind: 'level' | 'job' | 'generic'; title: string; text: string; sub?: string; color?: string; durMs: number }
 
@@ -40,7 +41,7 @@ export class Banners {
   }
 
   levelUp(level: number) {
-    this.enqueue({ kind: 'level', title: 'LEVEL UP!', text: `Level ${level}`, sub: 'New AP & SP available — press P / K', color: '#ffd76a', durMs: 2600 });
+    this.enqueue({ kind: 'level', title: 'LEVEL UP!', text: `Level ${level}`, sub: `New AP & SP available — press ${keyLabel(getBinding('stats'))} / ${keyLabel(getBinding('skills'))}`, color: '#ffd76a', durMs: 2600 });
   }
 
   jobAdvance(jobName: string, desc: string, color: string, year?: number) {

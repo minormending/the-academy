@@ -10,6 +10,7 @@ import {
   setActiveSlot, writeSave, type SlotSummary,
 } from '../systems/SaveSystem';
 import type { School } from '../data/jobs';
+import { getBinding, keyLabel, type ActionId } from '../core/bindings';
 import { ensurePlayerTexture, jobPreviewDataUrl, playerAnimKey, playerTextureKey } from '../art/characters';
 import { getAudio } from '../systems/AudioSystem';
 import { append, h, isTextInput, safe } from './dom';
@@ -193,7 +194,13 @@ export class TitleMenu {
     if (csOn) { this.panel.replaceChildren(); this.renderSelect(); } else { this.cs.replaceChildren(); this.renderPanel(); }
     this.foot.textContent = csOn
       ? (this.view === 'confirm' ? '← → choose · Enter confirm · Esc cancel' : 'Arrows choose · Enter play · N new · Del delete · Esc back')
-      : 'Arrows move · Space jumps · Q W E R T cast · H for help';
+      : this.playHint();
+  }
+
+  /** Main-menu footer: key names follow the player's live bindings. */
+  private playHint(): string {
+    const k = (a: ActionId) => keyLabel(getBinding(a));
+    return `${['left', 'right'].map(a => k(a as ActionId)).join(' ')} move · ${k('jump')} jumps · ${(['slot0', 'slot1', 'slot2', 'slot3', 'slot4'] as ActionId[]).map(k).join(' ')} cast · ${k('help')} for help`;
   }
 
   private mainButtons(): { label: string; sub: string; primary: boolean; disabled?: boolean; run: () => void }[] {

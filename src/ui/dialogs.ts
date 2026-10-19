@@ -2,6 +2,7 @@
 import type { Branch, DialogSpec, ItemDef, ItemStack, ShopSpec } from '../core/types';
 import { Registry } from '../core/registry';
 import type { UICtx } from './context';
+import { keyText } from '../data/keyText';
 import { fmtNum, h, safe } from './dom';
 import { itemTooltip } from './info';
 import { iconEl, portraitEl } from './uiIcons';
@@ -28,7 +29,7 @@ export class DialogWindow extends UIWindow {
   show(spec: DialogSpec) {
     this.spec = spec;
     this.gen++;
-    this.full = String(spec.text ?? '').replace(/\\n/g, '\n');
+    this.full = keyText(String(spec.text ?? '').replace(/\\n/g, '\n'));
     this.shown = 0;
     this.invalidate();
     if (!this.isOpen) this.open(); else this.bringToFront();
@@ -52,7 +53,7 @@ export class DialogWindow extends UIWindow {
     const buttons = opts.map((o, i) => h('button', {
       class: `ax-dlg-opt${opts.length === 1 ? ' ax-single' : ''}`,
       onclick: () => this.choose(i),
-    }, h('span', { class: 'ax-dlg-num' }, String(i + 1)), o.label));
+    }, h('span', { class: 'ax-dlg-num' }, String(i + 1)), keyText(o.label)));
     this.body.replaceChildren(
       h('div', { class: 'ax-dlg' },
         h('div', { class: 'ax-dlg-left' }, portraitEl(npc?.look, 110, spec.npcName),

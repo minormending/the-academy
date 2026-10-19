@@ -191,15 +191,15 @@ const bramShop = (c: Ctx): DialogOption =>
 /** Your own Professor's farewell after office hours (by the professor's School, not the student's). */
 const OFFICE_HOURS: Record<School, { offer: string; done: string }> = {
   fire: {
-    offer: 'A first-year at office hours! Keen — I like that. Professor Pyra, Head of Pyromancy. At level 10 you\'ll declare a School with the Headmistress. Pick fire. Or don\'t! But pick fire.\n\nStudy tip: every level gives you 3 SP. Press K to open your spellbook and spend them — Arcane Bolt gets hotter with every point.',
+    offer: 'A first-year at office hours! Keen — I like that. Professor Pyra, Head of Pyromancy. At level 10 you\'ll declare a School with the Headmistress. Pick fire. Or don\'t! But pick fire.\n\nStudy tip: every level gives you 3 SP. Press {key:skills} to open your spellbook and spend them — Arcane Bolt gets hotter with every point.',
     done: 'There. Now you know where the warm office is.',
   },
   ice: {
-    offer: 'Professor Glacius, Cryomancy. Sit. Breathe. Good — most first-years forget the second part.\n\nStudy tip: each level also gives you AP. Press P for your stats and put them into INT, which strengthens every spell. The Auto button will do it for you, if you trust it.',
+    offer: 'Professor Glacius, Cryomancy. Sit. Breathe. Good — most first-years forget the second part.\n\nStudy tip: each level also gives you AP. Press {key:stats} for your stats and put them into INT, which strengthens every spell. The Auto button will do it for you, if you trust it.',
     done: 'Calm, attentive, punctual. You will do well here.',
   },
   lightning: {
-    offer: 'Professor Voltis, Storm Magic! You\'re here! You\'re early! I LOVE early!\n\nStudy tip: your hotbar has two pages — press Tab to flip between them. More slots for spells, more slots for ZAP.',
+    offer: 'Professor Voltis, Storm Magic! You\'re here! You\'re early! I LOVE early!\n\nStudy tip: your hotbar has two pages — press {key:hotbarPage} to flip between them. More slots for spells, more slots for ZAP.',
     done: 'Great chat! Quick chat! Best kind of chat!',
   },
   holy: {
@@ -218,9 +218,9 @@ function npcSchool(c: Ctx): School { return PROFESSOR_SCHOOL[c.npcId] ?? 'fire';
 const STORY_SCRIPT: Record<string, StoryLines> = {
   // ───── Year 1 · Orientation ─────
   story_orientation: {
-    offer: c => fill(c, 'Welcome, welcome! I am Headmistress Maelis, and this is the Academy. Before your first lesson, {name}, the basics:\n\n• Arrow keys walk. Space (or Alt) jumps — hold Down and jump to drop through a ledge.\n• Press Up to talk to people, climb ropes and ladders, and step through glowing portals.\n• Press H any time for the full list of controls.'),
-    accept: 'Walk, jump, Up to talk. Got it!',
-    progress: () => 'Arrow keys, Space to jump, Up to talk.',
+    offer: c => fill(c, 'Welcome, welcome! I am Headmistress Maelis, and this is the Academy. Before your first lesson, {name}, the basics:\n\n• {key:left} / {key:right} walk. {key:jump} (or {key:jump2}) jumps — hold {key:down} and jump to drop through a ledge.\n• Press {key:interact} to talk to people, climb ropes and ladders, and step through glowing portals.\n• Press {key:help} any time for the full list of controls.'),
+    accept: 'Walk, jump, {key:interact} to talk. Got it!',
+    progress: () => '{key:left} / {key:right} to walk, {key:jump} to jump, {key:interact} to talk.',
     done: () => 'Splendid! Here is a little pocket money — every first-year needs it.\n\nOur Professors keep office hours along the east hall. Walk over, pick any one of them, and say hello.',
   },
   story_office_hours: {
@@ -230,19 +230,19 @@ const STORY_SCRIPT: Record<string, StoryLines> = {
     done: c => `${OFFICE_HOURS[npcSchool(c)].done}\n\nNext, see Bram, our quartermaster, at the west end of campus. Nobody leaves for a practicum without supplies.`,
   },
   story_supplies: {
-    offer: () => 'First trip off campus, eh? Rule one: always carry a Return Scroll. Buy one from my counter — 150 mesos — and show it to me.\n\nRule two, free of charge: your Red Potions sit on key 1 and Blue on key 2. Open your bag (I) and drag any potion onto a hotbar slot to keep it handy. Low on HP? Tap the key and drink.',
+    offer: () => 'First trip off campus, eh? Rule one: always carry a Return Scroll. Buy one from my counter — 150 mesos — and show it to me.\n\nRule two, free of charge: your Red Potions sit on key {key:slot10} and Blue on key {key:slot11}. Open your bag ({key:inventory}) and drag any potion onto a hotbar slot to keep it handy. Low on HP? Tap the key and drink.',
     accepted: () => 'Return Scrolls are on the counter. Go on, have a look.',
     progress: () => 'One Return Scroll, 150 mesos. Got the coin? The Headmistress gave every first-year a little.',
     extra: c => [bramShop(c)],
     done: c => {
       const potionOnBar = c.p.state.hotbar.some(e => !!e && e.startsWith('item:'));
-      return `That's the one! Here it is back, with two more on the house and a stack of Red Potions.${potionOnBar ? '' : '\n\nOh, and your hotbar has no potions on it! Open your bag (I), go to the Use tab and drag a potion onto a slot.'}\n\nPrefect Finn is waiting just past the east gate, in Whisperwood, for your first practicum.`;
+      return `That's the one! Here it is back, with two more on the house and a stack of Red Potions.${potionOnBar ? '' : '\n\nOh, and your hotbar has no potions on it! Open your bag ({key:inventory}), go to the Use tab and drag a potion onto a slot.'}\n\nPrefect Finn is waiting just past the east gate, in Whisperwood, for your first practicum.`;
     },
   },
   story_first_practicum: {
-    offer: () => 'Prefect Finn, field practicums! Lesson one: Moss Snails.\n\nFace one and press Q to cast Arcane Bolt. Defeat 3 of them, then hold Z near what they drop to scoop it up. I need 2 Snail Shells.',
-    accepted: () => 'Q to cast, Z to loot. The snails are the slow green ones. Go!',
-    progress: () => 'Q to cast, hold Z to loot! Snails won\'t bite. Much.',
+    offer: () => 'Prefect Finn, field practicums! Lesson one: Moss Snails.\n\nFace one and press {key:slot0} to cast Arcane Bolt. Defeat 3 of them, then hold {key:pickup} near what they drop to scoop it up. I need 2 Snail Shells.',
+    accepted: () => '{key:slot0} to cast, {key:pickup} to loot. The snails are the slow green ones. Go!',
+    progress: () => '{key:slot0} to cast, hold {key:pickup} to loot! Snails won\'t bite. Much.',
     done: () => 'Textbook! Take these sandals — the trail gets muddy.\n\nFrom here, Year 1 is about practice: my field practicums, assignments from the staff, and levels. The Headmistress has your next assignment — head back to campus and see her.',
   },
   story_declaration: {
@@ -545,7 +545,7 @@ function chooseSchool(c: Ctx) {
           let extra = '';
           const decl = Registry.quest('story_declaration');
           if (decl && p.questStatus(decl.id) === 'complete' && p.turnInQuest(decl.id)) extra = `\n\nAnd your upperclassman's cap — Declaration Day is complete. ${rewardsText(decl)}`;
-          say(c, `It is done. Welcome to Year 2 and the ${SCHOOL_NAME[sc]} School, ${jobName(target)}.\n\n${professorName(sc)} will guide you from here and set your Year 3 Exam at level 25. You also have 3 bonus SP — open your spellbook with K.${extra}\n\nOne more thing. Prefect Finn sent word of strange violet light in Shroom Hollow. At level 11, would you look into it for me?`, [bye('Thank you, Headmistress!')]);
+          say(c, `It is done. Welcome to Year 2 and the ${SCHOOL_NAME[sc]} School, ${jobName(target)}.\n\n${professorName(sc)} will guide you from here and set your Year 3 Exam at level 25. You also have 3 bonus SP — open your spellbook with {key:skills}.${extra}\n\nOne more thing. Prefect Finn sent word of strange violet light in Shroom Hollow. At level 11, would you look into it for me?`, [bye('Thank you, Headmistress!')]);
         } else {
           say(c, 'Hmm. The registrar\'s ledger will not take the ink yet. Come back when you are ready.', [bye()]);
         }
@@ -653,7 +653,7 @@ const PROFESSOR_LINES: Record<School, ProfessorLines> = {
     offerExam: job => `You've grown hot enough to forge. Pass my exam, and I'll make you ${aJob(job)}.`,
     examProgress: 'Still working on it? Fire waits for no one — get moving!',
     examDone: job => `Ha! Look at that haul! Top marks. Ready to become ${aJob(job)}?`,
-    advanced: job => `Burn bright, ${job}! New spells await — check them with K.`,
+    advanced: job => `Burn bright, ${job}! New spells await — check them with {key:skills}.`,
     graduate: ['An Inferno Sage. Honestly? I\'m a little jealous. Go melt something magnificent.'],
   },
   ice: {
@@ -673,7 +673,7 @@ const PROFESSOR_LINES: Record<School, ProfessorLines> = {
     offerExam: job => `Your frost has deepened. Pass my exam and I will name you ${job}.`,
     examProgress: 'Patience. But not too much patience. The exam still waits.',
     examDone: job => `Exquisite work. The cold is pleased. Shall I name you ${job}?`,
-    advanced: job => `Welcome, ${job}. Let the world slow around you. Press K to learn new spells.`,
+    advanced: job => `Welcome, ${job}. Let the world slow around you. Press {key:skills} to learn new spells.`,
     graduate: ['A Glacial Sage stands before me. The stillness at the heart of the storm... is you.'],
   },
   lightning: {
@@ -693,7 +693,7 @@ const PROFESSOR_LINES: Record<School, ProfessorLines> = {
     offerExam: job => `You're crackling, kid! Pass my exam and I'll make you ${aJob(job)}. Deal?`,
     examProgress: 'Not done yet? Speed it up! Zip zap!',
     examDone: job => `BOOM! That's an A-plus! Ready to become ${aJob(job)}?`,
-    advanced: job => `Say hello to the new ${job}! Go check your spells — K, quick!`,
+    advanced: job => `Say hello to the new ${job}! Go check your spells — {key:skills}, quick!`,
     graduate: ['A Tempest Sage. You ARE the storm now. Try not to set the campus on fire. That\'s Pyra\'s job.'],
   },
   holy: {
@@ -714,7 +714,7 @@ const PROFESSOR_LINES: Record<School, ProfessorLines> = {
     offerExam: job => `Your light has grown steady. Pass this exam and you'll rise as ${aJob(job)}.`,
     examProgress: 'Take your time — but not too much. The chapel lamps won\'t light themselves.',
     examDone: job => `Oh, well done! Radiant work. Are you ready to become ${aJob(job)}?`,
-    advanced: job => `Rise, ${job}. May your light never gutter. New spells await — press K.`,
+    advanced: job => `Rise, ${job}. May your light never gutter. New spells await — press {key:skills}.`,
     graduate: ['A Hierophant of the Academy. When the Lich Archon sees you coming, I hope it feels the sunrise.'],
   },
   shadow: {
@@ -735,7 +735,7 @@ const PROFESSOR_LINES: Record<School, ProfessorLines> = {
     offerExam: job => `You've become a respectable little menace. Pass my exam and I'll name you ${aJob(job)}.`,
     examProgress: 'Still at it? Good. Suffering builds character. Ideally someone else\'s.',
     examDone: job => `Oh, that is delightfully grim. Well done. Shall I make you ${aJob(job)}?`,
-    advanced: job => `Welcome to the dark, ${job}. Press K — your new spells are waiting, and they bite.`,
+    advanced: job => `Welcome to the dark, ${job}. Press {key:skills} — your new spells are waiting, and they bite.`,
     graduate: ['An Umbral Sage. I taught you everything, and you still surprised me. Tell no one I said that.'],
   },
 };
@@ -942,11 +942,11 @@ function smithTilda(c: Ctx) {
 }
 
 const FINN_TIPS = [
-  'Hold Z to scoop up loot and mesos. Monsters drop the goods; you just have to grab them.',
-  'Press Up at a glowing portal to travel. East leads deeper into the wilds — and tougher monsters.',
-  'Spend your AP in the Stats window (P). INT makes your spells hit harder; LUK helps you crit.',
-  'Put potions on your hotbar! Keys 1 and 2 are perfect for them.',
-  'Ropes and ladders: walk up to one and press Up to climb.',
+  'Hold {key:pickup} to scoop up loot and mesos. Monsters drop the goods; you just have to grab them.',
+  'Press {key:interact} at a glowing portal to travel. East leads deeper into the wilds — and tougher monsters.',
+  'Spend your AP in the Stats window ({key:stats}). INT makes your spells hit harder; LUK helps you crit.',
+  'Put potions on your hotbar! Keys {key:slot10} and {key:slot11} are perfect for them.',
+  'Ropes and ladders: walk up to one and press {key:up} to climb.',
   'Every School has favourite targets. Spells hit 50% harder on a weakness — and half as hard on a resistance.',
   'Every practicum zone has one big troublemaker that shows up now and then. When the ground starts flashing red, MOVE — then make it pay. I post Field Bounties for each of them.',
 ];

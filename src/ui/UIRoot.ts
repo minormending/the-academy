@@ -7,7 +7,7 @@ import Phaser from 'phaser';
 import type { GameServices, IUI, SfxKey } from '../core/types';
 import { bus, type GameEvents } from '../core/events';
 import { Registry } from '../core/registry';
-import { actionsForKey, eventKeyCode } from '../core/bindings';
+import { actionsForKey, eventKeyCode, getBinding, keyLabel } from '../core/bindings';
 import { controlsClaimKey } from './controlsWindow';
 import { expToNext } from '../core/balance';
 import { Layout, type UICtx, type WindowName } from './context';
@@ -28,7 +28,15 @@ import { DeathModal, DialogWindow, ShopWindow } from './dialogs';
 import { BRANCH_COLORS, jobName } from './info';
 import { consumeNewCharacter } from './session';
 import { ArenaPanel } from './arenaPanel';
+import { CreditsRoll } from './creditsRoll';
+import { GRADUATION_QUEST_ID, STORY_FLOW, STORY_QUESTS } from '../data/storyQuests';
+import { keyText } from '../data/keyText';
 import type { UIWindow } from './window';
+
+/** Names of talk-only story steps (their "Ready to hand in" log line is pointless: they are handed in on the spot). */
+const TALK_STEP_NAMES = new Set(STORY_QUESTS.filter(q => STORY_FLOW[q.id]?.talk).map(q => q.name));
+/** A completed assignment is announced only if it is still waiting for hand-in after this long. */
+const COMPLETE_DELAY_MS = 1000;
 
 export class UIRoot implements IUI {
   private root: HTMLElement;
@@ -47,6 +55,7 @@ export class UIRoot implements IUI {
   private chat: ChatLog;
   private banners: Banners;
   private arena: ArenaPanel;
+  private credits: CreditsRoll;
   private death: DeathModal;
   private dialog: DialogWindow;
   private shop: ShopWindow;
@@ -59,6 +68,8 @@ export class UIRoot implements IUI {
   private lastLevel = -1;
   private lastExp = 0;
   private questStatus = new Map<string, string>();
+  /** Delayed "Assignment Complete" announcements (cancelled when the quest is handed in right away). */
+  private completeTimers = new Map<string, number>();
   private unsubs: (() => void)[] = [];
   private errorAt = 0;
 
@@ -112,6 +123,7 @@ export class UIRoot implements IUI {
     this.shop = new ShopWindow(this.ctx);
     this.allWindows = [...Object.values(this.windows), this.dialog, this.shop];
     this.death = new DeathModal(this.ctx);
+    this.credits = new CreditsRoll(this.ctx);
 
     window.addEventListener('keydown', this.onKeyDown);
     this.root.addEventListener('contextmenu', this.onContextMenu);
@@ -138,7 +150,7 @@ export class UIRoot implements IUI {
     this.on('player:job', ({ job }) => {
       const def = safe(() => Registry.job(job), undefined);
       this.banners.jobAdvance(def?.name ?? jobName(job), def?.description ?? '', BRANCH_COLORS[def?.branch ?? 'none'], def?.tier);
-      this.chat.push('New spells await in your Spellbook (K).', '#b8c2ff');
+      this.chat.push(`New spells await in your Spellbook (${keyLabel(getBinding('skills'))}).`, '#b8c2ff');
       if (this.windows.jobs.isOpen) this.windows.jobs.close();
       dirtyAll();
     });
@@ -163,11 +175,14 @@ export class UIRoot implements IUI {
     this.on('ui:dialog', (spec) => { this.dialog.show(spec); this.tooltip.hide(); });
     this.on('ui:closeDialog', () => this.dialog.close());
     this.on('ui:shop', (spec) => { this.shop.show(spec); this.tooltip.hide(); });
-    this.on('ui:banner', ({ text, sub, color }) => this.banners.showArea(text, sub, color));
+    this.on('ui:banner', ({ text, sub, color }) => this.banners.showArea(keyText(text), sub ? keyText(sub) : sub, color));
     this.on('ui:log', ({ text, color }) => {
       // EXP gains are tracked (and coalesced) by trackExp(); drop per-kill "+N EXP" duplicates.
       if (/^\+[\d,]+ EXP$/.test(String(text).trim())) return;
-      this.chat.push(text, color);
+      // Talk-only story steps are accepted and handed in within one conversation: no "ready to hand in" flash.
+      const ready = /^Ready to hand in: (.+)$/.exec(String(text).trim());
+      if (ready && TALK_STEP_NAMES.has(ready[1])) return;
+      this.chat.push(keyText(String(text)), color);
     });
     this.on('ui:death', () => { this.dialog.close(); this.shop.close(); this.death.show(); });
     this.on('ui:open', ({ window: w }) => this.openWindow(w));
@@ -181,10 +196,23 @@ export class UIRoot implements IUI {
     if (q && now !== prev) {
       // Progression logs accept / ready / turn-in lines; the UI adds the banner + a pointer to the giver.
       const giver = Registry.npc(q.giver)?.name ?? q.giver;
-      if (now === 'complete') { this.chat.push(`Return to ${giver} for your reward.`, '#9fe8a8'); this.banners.showArea('Assignment Complete!', `${q.name} — return to ${giver}`, '#9fe8a8'); }
+      // Talk-only story steps jump accepted -> complete -> handed in inside one conversation: nothing to announce.
+      // Everything else waits a moment, so a quest that is handed in right away never flashes the banner.
+      if (now === 'complete' && !STORY_FLOW[questId]?.talk) this.announceComplete(questId, q.name, giver);
     }
+    if (questId === GRADUATION_QUEST_ID && now === 'turned_in' && prev !== 'turned_in' && this.started) this.credits.arm();
     this.questStatus.set(questId, now);
     this.windows.quests.markDirty();
+  }
+
+  private announceComplete(questId: string, name: string, giver: string) {
+    window.clearTimeout(this.completeTimers.get(questId));
+    this.completeTimers.set(questId, window.setTimeout(() => {
+      this.completeTimers.delete(questId);
+      if (this.destroyed || this.services.progression.state.quests?.[questId]?.status !== 'complete') return;
+      this.chat.push(`Return to ${giver} for your reward.`, '#9fe8a8');
+      this.banners.showArea('Assignment Complete!', `${name} — return to ${giver}`, '#9fe8a8');
+    }, COMPLETE_DELAY_MS));
   }
 
   private markAllDirty() {
@@ -220,7 +248,7 @@ export class UIRoot implements IUI {
       if (e.code === 'Escape') (active as HTMLElement).blur();
       return;
     }
-    if (this.death.isOpen) return;
+    if (this.death.isOpen || this.credits.isOpen) return;
     if (this.dialog.isOpen) {
       if (e.code === 'Escape') { this.dialog.close(); e.preventDefault(); return; }
       if (this.dialog.handleKey(e)) { e.preventDefault(); return; }
@@ -293,7 +321,7 @@ export class UIRoot implements IUI {
       this.layout.setFlag(flag, true);
       this.windows.help.open();
       this.chat.push(`Welcome to The Academy, ${st.name}! Your first year begins.`, '#ffd76a');
-      this.chat.push('Press H any time to see the controls.', '#b8c2ff');
+      this.chat.push(`Press ${keyLabel(getBinding('help'))} any time to see the controls.`, '#b8c2ff');
     } else {
       this.chat.push(`Welcome back, ${st.name}.`, '#ffd76a');
     }
@@ -313,8 +341,13 @@ export class UIRoot implements IUI {
     this.lastExp = st.exp;
   }
 
+  /** The roll covers the whole screen; windows opened behind it (e.g. from a gamepad) are closed. */
+  private closeWindowsForCredits() {
+    for (const w of this.allWindows) if (w.isOpen) w.close();
+  }
+
   private syncInputBlock() {
-    const want = this.dialog.isOpen || this.shop.isOpen || isTextInput(document.activeElement);
+    const want = this.dialog.isOpen || this.shop.isOpen || this.credits.isOpen || isTextInput(document.activeElement);
     if (want === this.blocked) return;
     this.blocked = want;
     try { this.services.game.setInputBlocked(want); } catch { /* ignore */ }
@@ -335,6 +368,8 @@ export class UIRoot implements IUI {
       this.arena.frame();
       for (const w of this.allWindows) w.tick(time, delta);
       this.tooltip.check();
+      this.credits.frame(delta, !this.dialog.isOpen && !this.shop.isOpen && !this.death.isOpen && !safe(() => this.services.progression.isDead(), false));
+      if (this.credits.isOpen) this.closeWindowsForCredits();
       this.syncInputBlock();
       if (!this.death.isOpen && safe(() => this.services.progression.isDead(), false) && this.started) {
         // Safety net: if ui:death was missed, still offer the respawn prompt.
@@ -348,6 +383,8 @@ export class UIRoot implements IUI {
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
+    for (const t of this.completeTimers.values()) window.clearTimeout(t);
+    this.completeTimers.clear();
     for (const u of this.unsubs) { try { u(); } catch { /* ignore */ } }
     this.unsubs = [];
     window.removeEventListener('keydown', this.onKeyDown);
@@ -357,6 +394,7 @@ export class UIRoot implements IUI {
     if (this.blocked) { try { this.scene.input.keyboard?.enableGlobalCapture(); } catch { /* ignore */ } }
     for (const w of this.allWindows) w.destroy();
     this.death.destroy();
+    this.credits.destroy();
     this.banners.destroy();
     this.arena.destroy();
     this.status.destroy();

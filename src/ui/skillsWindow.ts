@@ -5,6 +5,7 @@
  */
 import { HOTBAR_PAGE_SIZE, HOTBAR_SIZE, type JobDef, type JobId, type SkillDef } from '../core/types';
 import { Registry } from '../core/registry';
+import { getBinding, keyLabel } from '../core/bindings';
 import type { UICtx } from './context';
 import { h, safe } from './dom';
 import { BRANCH_COLORS, BRANCH_NAMES, examinerName, schoolName, skillTooltip } from './info';
@@ -269,7 +270,7 @@ export class SkillsWindow extends UIWindow {
     const slot = order.find(i => !hb[i] && !isPotionKey(i)) ?? order.find(i => !hb[i]);
     if (slot === undefined) { this.ctx.sfx('ui_error'); this.ctx.log('Both hotbar pages are full — drag the spell onto a slot to replace it.', '#ff9b9b'); return; }
     safe(() => p.setHotbar(slot, def.id), undefined);
-    if (pageOf(slot) - 1 !== cur) this.ctx.log(`${def.name} added to hotbar page ${pageOf(slot)} (Tab to flip).`, '#b8c2ff');
+    if (pageOf(slot) - 1 !== cur) this.ctx.log(`${def.name} added to hotbar page ${pageOf(slot)} (${keyLabel(getBinding('hotbarPage'))} to flip).`, '#b8c2ff');
     this.ctx.sfx('ui_click');
   }
 

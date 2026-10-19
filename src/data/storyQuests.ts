@@ -53,7 +53,7 @@ export const STORY_QUESTS: QuestDef[] = [
   },
   {
     id: 'story_first_practicum', name: 'First Practicum', giver: 'scout_finn', minLevel: 1,
-    description: 'Prefect Finn\'s first field lesson, just past the east gate in Whisperwood: blast 3 Moss Snails with Arcane Bolt (Q) and scoop up 2 Snail Shells (hold Z).',
+    description: 'Prefect Finn\'s first field lesson, just past the east gate in Whisperwood: blast 3 Moss Snails with Arcane Bolt ({key:slot0}) and scoop up 2 Snail Shells (hold {key:pickup}).',
     objectives: [{ kind: 'kill', monsterId: 'moss_snail', count: 3 }, { kind: 'collect', itemId: 'snail_shell', count: 2 }],
     rewards: { exp: xp(2, 0.8), mesos: 100, items: [{ itemId: 'soft_sandals', qty: 1 }, { itemId: 'red_potion', qty: 10 }] },
   },

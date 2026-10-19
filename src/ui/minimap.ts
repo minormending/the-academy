@@ -2,6 +2,7 @@
 import type { MapDef } from '../core/types';
 import { Registry } from '../core/registry';
 import type { UICtx } from './context';
+import { getBinding, keyLabel, onBindingsChanged } from '../core/bindings';
 import { h, safe, setText } from './dom';
 
 const MAX_W = 216, MAX_H = 112, DPR = 2;
@@ -20,14 +21,18 @@ export class Minimap {
   private nextDraw = 0;
   private visible: boolean;
   private toggleBtn!: HTMLButtonElement;
+  private offBindings: (() => void) | null = null;
 
   constructor(private ctx: UICtx) {
     this.canvas = h('canvas', { class: 'ax-minimap-canvas' });
     this.g = this.canvas.getContext('2d');
     this.nameEl = h('div', { class: 'ax-mm-name' });
     this.subEl = h('div', { class: 'ax-mm-sub' });
-    const toggle = h('button', { class: 'ax-mm-toggle', title: 'Toggle minimap (M)', onclick: () => this.toggle() }, '–');
+    const toggle = h('button', { class: 'ax-mm-toggle', title: 'Toggle minimap', onclick: () => this.toggle() }, '–');
     this.toggleBtn = toggle;
+    const syncKey = () => { toggle.title = `Toggle minimap (${keyLabel(getBinding('minimap'))})`; };
+    syncKey();
+    this.offBindings = onBindingsChanged(syncKey);
     this.el = h('div', { class: 'ax-minimap' },
       h('div', { class: 'ax-mm-head' }, h('div', { class: 'ax-mm-titles' }, this.nameEl, this.subEl), toggle),
       h('div', { class: 'ax-mm-body' }, this.canvas));
@@ -137,5 +142,5 @@ export class Minimap {
     g.beginPath(); g.arc(px, py, 2.8 * DPR, 0, Math.PI * 2); g.fill(); g.stroke();
   }
 
-  destroy() { this.el.remove(); }
+  destroy() { this.offBindings?.(); this.offBindings = null; this.el.remove(); }
 }

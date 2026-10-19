@@ -932,3 +932,42 @@ body.ax-dragging, body.ax-dragging * { cursor: grabbing !important; }
 .ax-seg-btn + .ax-seg-btn { border-left: 2px solid var(--ax-k); }
 .ax-seg-btn:hover { color: var(--ax-ink); }
 .ax-seg-btn.ax-active { color: var(--ax-k); text-shadow: 1px 1px 0 rgba(255, 240, 180, 0.55); background: var(--ax-gold); box-shadow: inset 2px 2px 0 #f4eea0, inset -2px -2px 0 var(--ax-gold-2); }
+
+/* ═══════════════ Graduation credits roll ═══════════════ */
+.ax-credits {
+  position: absolute; inset: 0; z-index: 60000; overflow: hidden; text-align: center; color: var(--ax-ink);
+  background:
+    linear-gradient(180deg, #0c0a24 0 22%, #120f38 22% 44%, #1a1448 44% 62%, #231a58 62% 78%, #2d1f66 78% 90%, #3a2878 90% 100%);
+}
+.ax-cr-stars { position: absolute; left: 0; top: 0; width: 2px; height: 2px; background: transparent; }
+.ax-cr-cards { position: absolute; inset: 0; }
+.ax-cr-card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 0 140px; }
+.ax-cr-kicker { font-family: var(--ax-head); font-size: 16px; letter-spacing: 6px; color: var(--ax-arcane); text-shadow: var(--ax-ts2); text-transform: uppercase; }
+.ax-cr-title { font-family: var(--ax-head); font-size: 96px; letter-spacing: 8px; line-height: 1.05; color: var(--ax-gold); text-shadow: var(--ax-outline), 0 8px 0 var(--ax-k), 0 6px 0 rgba(90, 50, 0, 0.95); }
+.ax-cr-big { font-family: var(--ax-head); font-size: 64px; letter-spacing: 4px; color: #f4eea0; text-shadow: var(--ax-outline), 0 6px 0 var(--ax-k); }
+.ax-cr-name { font-family: var(--ax-head); font-size: 64px; letter-spacing: 3px; color: #fff; text-shadow: var(--ax-outline), 0 6px 0 var(--ax-k); max-width: 1000px; overflow-wrap: anywhere; }
+.ax-cr-job { font-family: var(--ax-head); font-size: 32px; letter-spacing: 3px; color: var(--ax-gold); text-shadow: var(--ax-outline); }
+.ax-cr-line { font-size: 24px; line-height: 1.2; color: var(--ax-ink); text-shadow: var(--ax-ts2); }
+.ax-cr-stats { display: flex; gap: 48px; font-size: 24px; color: var(--ax-ink-dim); text-shadow: var(--ax-ts2); }
+.ax-cr-stats b { color: var(--ax-gold); }
+.ax-cr-orn { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 6px 0; }
+.ax-cr-orn i { display: block; width: 120px; height: 4px; background: var(--ax-gold-2); box-shadow: 0 2px 0 var(--ax-k); }
+.ax-cr-orn b { display: block; width: 14px; height: 14px; background: var(--ax-gold); box-shadow: 0 0 0 2px var(--ax-k); transform: rotate(45deg); }
+.ax-cr-portrait { padding: 6px; background: var(--ax-indigo-lo); box-shadow: 0 0 0 2px var(--ax-k), 0 0 0 4px var(--ax-gold-2); }
+.ax-cr-quote { max-width: 800px; font-size: 24px; line-height: 1.3; color: var(--ax-ink); text-shadow: var(--ax-ts2); }
+.ax-cr-sign { font-family: var(--ax-head); font-size: 16px; letter-spacing: 3px; color: var(--ax-gold); text-shadow: var(--ax-ts2); margin-top: 6px; }
+.ax-cr-roll { position: absolute; left: 0; right: 0; top: 0; bottom: 0; overflow: hidden; }
+.ax-cr-roll-inner { position: absolute; left: 50%; top: 0; width: 820px; margin-left: -410px; will-change: transform; }
+.ax-cr-sec { margin-bottom: 56px; }
+.ax-cr-h { font-family: var(--ax-head); font-size: 24px; letter-spacing: 5px; color: var(--ax-gold); text-shadow: var(--ax-outline); margin-bottom: 18px; }
+.ax-cr-credit { font-size: 16px; line-height: 1.35; color: var(--ax-ink); text-shadow: var(--ax-ts); margin: 0 0 11px; }
+.ax-cr-credit.ax-dim { color: var(--ax-ink-dim); margin-bottom: 0; }
+.ax-cr-who { color: #f4eea0; }
+.ax-cr-lic { color: var(--ax-arcane); }
+.ax-cr-thanks { padding: 220px 0 160px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.ax-cr-thanks-big { font-family: var(--ax-head); font-size: 48px; letter-spacing: 4px; color: #fff; text-shadow: var(--ax-outline), 0 6px 0 var(--ax-k); }
+.ax-cr-fade { position: absolute; left: 0; right: 0; height: 96px; pointer-events: none; }
+.ax-cr-fade-top { top: 0; background: linear-gradient(180deg, #0c0a24 0 24%, rgba(12, 10, 36, 0.75) 24% 48%, rgba(12, 10, 36, 0.4) 48% 74%, transparent 74%); }
+.ax-cr-fade-bot { bottom: 0; background: linear-gradient(0deg, #3a2878 0 24%, rgba(58, 40, 120, 0.75) 24% 48%, rgba(58, 40, 120, 0.4) 48% 74%, transparent 74%); }
+.ax-cr-end { position: absolute; left: 0; right: 0; bottom: 64px; display: flex; justify-content: center; }
+.ax-cr-hint { position: absolute; right: 24px; bottom: 16px; font-size: 16px; color: var(--ax-ink-faint); text-shadow: var(--ax-ts); }

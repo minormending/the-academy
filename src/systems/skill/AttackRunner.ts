@@ -51,8 +51,20 @@ function poseProj(go: Phaser.GameObjects.GameObject | null | undefined, x: numbe
   if (Math.sign(t.scaleY) !== want) t.scaleY = -t.scaleY;
 }
 
+/** A living monster with its bounds, captured once per frame (getBounds() allocates a Rectangle per call). */
+interface Live { m: IMonster; b: Phaser.Geom.Rectangle }
+
+/** Hit-VFX throttle: at most this many hit effects per window (the first of each distinct key always plays). */
+const HIT_VFX_WINDOW_MS = 100;
+const HIT_VFX_PER_WINDOW = 14;
+
 export class AttackRunner {
   private projs: Proj[] = [];
+  private liveFrame = -1;
+  private liveList: Live[] = [];
+  private hitWindowAt = -1e9;
+  private hitWindowCount = 0;
+  private hitWindowKeys = new Set<string>();
 
   constructor(private scene: Phaser.Scene, private svc: () => GameServices, private sched: Scheduler) {}
 
@@ -78,11 +90,17 @@ export class AttackRunner {
   update(delta: number): void {
     if (this.projs.length === 0) return;
     const dt = delta / 1000;
-    for (const p of this.projs) {
+    const projs = this.projs;
+    // Index loop: stepProj never appends, but a hit can schedule new projectiles (they are pushed later by the scheduler).
+    for (let i = 0; i < projs.length; i++) {
+      const p = projs[i];
       if (p.dead) continue;
       try { this.stepProj(p, dt); } catch (e) { console.error('[skills] projectile', e); this.kill(p, 0); }
     }
-    this.projs = this.projs.filter(p => !p.dead);
+    // Compact in place (no per-frame array allocation).
+    let keep = 0;
+    for (let i = 0; i < projs.length; i++) if (!projs[i].dead) projs[keep++] = projs[i];
+    projs.length = keep;
   }
 
   clear(): void {
@@ -92,15 +110,42 @@ export class AttackRunner {
 
   // ─────────────────────────── targeting ───────────────────────────
 
-  private living(): IMonster[] {
-    try { return this.svc().monsters.all().filter(m => m && m.alive); } catch { return []; }
+  /**
+   * Living monsters + bounds, rebuilt at most once per frame. Projectiles used to call monsters.all() (two array
+   * allocations) and getBounds() (one Rectangle per monster) for every sub-step of every projectile.
+   * Entries can die mid-frame (strikes resolve synchronously), so loops must still check `alive`.
+   */
+  private live(): Live[] {
+    const frame = this.scene.game.getFrame();
+    if (frame !== this.liveFrame) {
+      this.liveFrame = frame;
+      const out = this.liveList;
+      out.length = 0;
+      try {
+        for (const m of this.svc().monsters.all()) if (m && m.alive) out.push({ m, b: m.getBounds() });
+      } catch { out.length = 0; }
+    }
+    return this.liveList;
+  }
+
+  /** Throttle for `vfx.hit`: protects the frame when a many-hit cast lands on a crowd. Damage is never throttled. */
+  private allowHitVfx(key: string | undefined): boolean {
+    if (!key) return false;
+    const now = this.scene.time.now;
+    if (now - this.hitWindowAt >= HIT_VFX_WINDOW_MS || now < this.hitWindowAt) {
+      this.hitWindowAt = now; this.hitWindowCount = 0; this.hitWindowKeys.clear();
+    }
+    if (!this.hitWindowKeys.has(key)) { this.hitWindowKeys.add(key); this.hitWindowCount++; return true; }
+    if (this.hitWindowCount >= HIT_VFX_PER_WINDOW) return false;
+    this.hitWindowCount++;
+    return true;
   }
 
   /** Nearest living monster in the facing half-plane within `range` (edge distance) and |dy| ≤ maxDy. */
   frontNearest(o: Origin, range: number, maxDy = FRONT_MAX_DY): IMonster | null {
     let best: IMonster | null = null, bestD = Infinity;
-    for (const m of this.living()) {
-      const b = m.getBounds();
+    for (const { m, b } of this.live()) {
+      if (!m.alive) continue;
       const dx = (b.centerX - o.x) * o.facing;
       if (dx < -b.width / 2) continue;
       const dy = Math.abs(b.centerY - o.y);
@@ -115,8 +160,9 @@ export class AttackRunner {
   /** Nearest living monster in any direction (used by summons). */
   nearestAny(x: number, y: number, range: number, maxDy = 160): IMonster | null {
     let best: IMonster | null = null, bestD = Infinity;
-    for (const m of this.living()) {
-      const c = monsterCenter(m);
+    for (const { m, b } of this.live()) {
+      if (!m.alive) continue;
+      const c = { x: b.centerX, y: b.centerY };
       const dy = Math.abs(c.y - y);
       if (dy > maxDy) continue;
       const d = Math.hypot(c.x - x, dy);
@@ -127,9 +173,8 @@ export class AttackRunner {
 
   private inRect(r: Phaser.Geom.Rectangle, fromX: number, fromY: number, max: number, exclude?: Set<number>): IMonster[] {
     const out: { m: IMonster; d: number }[] = [];
-    for (const m of this.living()) {
-      if (exclude?.has(m.uid)) continue;
-      const b = m.getBounds();
+    for (const { m, b } of this.live()) {
+      if (!m.alive || exclude?.has(m.uid)) continue;
       if (!Phaser.Geom.Rectangle.Overlaps(r, b)) continue;
       out.push({ m, d: Math.hypot(b.centerX - fromX, b.centerY - fromY) });
     }
@@ -159,7 +204,7 @@ export class AttackRunner {
       pct *= num(spec.bonusVs.mult, 1);
       consume = !!spec.bonusVs.consume;
     }
-    if (playHit) {
+    if (playHit && this.allowHitVfx(spec.vfx.hit)) {
       const c = monsterCenter(m);
       let h = 40;
       try { h = m.getBounds().height; } catch { /* ignore */ }
@@ -257,9 +302,9 @@ export class AttackRunner {
       this.sched.after(jumpDelay, () => {
         const here = t.alive ? monsterCenter(t) : c;
         let best: IMonster | null = null, bestD = Infinity;
-        for (const m of this.living()) {
-          if (visited.has(m.uid)) continue;
-          const mc = monsterCenter(m);
+        for (const { m, b } of this.live()) {
+          if (!m.alive || visited.has(m.uid)) continue;
+          const mc = { x: b.centerX, y: b.centerY };
           const d = Math.hypot(mc.x - here.x, mc.y - here.y);
           if (d <= jumpRange && d < bestD) { bestD = d; best = m; }
         }
@@ -419,9 +464,8 @@ export class AttackRunner {
     const r = p.radius;
     const vr = Math.max(r, 18); // forgiving vertical reach so straight shots hit short monsters
     const hits: IMonster[] = [];
-    for (const m of this.living()) {
-      if (p.hitSet.has(m.uid)) continue;
-      const b = m.getBounds();
+    for (const { m, b } of this.live()) {
+      if (!m.alive || p.hitSet.has(m.uid)) continue;
       if (p.x + r < b.left || p.x - r > b.right || p.y + vr < b.top || p.y - vr > b.bottom) continue;
       hits.push(m);
     }

@@ -1,9 +1,9 @@
 // OWNER: A3 (fire-tree) / PX4 (pixel VFX). Fire textures + all `fire_*` VFX: 16-bit pixel sprite sheets (pxFx) over pixelized particles; procedural fallback when a sheet failed to load.
 import Phaser from 'phaser';
-import { registerVfx } from '../core/vfx';
 import { DEPTH } from '../core/constants';
 import { maybeServices } from '../core/services';
 import { pxFx, pxLoop } from '../art/particles';
+import { defineSchool, lazyRegister, scheduleIdle } from '../art/lazy';
 import type { VfxFn, VfxOptions } from '../core/types';
 import { generateFireTextures as genTextures, FT } from './fire/textures';
 import { generateFireSheets, fpx, fpxLoop } from './fire/sheets';
@@ -12,10 +12,16 @@ import {
   burst, stream, attachTrail, tongue, zone,
 } from './fire/fx';
 
-export function generateFireTextures(scene: Phaser.Scene): void {
+function buildFire(scene: Phaser.Scene): void {
   genTextures(scene);
   generateFireSheets(scene);
 }
+
+/** Boot hook: textures/sheets are built on first fire VFX (or in the background while on the Title screen). */
+export function generateFireTextures(scene: Phaser.Scene): void { scheduleIdle(scene, 'fire', buildFire); }
+
+defineSchool('fire', buildFire);
+const registerVfx = lazyRegister('fire', buildFire);
 
 // ───────────────────────────── shared sub-effects ─────────────────────────────
 

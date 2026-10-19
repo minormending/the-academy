@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 import type { GameServices, IMapInstance, IMonster, MonsterDef, PlatformDef, StatusInstance, StatusKind } from '../core/types';
 import { bus } from '../core/events';
 import { DEPTH } from '../core/constants';
-import { MFX, MONSTER_FOOT_PAD, monsterTextureKey, monsterVisual, type MonsterAnim, type MonsterVisual } from '../art/monsterArt';
+import { MFX, MONSTER_FOOT_PAD, ensureFallbackMonster, ensureMonsterTexture, monsterTextureKey, monsterVisual, type MonsterAnim, type MonsterVisual } from '../art/monsterArt';
 import { platformUnder } from './monsters/ground';
 
 export interface MonsterSpawnOptions {
@@ -79,6 +79,7 @@ export class Monster implements IMonster {
     this.flyer = def.behavior === 'flyer';
 
     const key = monsterTextureKey(def.id);
+    if (!ensureMonsterTexture(scene, def.id)) ensureFallbackMonster(scene);   // sheets are built on first spawn of each type
     const texKey = scene.textures.exists(key) ? key : scene.textures.exists(MFX.fallback) ? MFX.fallback : '__DEFAULT';
     this.animBase = texKey === '__DEFAULT' ? null : texKey;
     this.visual = monsterVisual(texKey);
@@ -135,6 +136,13 @@ export class Monster implements IMonster {
   getBounds(): Phaser.Geom.Rectangle {
     const { w, h } = this.def.size;
     return new Phaser.Geom.Rectangle(this.sprite.x - w / 2, this.sprite.y - h, w, h);
+  }
+
+  private readonly scratchBounds = new Phaser.Geom.Rectangle();
+  /** Same rectangle as getBounds() without the allocation, for per-frame callers. Reused on every call: never keep it. */
+  boundsRef(): Phaser.Geom.Rectangle {
+    const { w, h } = this.def.size;
+    return this.scratchBounds.setTo(this.sprite.x - w / 2, this.sprite.y - h, w, h);
   }
 
   takeDamage(amount: number, opts: { crit?: boolean; knockbackX?: number; fromX?: number } = {}): void {
@@ -460,7 +468,7 @@ export class Monster implements IMonster {
 
   protected tickStatuses(delta: number) {
     if (this.statuses.size === 0) return;
-    const expired: StatusKind[] = [];
+    let expired: StatusKind[] | null = null;
     for (const [kind, st] of this.statuses) {
       st.durationMs -= delta;
       if (kind === 'burn') {
@@ -489,9 +497,9 @@ export class Monster implements IMonster {
         }
         if (!this._alive) return;
       }
-      if (st.durationMs <= 0) expired.push(kind);
+      if (st.durationMs <= 0) (expired ??= []).push(kind);
     }
-    for (const k of expired) this.removeStatus(k);
+    if (expired) for (const k of expired) this.removeStatus(k);
   }
 
   protected onStatusStart(kind: StatusKind) {
@@ -565,7 +573,7 @@ export class Monster implements IMonster {
   // ─────────────────────────── visuals ───────────────────────────
 
   protected updateOverlays(now: number, delta: number) {
-    const b = this.getBounds();
+    const b = this.boundsRef();
     // Overlays sit above the art, which can be taller than the hitbox.
     const top = Math.min(b.y, this.sprite.y - (this.visual?.contentH ?? 0));
     // status tint

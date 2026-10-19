@@ -2,7 +2,7 @@
 // sheets plus the holy-only sheets (Cethiel wings, Cabbit/AntumDeluge angel, twiswist wing), over pixel particles.
 // Every effect keeps a procedural fallback for when a sheet failed to load.
 import Phaser from 'phaser';
-import { registerVfx } from '../core/vfx';
+import { defineSchool, lazyRegister, scheduleIdle } from '../art/lazy';
 import { DEPTH } from '../core/constants';
 import type { VfxFn, VfxOptions } from '../core/types';
 import { HT, generateHolyProceduralTextures } from './holy/textures';
@@ -12,10 +12,16 @@ import {
   attachTrail, zone, motes, sparks,
 } from './holy/fx';
 
-export function generateHolyTextures(scene: Phaser.Scene): void {
+function buildHoly(scene: Phaser.Scene): void {
   generateHolyProceduralTextures(scene);
   buildHolySheets(scene);
 }
+
+/** Boot hook: textures/sheets are built on first holy VFX (or in the background while on the Title screen). */
+export function generateHolyTextures(scene: Phaser.Scene): void { scheduleIdle(scene, 'holy', buildHoly); }
+
+defineSchool('holy', buildHoly);
+const registerVfx = lazyRegister('holy', buildHoly);
 
 const sideAngle = (f: 1 | -1, spread: number) => (f > 0 ? { min: -spread, max: spread } : { min: 180 - spread, max: 180 + spread });
 const sizeOf = (o: VfxOptions, dw: number, dh: number) => ({ w: o.w ?? dw, h: o.h ?? dh });

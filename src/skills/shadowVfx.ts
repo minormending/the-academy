@@ -1,6 +1,6 @@
 // Shadow VFX: local CC0 sheet recolours + hard-edged 1× fallback art, rendered at 2× nearest.
 import Phaser from 'phaser';
-import { registerVfx } from '../core/vfx';
+import { defineSchool, lazyRegister, scheduleIdle } from '../art/lazy';
 import { generateShadowTextures as generate } from './shadow/textures';
 import * as academy from './shadow/academyFx';
 import {
@@ -8,7 +8,11 @@ import {
   tideCast, tideImpact, tideProjectile,
 } from './shadow/fx';
 
-export function generateShadowTextures(scene: Phaser.Scene): void { generate(scene); }
+/** Boot hook: textures are built on first shadow VFX (or in the background while on the Title screen). */
+export function generateShadowTextures(scene: Phaser.Scene): void { scheduleIdle(scene, 'shadow', generate); }
+
+defineSchool('shadow', generate);
+const registerVfx = lazyRegister('shadow', generate);
 
 /** One-shots deliberately discard their sprites; only engine-owned visuals return an object. */
 export function registerShadowVfx(): void {

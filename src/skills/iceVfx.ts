@@ -3,8 +3,8 @@
 // Conventions: one-shots self-destroy and return void; projectile / aura / summon visuals return a
 // Container drawn facing +x at rotation 0 (the engine moves, rotates and destroys them).
 import Phaser from 'phaser';
+import { defineSchool, lazyRegister, scheduleIdle } from '../art/lazy';
 import { DEPTH } from '../core/constants';
-import { registerVfx } from '../core/vfx';
 import { pxFx } from '../art/particles';
 import type { VfxFn, VfxOptions } from '../core/types';
 import { generateIceTextures as genTextures } from './ice/textures';
@@ -17,9 +17,11 @@ import {
   ADD, C, GROUND_DY, bindLife, breathe, burst, faceDeg, flash, followEmitter, img, ring, rnd, spin, T, tweenOut,
 } from './ice/fx';
 
-export function generateIceTextures(scene: Phaser.Scene): void {
-  genTextures(scene);
-}
+/** Boot hook: textures are built on first ice VFX (or in the background while on the Title screen). */
+export function generateIceTextures(scene: Phaser.Scene): void { scheduleIdle(scene, 'ice', genTextures); }
+
+defineSchool('ice', genTextures);
+const registerVfx = lazyRegister('ice', genTextures);
 
 const TAU = Math.PI * 2;
 const sc = (o: VfxOptions): number => o.scale ?? 1;

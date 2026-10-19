@@ -11,6 +11,8 @@ import Phaser from 'phaser';
 import type { CharacterLook, JobId } from '../core/types';
 import { PLAYER_FRAME } from '../core/constants';
 import { Registry } from '../core/registry';
+import { timed } from './perf';
+import { scheduleIdle, warmSchoolSoon } from './lazy';
 import { hashStr, makeCanvas, seeded, luminance } from './char/color';
 import { DEFAULT_EXTRAS, drawCharacter, drawGhost, drawProne, pose, HEAD_X, HEAD_Y, type Extras, type HairStyle } from './char/rig';
 import { FRAME_LAYOUT, NPC_IDLE, PLAYER_ANIMS, type FrameDef } from './char/poses';
@@ -104,11 +106,23 @@ const pixelSheets = new Set<string>();
 
 // ───────────────────────────── player ─────────────────────────────
 
-export function playerTextureKey(job: JobId): string { return `player_${job}`; }
-export function playerAnimKey(job: JobId, anim: PlayerAnim): string { return `${playerTextureKey(job)}_${anim}`; }
+const texKey = (job: JobId): string => `player_${job}`;
+/** Scene whose texture manager owns the sheets (set at boot); lets playerTextureKey build a missing sheet on first use. */
+let sheetScene: Phaser.Scene | null = null;
+
+/**
+ * Texture key of a job's sheet. Sheets other than the Apprentice's are built lazily, so the first call for a job
+ * (Player constructor / setJob / title cards) builds it here — callers never see a missing texture.
+ */
+export function playerTextureKey(job: JobId): string {
+  const key = texKey(job);
+  if (sheetScene && !sheetScene.textures.exists(key)) ensurePlayerTexture(sheetScene, job);
+  return key;
+}
+export function playerAnimKey(job: JobId, anim: PlayerAnim): string { return `${texKey(job)}_${anim}`; }
 
 function createPlayerAnims(scene: Phaser.Scene, job: JobId) {
-  const key = playerTextureKey(job);
+  const key = texKey(job);
   for (const a of PLAYER_ANIMS) {
     const ak = `${key}_${a.anim}`;
     if (scene.anims.exists(ak)) continue;
@@ -127,7 +141,7 @@ function createPlayerAnims(scene: Phaser.Scene, job: JobId) {
  * (falls back to a default look). Safe to call any time; returns the texture key.
  */
 export function ensurePlayerTexture(scene: Phaser.Scene, job: JobId): string {
-  const key = playerTextureKey(job);
+  const key = texKey(job);
   try {
     if (!pixelReady()) registerPixelSources(scene);
     if (!scene.textures.exists(key) && pixelReady()) {
@@ -146,11 +160,13 @@ export function ensurePlayerTexture(scene: Phaser.Scene, job: JobId): string {
       else createPlayerAnims(scene, job);
     }
   } catch (e) { console.warn(`[characters] player texture for ${job} failed`, e); }
+  // Whoever selects / advances to a job is about to cast that School's spells: build its VFX textures next in the background.
+  try { warmSchoolSoon(scene, Registry.job(job)?.branch); } catch { /* ignore */ }
   return key;
 }
 
 function createPixelPlayerAnims(scene: Phaser.Scene, job: JobId) {
-  const key = playerTextureKey(job);
+  const key = texKey(job);
   for (const a of PIXEL_PLAYER_ANIMS) {
     const ak = `${key}_${a.anim}`;
     if (scene.anims.exists(ak)) continue;
@@ -164,14 +180,22 @@ function createPixelPlayerAnims(scene: Phaser.Scene, job: JobId) {
   }
 }
 
-/** Generates a spritesheet + animations for every job's look. Anim key = `${playerTextureKey(job)}_${anim}`. */
+/**
+ * Boot hook. Only the Apprentice sheet is built synchronously (it is the first character everyone plays); every other
+ * job's sheet + anims are built on demand (`playerTextureKey` / `ensurePlayerTexture`: Player, title cards) and otherwise in
+ * the background while the player is still on the Title screen (src/art/lazy.ts).
+ * Anim key = `${playerTextureKey(job)}_${anim}`.
+ */
 export function generateCharacterTextures(scene: Phaser.Scene): void {
-  try { registerPixelSources(scene); } catch (e) { console.warn('[characters] pixel sources failed', e); }
-  if (!pixelReady()) console.warn('[characters] pixel sources missing — using procedural characters');
+  timed('characters', () => {
+    sheetScene = scene;
+    try { registerPixelSources(scene); } catch (e) { console.warn('[characters] pixel sources failed', e); }
+    if (!pixelReady()) console.warn('[characters] pixel sources missing — using procedural characters');
+    ensurePlayerTexture(scene, 'apprentice');
+  });
   let jobs: JobId[] = [];
   try { jobs = Registry.jobs().map(j => j.id); } catch (e) { console.warn('[characters] Registry.jobs failed', e); }
-  if (!jobs.includes('apprentice')) jobs.unshift('apprentice');
-  for (const j of jobs) ensurePlayerTexture(scene, j);
+  for (const j of jobs) if (j !== 'apprentice') scheduleIdle(scene, `job:${j}`, sc => { ensurePlayerTexture(sc, j); });
 }
 
 // ───────────────────────────── NPCs ─────────────────────────────

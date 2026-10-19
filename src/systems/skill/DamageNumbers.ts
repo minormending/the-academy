@@ -206,7 +206,10 @@ export class DamageNumbers {
   private seq = 0;
   private ready = false;
 
-  constructor(private scene: Phaser.Scene) {}
+  constructor(private scene: Phaser.Scene) {
+    // Build the glyph atlases (~9ms of canvas work) shortly after the scene starts instead of on the first hit.
+    try { scene.time.delayedCall(300, () => this.ensure()); } catch { /* built lazily on first show() */ }
+  }
 
   private ensure() {
     if (this.ready) return;
@@ -292,8 +295,11 @@ export class DamageNumbers {
 
   update(delta: number) {
     if (this.active.length === 0) return;
-    const keep: NumObj[] = [];
-    for (const o of this.active) {
+    // Compact in place: no per-frame array allocation.
+    const list = this.active;
+    let kept = 0;
+    for (let li = 0; li < list.length; li++) {
+      const o = list[li];
       if (!o.active) continue;
       if (!o.c.scene) { o.active = false; continue; }
       o.t += delta;
@@ -314,9 +320,9 @@ export class DamageNumbers {
         o.burst.setScale(0.35 + bp * 1.05).setAlpha(1 - bp).rotation += delta * 0.002;
         if (bp >= 1) o.burst.setVisible(false);
       }
-      keep.push(o);
+      list[kept++] = o;
     }
-    this.active = keep;
+    list.length = kept;
   }
 
   destroy() {

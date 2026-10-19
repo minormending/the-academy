@@ -1,7 +1,7 @@
 // OWNER: A5 (lightning-tree) / PX4 (pixel VFX). Lightning VFX: 16-bit pixel sheets (pxFx, palette-swapped violet/yellow)
 // plus jagged bolts rasterised on a 2px grid. All keys prefixed `ltn_`. Procedural fallback when a sheet is missing.
 import Phaser from 'phaser';
-import { registerVfx } from '../core/vfx';
+import { defineSchool, lazyRegister, scheduleIdle } from '../art/lazy';
 import { pxFx } from '../art/particles';
 import { DEPTH } from '../core/constants';
 import type { VfxFn, VfxOptions } from '../core/types';
@@ -18,9 +18,11 @@ import {
   railCharge, railBeam, conductorSigil,
 } from './lightning/academyVfx';
 
-export function generateLightningTextures(scene: Phaser.Scene): void {
-  generateTextures(scene);
-}
+/** Boot hook: textures are built on first lightning VFX (or in the background while on the Title screen). */
+export function generateLightningTextures(scene: Phaser.Scene): void { scheduleIdle(scene, 'lightning', generateTextures); }
+
+defineSchool('lightning', generateTextures);
+const registerVfx = lazyRegister('lightning', generateTextures);
 
 const ADD = Phaser.BlendModes.ADD;
 const scaleOf = (o: VfxOptions): number => o.scale ?? 1;

@@ -4,6 +4,7 @@ import type { GameServices, IMapInstance, IMonster, IMonsterManager, MonsterDef,
 import { bus } from '../core/events';
 import { Registry } from '../core/registry';
 import { Monster, type MonsterSpawnOptions } from '../entities/Monster';
+import { ensureMonsterTexture } from '../art/monsterArt';
 import { LichArchon } from '../entities/monsters/LichArchon';
 import { FIELD_BOSS_CLASSES } from '../entities/monsters/fieldBosses';
 import { FIELD_BOSSES, fieldBossTitle, isFieldBoss } from '../data/monsters';
@@ -75,6 +76,8 @@ export class MonsterManager implements IMonsterManager {
     this.map = map;
     this.gen++;
     if (map.def.safe) return;
+    // Build this map's monster sheets up front (one batch during the map load, not a hitch per first spawn).
+    for (const id of new Set((map.def.spawns ?? []).map(sp => sp.monsterId))) ensureMonsterTexture(this.scene, id);
     (map.def.spawns ?? []).forEach((sp, i) => {
       if (isFieldBoss(sp.monsterId)) { this.scheduleFieldBoss(i); return; }
       for (let k = 0; k < sp.count; k++) this.spawnInGroup(i, false);
@@ -97,8 +100,13 @@ export class MonsterManager implements IMonsterManager {
   update(time: number, delta: number) {
     if (this.list.length === 0) return;
     // prune destroyed
-    if (this.list.some(m => m.destroyed)) this.list = this.list.filter(m => !m.destroyed);
-    for (const m of [...this.list]) m.update(time, delta);
+    let pruned = false;
+    for (let i = 0; i < this.list.length; i++) if (this.list[i].destroyed) { pruned = true; break; }
+    if (pruned) this.list = this.list.filter(m => !m.destroyed);
+    // Index loop over the length at entry: monsters spawned during this update (boss adds) wait for next frame, and a
+    // map change that swaps `this.list` mid-loop can't break iteration (destroyed monsters ignore update()).
+    const list = this.list, n = list.length;
+    for (let i = 0; i < n; i++) list[i].update(time, delta);
     try {
       this.contactDamage();
     } catch (e) {
@@ -264,7 +272,7 @@ export class MonsterManager implements IMonsterManager {
     const pb = s.player.getBounds();
     for (const m of this.list) {
       if (!m.canContact()) continue;
-      if (Phaser.Geom.Intersects.RectangleToRectangle(m.getBounds(), pb)) {
+      if (Phaser.Geom.Intersects.RectangleToRectangle(m.boundsRef(), pb)) {
         const weak = (m as { outgoingDamageMult?: () => number }).outgoingDamageMult?.() ?? 1;
         s.combat.hitPlayer(Math.max(1, Math.round(m.def.touchDamage * weak)), m.x);
         return; // one contact hit per frame

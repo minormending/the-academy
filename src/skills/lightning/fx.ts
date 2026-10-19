@@ -46,14 +46,36 @@ function pixelSeg(g: Phaser.GameObjects.Graphics, a: Pt, b: Pt, cell: number, th
   const dx = b.x - a.x, dy = b.y - a.y;
   const snap = (v: number): number => Math.floor(v / cell) * cell;
   const half = snap(th / 2);
+  // Same pixels as one rect per cell, but neighbouring cells on the same row/column are merged into a single
+  // fillRect (a 200px bolt drops from ~100 Graphics commands per layer to ~15).
   if (Math.abs(dx) >= Math.abs(dy)) {
     const n = Math.max(1, Math.ceil(Math.abs(dx) / cell));
     const sx = Math.sign(dx) || 1;
-    for (let k = 0; k < n; k++) g.fillRect(snap(a.x + sx * k * cell), snap(a.y + (dy * k) / n) - half, cell, th);
+    let runX = 0, runY = 0, runW = 0;
+    for (let k = 0; k < n; k++) {
+      const x = snap(a.x + sx * k * cell), y = snap(a.y + (dy * k) / n) - half;
+      if (runW > 0 && y === runY && (sx > 0 ? x === runX + runW : x + cell === runX)) {
+        if (sx > 0) runW += cell; else { runX = x; runW += cell; }
+        continue;
+      }
+      if (runW > 0) g.fillRect(runX, runY, runW, th);
+      runX = x; runY = y; runW = cell;
+    }
+    if (runW > 0) g.fillRect(runX, runY, runW, th);
   } else {
     const n = Math.max(1, Math.ceil(Math.abs(dy) / cell));
     const sy = Math.sign(dy) || 1;
-    for (let k = 0; k < n; k++) g.fillRect(snap(a.x + (dx * k) / n) - half, snap(a.y + sy * k * cell), th, cell);
+    let runX = 0, runY = 0, runH = 0;
+    for (let k = 0; k < n; k++) {
+      const x = snap(a.x + (dx * k) / n) - half, y = snap(a.y + sy * k * cell);
+      if (runH > 0 && x === runX && (sy > 0 ? y === runY + runH : y + cell === runY)) {
+        if (sy > 0) runH += cell; else { runY = y; runH += cell; }
+        continue;
+      }
+      if (runH > 0) g.fillRect(runX, runY, th, runH);
+      runX = x; runY = y; runH = cell;
+    }
+    if (runH > 0) g.fillRect(runX, runY, th, runH);
   }
 }
 

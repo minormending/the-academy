@@ -6,7 +6,7 @@ import { Registry } from '../core/registry';
 import { DEPTH } from '../core/constants';
 import { playVfx } from '../core/vfx';
 import { iconTexture } from '../art/icons';
-import { DROP_TEX, dropCoinAnimKey } from '../art/monsterArt';
+import { DROP_TEX, dropCoinAnimKey, ensureDropFallback } from '../art/monsterArt';
 import { groundBelow } from '../entities/monsters/ground';
 
 const GRAVITY = 1400;
@@ -15,6 +15,8 @@ const PICKUP_RANGE = 50;
 const LIFETIME_MS = 60000;
 const BLINK_MS = 6000;
 const MESO_CHANCE = 0.8;
+/** Safety cap on loot lying around (60s lifetime × heavy farming could otherwise reach hundreds of sprites). */
+const MAX_DROPS = 150;
 
 interface Drop {
   kind: 'item' | 'mesos';
@@ -202,6 +204,11 @@ export class DropManager implements IDropManager {
     const groundY = g ? g.y : feetY;
     const drop = groundY - y0;
     const tFlight = (-LAUNCH_VY + Math.sqrt(LAUNCH_VY * LAUNCH_VY + 2 * GRAVITY * Math.max(-50, drop))) / GRAVITY || 0.55;
+    // Over the cap: the oldest resting drop fades out early (never one still flying or being picked up).
+    if (this.drops.length >= MAX_DROPS) {
+      const i = this.drops.findIndex(d => d.state === 'rest');
+      if (i >= 0) this.remove(i, true);
+    }
     const img = this.makeSprite(kind, itemId, qty, x0, y0);
     img.setVisible(delayMs <= 0);
     this.drops.push({
@@ -231,6 +238,7 @@ export class DropManager implements IDropManager {
         try { key = iconTexture(sc, def.icon, 32); } catch { key = ''; }
       }
       if (!key || key === '__DEFAULT' || key === '__MISSING' || !sc.textures.exists(key)) {
+        ensureDropFallback(sc);
         key = sc.textures.exists(DROP_TEX.fallback) ? DROP_TEX.fallback : '__DEFAULT';
       }
       spr = sc.add.sprite(x, y, key);

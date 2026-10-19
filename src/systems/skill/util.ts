@@ -30,16 +30,26 @@ export class Scheduler {
     this.items.push({ at: this.now + ms, fn });
   }
 
+  /** Reused between frames: due callbacks are collected here, then run (they may schedule more items). */
+  private due: (() => void)[] = [];
+
   update(dt: number): void {
     this.now += dt;
-    if (this.items.length === 0) return;
-    const due: (() => void)[] = [];
-    const keep: { at: number; fn: () => void }[] = [];
-    for (const it of this.items) {
-      if (it.at <= this.now) due.push(it.fn); else keep.push(it);
+    const items = this.items;
+    if (items.length === 0) return;
+    // Compact in place and collect the due callbacks (no per-frame array allocation).
+    let keep = 0;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.at <= this.now) this.due.push(it.fn); else items[keep++] = it;
     }
-    this.items = keep;
-    for (const fn of due) safe(fn);
+    if (this.due.length === 0) return;
+    items.length = keep;
+    const due = this.due;
+    this.due = [];                 // callbacks may re-enter update()/after(); never share the buffer while running them
+    for (let i = 0; i < due.length; i++) safe(due[i]);
+    due.length = 0;
+    this.due = due;
   }
 
   clear(): void { this.items = []; }

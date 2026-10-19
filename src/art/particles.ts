@@ -15,6 +15,7 @@ import Phaser from 'phaser';
 import type { VfxOptions } from '../core/types';
 import { DEPTH, PIXEL_SCALE } from '../core/constants';
 import { registerVfx } from '../core/vfx';
+import { timed } from './perf';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -255,14 +256,18 @@ export const PX_SHEETS: Record<string, SheetDef> = {
 const texKey = (id: string, v?: string) => (v ? `pxs_${id}_${v}` : `pxs_${id}`);
 const animKey = (id: string, v?: string) => (v ? `pxa_${id}_${v}` : `pxa_${id}`);
 
-function buildSheet(scene: Phaser.Scene, id: string, d: SheetDef): void {
+/**
+ * Builds one (id, variant) texture + anim from its loaded source. Sheets are built lazily on first use
+ * (`ensureSheet`, called by pxHas / pxFx) so boot doesn't pay for ~70 sheet + palette-swap canvases.
+ */
+function buildSheet(scene: Phaser.Scene, id: string, d: SheetDef, only?: RampName | null): void {
   const srcKey = `src_vfx_${d.src}`;
   if (!scene.textures.exists(srcKey)) return;
   const srcTex = scene.textures.get(srcKey);
   const src = srcTex.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
   if (!src || !src.width) return;
   const rects: Rect[] = d.rects ?? Array.from({ length: d.n ?? 1 }, (_, i): Rect => [i * (d.fw ?? 16), 0, d.fw ?? 16, d.fh ?? 16]);
-  const variants: (RampName | undefined)[] = [undefined, ...(d.v ?? [])];
+  const variants: (RampName | undefined)[] = only === undefined ? [undefined, ...(d.v ?? [])] : [only ?? undefined];
   for (const v of variants) {
     const tk = texKey(id, v), ak = animKey(id, v);
     if (scene.textures.exists(tk)) continue;
@@ -282,8 +287,17 @@ function buildSheet(scene: Phaser.Scene, id: string, d: SheetDef): void {
   }
 }
 
+/** Lazily builds the sheet (and the requested palette variant) if it isn't registered yet. */
+function ensureSheet(scene: Phaser.Scene, id: string, v?: RampName): void {
+  if (scene.textures.exists(texKey(id, v))) return;
+  const d = PX_SHEETS[id];
+  if (!d || (v && !d.v?.includes(v))) return;
+  try { buildSheet(scene, id, d, v ?? null); } catch (e) { console.warn(`[particles] sheet ${id} failed`, e); }
+}
+
 /** True if the sheet (and variant) is available. */
 export function pxHas(scene: Phaser.Scene, id: string, v?: RampName): boolean {
+  ensureSheet(scene, id, v);
   return scene.textures.exists(texKey(id, v)) && scene.anims.exists(animKey(id, v));
 }
 
@@ -341,6 +355,7 @@ export interface PxOpts {
 export function pxFx(scene: Phaser.Scene, id: string, x: number, y: number, o: PxOpts = {}): Phaser.GameObjects.Sprite | null {
   const v = o.v && pxHas(scene, id, o.v) ? o.v : undefined;
   const tk = texKey(id, v), ak = animKey(id, v);
+  ensureSheet(scene, id, v);
   if (!scene.textures.exists(tk) || !scene.anims.exists(ak)) return null;
   const n = pxFrames(id);
   const s = scene.add.sprite(x, y, tk, 0);
@@ -391,6 +406,9 @@ const RUNES: ((ctx: Ctx) => void)[] = [
 
 /** Generates the shared hard-edged white pixel textures and builds every pixel sheet + anim. */
 export function generateParticleTextures(scene: Phaser.Scene): void {
+  timed('particles', () => generateParticleTexturesImpl(scene));
+}
+function generateParticleTexturesImpl(scene: Phaser.Scene): void {
   // 8px: 4×4 grid of 2px pixels, rounded square with a bright core
   gridTex(scene, 'px_dot', 8, 8, 2, (x, y) => ((x === 0 || x === 3) && (y === 0 || y === 3) ? 0 : 1));
   // 32px stepped disc on a 4px grid
@@ -470,10 +488,7 @@ export function generateParticleTextures(scene: Phaser.Scene): void {
     ctx.beginPath(); draw(ctx); ctx.stroke();
   }, 2, { hard: true, cutoff: 0.3 }));
 
-  // Pixel sprite sheets (+ palette variants + anims). Missing sources are skipped → procedural fallback.
-  for (const [id, d] of Object.entries(PX_SHEETS)) {
-    try { buildSheet(scene, id, d); } catch (e) { console.warn(`[particles] sheet ${id} failed`, e); }
-  }
+  // Pixel sprite sheets (+ palette variants + anims) are built lazily on first use: see ensureSheet().
 }
 
 // ───────────────────────────── VFX helpers ─────────────────────────────

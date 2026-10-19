@@ -9,6 +9,7 @@ import type Phaser from 'phaser';
 import { MONSTERS } from '../data/monsters';
 import { PIXEL_SCALE } from '../core/constants';
 import { sourceImage } from './assets';
+import { timed } from './perf';
 import { MSRC } from './manifests/monsters';
 
 export type MonsterAnim = 'idle' | 'move' | 'hit' | 'die' | 'attack';
@@ -1600,8 +1601,10 @@ function canvasOf(w: number, h: number, fn: (c: Ctx) => void): HTMLCanvasElement
   fn(c);
   return cv;
 }
+/** While true, the procedural FX painters keep any texture the pixel pipeline already produced. */
+let keepExisting = false;
 function addSimple(scene: Phaser.Scene, key: string, cv: HTMLCanvasElement) {
-  if (scene.textures.exists(key)) scene.textures.remove(key);
+  if (scene.textures.exists(key)) { if (keepExisting) return; scene.textures.remove(key); }
   scene.textures.addCanvas(key, cv);
 }
 function softDot(c: Ctx, x: number, y: number, r: number, inner: string, outer: string) {
@@ -1706,14 +1709,9 @@ function generateProceduralFxTextures(scene: Phaser.Scene) {
     c.fill();
   }));
   addSimple(scene, MFX.aura, canvasOf(128, 128, c => softDot(c, 64, 64, 64, 'rgba(255,255,255,0.5)', 'rgba(255,255,255,0)')));
-  // Generic fallback monster.
-  const fb = paintMonsterSheet('__fallback__');
-  if (registerSheet(scene, MFX.fallback, fb)) {
-    for (const a of fb.anims) addAnim(scene, `${MFX.fallback}_${a.name}`, MFX.fallback, a.frames, a.rate, a.repeat);
-  }
-
   // Coins: 4 spin frames each (20×20).
   (['bronze', 'silver', 'gold'] as const).forEach(tier => {
+    if (keepExisting && scene.textures.exists(DROP_TEX[tier])) return;
     const col = COIN_COLORS[tier];
     const S = 20, N = 4;
     const cv = canvasOf(S * N, S, c => {
@@ -1759,6 +1757,21 @@ function generateProceduralFxTextures(scene: Phaser.Scene) {
     paint(c, radial(c, 14, 19, 5, 0xffc93a), 0x9a6a08, 1.2);
     shine(c, 9, 15, 2.5, 1.6, 0.5);
   }));
+}
+
+
+/** Generic fallback monster (used only when a monster's own sheet is missing). Built on first need. */
+export function ensureFallbackMonster(scene: Phaser.Scene): void {
+  if (scene.textures.exists(MFX.fallback)) return;
+  const fb = paintMonsterSheet('__fallback__');
+  if (registerSheet(scene, MFX.fallback, fb)) {
+    for (const a of fb.anims) addAnim(scene, `${MFX.fallback}_${a.name}`, MFX.fallback, a.frames, a.rate, a.repeat);
+  }
+}
+
+/** "?" token for items without an icon (DropManager). Built on first need. */
+export function ensureDropFallback(scene: Phaser.Scene): void {
+  if (scene.textures.exists(DROP_TEX.fallback)) return;
   addSimple(scene, DROP_TEX.fallback, canvasOf(28, 28, c => {
     ell(c, 14, 14, 11, 11);
     paint(c, radial(c, 14, 14, 11, 0xa08ad8), 0x4a3a7a, 1.6);
@@ -2420,28 +2433,55 @@ function generatePixelFxTextures(scene: Phaser.Scene) {
   ], { k: 0x3a2410, b: 0x8a5a26, B: 0xc8904a, y: 0xffc93a, G: 0xe8a820, Y: 0xfff2a0 })));
 }
 
-/** Texture key `monster_${id}`; anims `monster_${id}_${'idle'|'move'|'hit'|'die'|'attack'}`. */
+/** Every FX / drop key the pixel pipeline is expected to produce (so we know whether the procedural layer is needed). */
+function pixelFxComplete(scene: Phaser.Scene): boolean {
+  const keys: string[] = [
+    ...Object.entries(MFX).filter(([k]) => k !== 'fallback').map(([, v]) => v),
+    ...Object.values(BFX), DROP_TEX.bronze, DROP_TEX.silver, DROP_TEX.gold, DROP_TEX.bag,
+  ];
+  return keys.every(k => scene.textures.exists(k));
+}
+
+/**
+ * Boot hook: shared FX + drop textures only. Per-monster sheets are built on demand by `ensureMonsterTexture`
+ * (Monster ctor / MonsterManager.bindMap), so a map pays only for the monsters it actually spawns.
+ * The smooth procedural FX are just the fallback layer: they run only for keys the pixel pipeline didn't produce.
+ */
 export function generateMonsterTextures(scene: Phaser.Scene): void {
-  try { generateProceduralFxTextures(scene); } catch (e) { console.error('[monsterArt] fx textures failed', e); }
-  try { generatePixelFxTextures(scene); } catch (e) { console.error('[monsterArt] pixel fx textures failed', e); }
-  const ids = new Set<string>([...MONSTERS.map(m => m.id), ...Object.keys(ART)]);
-  let pixel = 0;
-  for (const id of ids) {
-    try {
-      const key = monsterTextureKey(id);
-      let sheet: MonsterSheet | null = null;
-      try {
-        const px = paintPixelMonsterSheet(scene, id);
-        if (px) { sheet = px; VISUALS.set(key, px.visual); pixel++; }
-      } catch (e) {
-        console.warn(`[monsterArt] pixel sheet for ${id} failed, using procedural`, e);
-      }
-      if (!sheet) { sheet = paintMonsterSheet(id); VISUALS.delete(key); }
-      if (!registerSheet(scene, key, sheet)) continue;
-      for (const a of sheet.anims) addAnim(scene, monsterAnimKey(id, a.name), key, a.frames, a.rate, a.repeat);
-    } catch (e) {
-      console.error(`[monsterArt] ${id} failed`, e);
+  timed('monsters', () => {
+    try { timed('monsters:pixelFx', () => generatePixelFxTextures(scene)); } catch (e) { console.error('[monsterArt] pixel fx textures failed', e); }
+    if (!pixelFxComplete(scene)) {
+      keepExisting = true;
+      try { timed('monsters:procFx', () => generateProceduralFxTextures(scene)); } catch (e) { console.error('[monsterArt] fx textures failed', e); } finally { keepExisting = false; }
     }
+  });
+}
+
+let monsterIds: Set<string> | null = null;
+
+/**
+ * Builds `monster_<id>` + its anims if missing (pixel sheet, else the procedural painter). Idempotent; never throws.
+ * Returns true when the texture exists afterwards.
+ */
+export function ensureMonsterTexture(scene: Phaser.Scene, id: string): boolean {
+  const key = monsterTextureKey(id);
+  if (scene.textures.exists(key)) return true;
+  monsterIds ??= new Set<string>([...MONSTERS.map(m => m.id), ...Object.keys(ART)]);
+  if (!monsterIds.has(id)) return false;   // unknown ids use the shared fallback sheet
+  try {
+    let sheet: MonsterSheet | null = null;
+    try {
+      const px = paintPixelMonsterSheet(scene, id);
+      if (px) { sheet = px; VISUALS.set(key, px.visual); }
+    } catch (e) {
+      console.warn(`[monsterArt] pixel sheet for ${id} failed, using procedural`, e);
+    }
+    if (!sheet) { sheet = paintMonsterSheet(id); VISUALS.delete(key); }
+    if (!registerSheet(scene, key, sheet)) return false;
+    for (const a of sheet.anims) addAnim(scene, monsterAnimKey(id, a.name), key, a.frames, a.rate, a.repeat);
+    return true;
+  } catch (e) {
+    console.error(`[monsterArt] ${id} failed`, e);
+    return false;
   }
-  if (pixel < ids.size) console.info(`[monsterArt] ${pixel}/${ids.size} monsters from pixel sources (rest procedural)`);
 }

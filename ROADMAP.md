@@ -35,9 +35,9 @@ a resumed session (after a usage-limit pause) reads it to pick up exactly where 
         talk-only steps that go straight to turned_in; rename `q_maelis_archon` to avoid name overlap.
 - [~] **7. Quality of life & polish** (save slots + controls in progress)
   - [x] Multiple save slots / character select (MapleStory-style), with per-slot School + Year shown.
-  - Key rebinding + controls screen (keyboard + gamepad map), settings persistence.
-  - Help/UI mentions gamepad; damage-number readability options; screen-shake toggle.
-  - Pacing QA levels 25–50 (Years 3–4) per School; boss tuning pass.
+  - [x] Key rebinding + controls screen (keyboard + gamepad map), settings persistence.
+  - [x] Help/UI mentions gamepad; damage-number readability options; screen-shake toggle.
+  - [ ] Pacing QA levels 25–50 (Years 3–4) per School; boss tuning pass (after the 1–25 pass lands).
 - [ ] **8. Ship**
   - Full regression QA (all five Schools, every map, bosses, arena, saves) + Codex final review.
   - Performance pass (busy ultimates, load time), production build.

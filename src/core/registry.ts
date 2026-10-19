@@ -2,8 +2,10 @@
 import type { ItemDef, JobDef, JobId, MapDef, MonsterDef, NpcDef, QuestDef, SkillDef } from './types';
 import { ALL_SKILLS } from '../skills';
 import { MONSTERS } from '../data/monsters';
+import { RAID_BOSSES } from '../data/raidBosses';
 import { MAPS } from '../data/maps';
 import { ITEMS } from '../data/items';
+import { ITEMS5 } from '../data/items5';
 import { JOBS } from '../data/jobs';
 import { NPCS } from '../data/npcs';
 import { QUESTS } from '../data/quests';
@@ -19,8 +21,8 @@ let _skills: Map<string, SkillDef>, _monsters: Map<string, MonsterDef>, _maps: M
   _items: Map<string, ItemDef>, _jobs: Map<string, JobDef>, _npcs: Map<string, NpcDef>, _quests: Map<string, QuestDef>;
 function ensure() {
   if (_skills) return;
-  _skills = index(ALL_SKILLS, 'skill'); _monsters = index(MONSTERS, 'monster'); _maps = index(MAPS, 'map');
-  _items = index(ITEMS, 'item'); _jobs = index(JOBS, 'job'); _npcs = index(NPCS, 'npc'); _quests = index([...QUESTS, ...STORY_QUESTS], 'quest');
+  _skills = index(ALL_SKILLS, 'skill'); _monsters = index([...MONSTERS, ...RAID_BOSSES], 'monster'); _maps = index(MAPS, 'map');
+  _items = index([...ITEMS, ...ITEMS5], 'item'); _jobs = index(JOBS, 'job'); _npcs = index(NPCS, 'npc'); _quests = index([...QUESTS, ...STORY_QUESTS], 'quest');
 }
 
 export const Registry = {

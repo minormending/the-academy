@@ -16,8 +16,8 @@ export const PLAYER_FRAME = { w: 64, h: 80 } as const;
 /** Player physics hitbox (px), bottom-aligned & horizontally centered in the frame. */
 export const PLAYER_HITBOX = { w: 26, h: 58 } as const;
 
-export const MAX_LEVEL = 50;
-export const JOB_LEVELS = { 1: 1, 2: 10, 3: 25, 4: 40 } as const;
+export const MAX_LEVEL = 70;
+export const JOB_LEVELS = { 1: 1, 2: 10, 3: 25, 4: 40, 5: 55 } as const;
 
 /** Hotbar key bindings (index = slot). Phaser KeyCodes names. */
 export const HOTBAR_KEYS = ['Q', 'W', 'E', 'R', 'T', 'A', 'S', 'D', 'F', 'G', 'ONE', 'TWO'] as const;

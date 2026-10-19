@@ -25,7 +25,7 @@ export function refMatk(level: number): number {
 
 /** Reference single-target damage % of the level-appropriate primary skill (per hit line). */
 export function refSkillPct(level: number): number {
-  return level < 10 ? 140 : level < 25 ? 220 : level < 40 ? 300 : 450;
+  return level < 10 ? 140 : level < 25 ? 220 : level < 40 ? 300 : level < 55 ? 450 : 650;
 }
 
 /** Expected damage of one hit line of the primary skill. */

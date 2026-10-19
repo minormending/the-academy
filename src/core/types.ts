@@ -10,7 +10,7 @@ import type Phaser from 'phaser';
 
 export type Element = 'neutral' | 'fire' | 'ice' | 'lightning' | 'holy' | 'shadow';
 export type Branch = 'none' | 'fire' | 'ice' | 'lightning' | 'holy' | 'shadow';
-export type JobTier = 1 | 2 | 3 | 4;
+export type JobTier = 1 | 2 | 3 | 4 | 5;
 
 export type JobId =
   | 'apprentice'                                   // tier 1 (start, lv 1)
@@ -18,7 +18,9 @@ export type JobId =
   | 'cryomancer' | 'frostbinder' | 'glacial_sage'  // ice   tiers 2,3,4
   | 'stormcaller' | 'stormbinder' | 'tempest_sage' // lightning tiers 2,3,4
   | 'cleric' | 'priest' | 'hierophant'            // holy  tiers 2,3,4
-  | 'occultist' | 'necromancer' | 'umbral_sage';  // shadow tiers 2,3,4
+  | 'occultist' | 'necromancer' | 'umbral_sage'   // shadow tiers 2,3,4
+  // Year 5 — the Fellowship (postgraduate, lv 55)
+  | 'pyre_archon' | 'winter_archon' | 'storm_archon' | 'light_archon' | 'night_archon';
 
 export interface JobDef {
   id: JobId;
@@ -266,7 +268,7 @@ export type SfxKey =
   | 'ui_click' | 'ui_open' | 'ui_close' | 'ui_error' | 'quest_complete' | 'potion';
 
 export type MusicKey = 'title' | 'town' | 'forest' | 'cave' | 'snow' | 'volcano' | 'storm' | 'boss'
-  | 'marsh' | 'grotto' | 'library';
+  | 'marsh' | 'grotto' | 'library' | 'astral' | 'rift';
 
 // ───────────────────────────── Items ─────────────────────────────
 

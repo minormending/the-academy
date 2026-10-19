@@ -220,6 +220,9 @@ const SONGS: Record<MusicKey, SongDef> = {
     drums: { kick: ['x . . . . . . .'], tick: ['x . o . x . o .'], vol: 0.5 },
     echo: { time: 0.268, feedback: 0.25, mix: 0.15 },
   },
+  // Placeholder aliases for the Year 5 zones (replaced by bespoke tracks).
+  get astral() { return SONGS.storm; },
+  get rift() { return SONGS.boss; },
 };
 
 // ───────────────────────────── parsing ─────────────────────────────

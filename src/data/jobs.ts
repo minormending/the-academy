@@ -100,6 +100,17 @@ export const JOBS: JobDef[] = [
     description: 'Year 4 · Graduate of Shadow Magic. They walk where light forgets to reach. Umbral Sages command a legion of shades and drown whole fields in night.',
     look: look({ robe: 0x120d1a, robeTrim: 0xb48cff, hat: 0x6a3fc2, hatTrim: 0x7dff5a, staffGem: 0x7dff5a, hatStyle: 'crown', hair: 0xf2f2f2, skin: 0xe4d6cc }),
   },
+  // ── Year 5: the Fellowship (postgraduate) ──
+  { id: 'pyre_archon', name: 'Pyre Archon', branch: 'fire', tier: 5, requiredLevel: JOB_LEVELS[5], parent: 'inferno_sage',
+    description: 'Year 5 · Fellowship of Fire.', look: look({ robe: 0x7a1408, robeTrim: 0xffd447, hat: 0xffd447, hatTrim: 0xff5a1f, staffGem: 0xfff0a0, hatStyle: 'crown', hair: 0xff7a3d }) },
+  { id: 'winter_archon', name: 'Winter Archon', branch: 'ice', tier: 5, requiredLevel: JOB_LEVELS[5], parent: 'glacial_sage',
+    description: 'Year 5 · Fellowship of Ice.', look: look({ robe: 0xeaf6ff, robeTrim: 0x7fd8ff, hat: 0xbfe9ff, hatTrim: 0xffffff, staffGem: 0xdff8ff, hatStyle: 'crown', hair: 0xf2fbff }) },
+  { id: 'storm_archon', name: 'Storm Archon', branch: 'lightning', tier: 5, requiredLevel: JOB_LEVELS[5], parent: 'tempest_sage',
+    description: 'Year 5 · Fellowship of Storms.', look: look({ robe: 0x180a3a, robeTrim: 0xfff36b, hat: 0xfff36b, hatTrim: 0x9f6bff, staffGem: 0xffffff, hatStyle: 'crown', hair: 0xe8e0ff }) },
+  { id: 'light_archon', name: 'Light Archon', branch: 'holy', tier: 5, requiredLevel: JOB_LEVELS[5], parent: 'hierophant',
+    description: 'Year 5 · Fellowship of Light.', look: look({ robe: 0xfffdf4, robeTrim: 0xffc83d, hat: 0xffe27a, hatTrim: 0x7fe7ff, staffGem: 0xffffff, hatStyle: 'crown', hair: 0xfff0c0 }) },
+  { id: 'night_archon', name: 'Night Archon', branch: 'shadow', tier: 5, requiredLevel: JOB_LEVELS[5], parent: 'umbral_sage',
+    description: 'Year 5 · Fellowship of Shadow.', look: look({ robe: 0x07050c, robeTrim: 0x7dff5a, hat: 0x3a1f6e, hatTrim: 0x7dff5a, staffGem: 0xb48cff, hatStyle: 'crown', hair: 0x101010, skin: 0xd8cfc8 }) },
 ];
 
 /** The five Schools a student can declare in Year 2 (job branches other than 'none'). */

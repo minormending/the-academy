@@ -4,7 +4,7 @@ import type {
   BaseStatKey, DerivedStats, EquipSlot, GameServices, IMonster, IProgression, ItemDef, JobDef, JobId,
   PlayerState, QuestDef, SfxKey, StatModifier,
 } from '../core/types';
-import { HOTBAR_SIZE } from '../core/types';
+import { HOTBAR_PAGE_SIZE, HOTBAR_SIZE } from '../core/types';
 import { Registry } from '../core/registry';
 import { bus } from '../core/events';
 import { AP_PER_LEVEL, SP_PER_LEVEL, expToNext } from '../core/balance';
@@ -351,9 +351,7 @@ export class Progression implements IProgression {
     s.mp = d.maxMp;
     const year = yearOfTier(def.tier);
     const school = isSchool(def.branch) ? `the ${SCHOOL_NAME[def.branch]} School` : '';
-    const text = year >= 4
-      ? `You graduated${school ? ` from ${school}` : ''} as ${/^[aeiou]/i.test(def.name) ? 'an' : 'a'} ${def.name}! (+${JOB_ADVANCE_BONUS_SP} SP)`
-      : `You are now a Year ${year} student${school ? ` of ${school}` : ''}: ${def.name}! (+${JOB_ADVANCE_BONUS_SP} SP)`;
+    const text = `You are now a Year ${year} student${school ? ` of ${school}` : ''}: ${def.name}!${year >= 4 ? ' Your Final Thesis awaits.' : ''} (+${JOB_ADVANCE_BONUS_SP} SP)`;
     bus.emit('ui:log', { text, color: LOG.good });
     bus.emit('player:job', { job });
     this.refreshQuests();
@@ -628,7 +626,12 @@ export class Progression implements IProgression {
     slot = Math.floor(slot);
     if (slot < 0 || slot >= HOTBAR_SIZE) return;
     const hb = this.state.hotbar;
-    if (entry) for (let i = 0; i < hb.length; i++) if (hb[i] === entry) hb[i] = null;
+    // A spell lives in one slot; an item (potion) may sit once on each page so its key works after flipping pages.
+    const page = Math.floor(slot / HOTBAR_PAGE_SIZE);
+    const isItem = !!entry && entry.startsWith('item:');
+    if (entry) for (let i = 0; i < hb.length; i++) {
+      if (hb[i] === entry && (!isItem || Math.floor(i / HOTBAR_PAGE_SIZE) === page)) hb[i] = null;
+    }
     hb[slot] = entry || null;
     this.changed();
   }

@@ -47,12 +47,12 @@ function professorName(sc: School): string {
   return Registry.npc(SCHOOL_PROFESSOR[sc])?.name ?? 'your Professor';
 }
 
-/** "Welcome to Year 3!" / graduation line shown after an advancement. */
+/** "Welcome to Year 3!" / final-year line shown after an advancement (graduation itself is Commencement). */
 function yearLine(job: JobId): string {
   const def = Registry.job(job);
   const year = yearOfTier(def?.tier ?? 1);
   return year >= 4
-    ? 'You have graduated from the Academy. Wear the title well. (+3 SP)'
+    ? 'Welcome to Year 4, your final year! Wear the title well — your Final Thesis awaits. (+3 SP)'
     : `Welcome to Year ${year}! (+3 SP)`;
 }
 
@@ -402,7 +402,11 @@ function storyTurnIn(c: Ctx, q: QuestDef, back: () => void) {
     return;
   }
   const L = STORY_SCRIPT[q.id];
-  try { L?.after?.(c); } catch (e) { console.warn('[story] after-hook failed', e); }
+  if (L?.after) {
+    try { L.after(c); } catch (e) { console.warn('[story] after-hook failed', e); }
+    // turnInQuest already saved 'turned_in'; persist what the hook granted (e.g. graduation merits) right away.
+    try { c.p.save(); } catch { /* ignore */ }
+  }
   const rewards = rewardsText(q);
   say(c, `${L ? L.done(c) : 'Well done!'}${rewards ? `\n\n${rewards}` : ''}`,
     L?.next?.(c, back) ?? [go('Anything else?', back), bye('Thank you!')]);
@@ -601,13 +605,16 @@ function elderMaelis(c: Ctx) {
   const professor = sc ? professorName(sc) : 'your Professor';
   if (job.tier >= 4) {
     const graduated = p.state.quests[GRADUATION_QUEST_ID]?.status === 'turned_in';
+    const thesisDone = p.state.quests.story_final_thesis?.status === 'turned_in';
     say(c, graduated
       ? pick([
         `Our graduate returns! The Forbidden Wing sleeps soundly, ${p.state.name}, and so do I. The Trial Hall still has plenty to teach a ${job.name}, if you miss the excitement.`,
         `${job.name}. I still have your thesis on my desk. It is one line long. It is my favourite.`,
       ])
-      : `${job.name}... I have watched many students graduate, ${p.state.name}, but few who shone like you. The Lich Archon still broods in the Arcane Sanctum. Consider it your final thesis.`,
-    [...quests, bye(graduated ? 'Goodbye, Headmistress.' : 'I will not fail.')]);
+      : thesisDone
+        ? `${job.name}... the Lich Archon has fallen, ${p.state.name}, and the whole Academy knows it. Only the ceremony remains — the faculty is waiting.`
+        : `${job.name}... I have watched many students graduate, ${p.state.name}, but few who shone like you. The Lich Archon still broods in the Arcane Sanctum. Consider it your final thesis.`,
+    [...quests, bye(graduated ? 'Goodbye, Headmistress.' : thesisDone ? 'One moment.' : 'I will not fail.')]);
     return;
   }
   const year = yearOfTier(job.tier);
@@ -988,11 +995,13 @@ function scoutFinn(c: Ctx) {
     say(c, FINN_TIPS[i], [go('Another tip?', tips), go('Back', home), bye('Thanks!')]);
   };
   const quests = [...storyOptions(c, home), ...questOptions(c, home), ...bountyRenewOptions(c, home)];
+  const firstYear = (Registry.job(c.p.state.job)?.tier ?? 1) <= 1;
   say(c, pick([
     'Prefect Finn, field practicums. Whisperwood is our classroom — stay on the path, mind the slimes, and don\'t eat the mushrooms.',
     'Shh — you hear that? Snails. Hundreds of them. Okay, maybe twelve. Practicum credit if you help?',
-    `A first-year! ${c.p.state.name}, right? The practicum roster could use another pair of hands.`,
-  ]), [...quests, go('Any tips for a first-year?', tips), bye()]);
+    firstYear ? `A first-year! ${c.p.state.name}, right? The practicum roster could use another pair of hands.`
+      : `${c.p.state.name}! An upperclassman on my roster — the first-years will be thrilled.`,
+  ]), [...quests, go(firstYear ? 'Any tips for a first-year?' : 'Any field tips?', tips), bye()]);
 }
 
 const SCRIPTS: Record<string, (c: Ctx) => void> = {

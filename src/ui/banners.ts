@@ -45,7 +45,7 @@ export class Banners {
   }
 
   jobAdvance(jobName: string, desc: string, color: string, year?: number) {
-    const title = year === 4 ? 'GRADUATED — YEAR 4' : year ? `EXAM PASSED — YEAR ${year}` : 'EXAM PASSED';
+    const title = year === 4 ? 'EXAM PASSED — FINAL YEAR' : year ? `EXAM PASSED — YEAR ${year}` : 'EXAM PASSED';
     this.enqueue({ kind: 'job', title, text: jobName, sub: desc, color, durMs: 3400 });
   }
 

@@ -204,6 +204,7 @@ export class FieldBoss extends Monster {
    */
   protected telegraph(rect: Phaser.Geom.Rectangle, durMs: number, onDone: (r: Phaser.Geom.Rectangle) => void,
     kind: Tele['kind'] = 'ground', dir: 1 | -1 = 1, color = WARN) {
+    if (this.destroyed) return;
     const g = this.scene.add.graphics().setDepth(DEPTH.VFX - 1);
     this.teles.push({ g, rect, t: 0, dur: Math.max(200, durMs), kind, color, dir, onDone });
   }
@@ -217,12 +218,15 @@ export class FieldBoss extends Monster {
   /** Lingering damage area: `dmg` every `tickMs` while the player stands in it (no knockback — it's a DoT). */
   protected addHazard(rect: Phaser.Geom.Rectangle, lifeMs: number, tickMs: number, dmg: number,
     objs: Phaser.GameObjects.GameObject[] = [], onTick?: Hazard['onTick']) {
+    // An attack can resolve after the boss was destroyed mid-callback (e.g. its hit killed the player in a Trial).
+    if (this.destroyed) { objs.forEach(o => { try { o.destroy(); } catch { /* ignore */ } }); return; }
     this.hazards.push({ rect, life: lifeMs, total: lifeMs, tickMs, acc: tickMs * 0.6, dmg, objs, onTick });
   }
 
   /** Lobbed / thrown projectile; lands on the ground under it (calls onLand) or hits the player directly. */
   protected addProjectile(img: Phaser.GameObjects.Image, vx: number, vy: number, gravity: number, dmg: number,
     onLand?: (x: number, groundY: number) => void, spin = 0) {
+    if (this.destroyed) { img.destroy(); return; }
     img.setDepth(DEPTH.VFX);
     this.projs.push({ img, vx, vy, gravity, life: 4000, spin, dmg, onLand });
   }
@@ -587,8 +591,10 @@ export class FieldBoss extends Monster {
   // ─────────────────────────── telegraphs / hazards / projectiles ───────────────────────────
 
   private tickTeles(delta: number) {
-    for (let i = this.teles.length - 1; i >= 0; i--) {
-      const z = this.teles[i];
+    // Iterate a snapshot: a resolving telegraph can kill the player, and a Trial then despawns this boss
+    // (cleanupAttacks() empties the lists) before the loop finishes.
+    for (const z of this.teles.slice()) {
+      if (this.destroyed) return;
       z.t += delta;
       const k = Phaser.Math.Clamp(z.t / z.dur, 0, 1);
       const pulse = 0.5 + 0.5 * Math.sin(z.t / 55);
@@ -621,7 +627,8 @@ export class FieldBoss extends Monster {
       g.lineStyle(2, z.color, 0.6 + 0.4 * pulse).strokeRect(r.x, r.y, r.width, r.height);
       if (z.t >= z.dur) {
         g.destroy();
-        this.teles.splice(i, 1);
+        const i = this.teles.indexOf(z);
+        if (i >= 0) this.teles.splice(i, 1);
         if (this._alive) { try { z.onDone(r); } catch (e) { console.warn('[boss] telegraph resolve', e); } }
       }
     }
@@ -632,8 +639,8 @@ export class FieldBoss extends Monster {
     const pb = this.playerBounds();
     let inv = false;
     try { inv = !!this.services.player?.isInvulnerable(); } catch { /* ignore */ }
-    for (let i = this.hazards.length - 1; i >= 0; i--) {
-      const h = this.hazards[i];
+    for (const h of this.hazards.slice()) {
+      if (this.destroyed) return; // a DoT tick can kill the player and despawn this boss (see tickTeles)
       h.life -= delta;
       h.acc += delta;
       try { h.onTick?.(h, delta); } catch { /* ignore */ }
@@ -647,7 +654,8 @@ export class FieldBoss extends Monster {
           if (!go.active) continue;
           this.scene.tweens.add({ targets: go, alpha: 0, duration: 300, onComplete: () => go.destroy() });
         }
-        this.hazards.splice(i, 1);
+        const i = this.hazards.indexOf(h);
+        if (i >= 0) this.hazards.splice(i, 1);
       }
     }
   }
@@ -658,7 +666,7 @@ export class FieldBoss extends Monster {
     try {
       if (!s.progression || s.progression.isDead()) return;
       const def = Math.max(0, s.progression.derived().def || 0);
-      const amt = Math.max(1, Math.round(raw * this.outgoingDamageMult() * (1 - def / (def + 120))));
+      const amt = Math.max(1, Math.round(raw * (1 - def / (def + 120)))); // raw comes from dmg(): curse already applied
       s.combat.showNumber(s.player.x, s.player.y - 66, amt, 'player');
       s.progression.loseHp(amt);
     } catch { /* ignore */ }
@@ -681,6 +689,7 @@ export class FieldBoss extends Monster {
         if (o.img.x + r > pb.x && o.img.x - r < pb.right && o.img.y + r > pb.y && o.img.y - r < pb.bottom) {
           try { this.services.combat.hitPlayer(o.dmg, o.img.x); } catch { /* ignore */ }
           o.dmg = 0;
+          if (this.destroyed) return;
         }
       }
       if (!gone && o.vy > 0) {
@@ -688,6 +697,7 @@ export class FieldBoss extends Monster {
         if (o.img.y >= gy) {
           gone = true;
           try { o.onLand?.(o.img.x, gy); } catch { /* ignore */ }
+          if (this.destroyed) return;
         }
       }
       if (gone) {

@@ -15,6 +15,7 @@ import type { MusicKey } from '../core/types';
 import { h, safe } from './dom';
 import { jobName, schoolName } from './info';
 import { portraitEl } from './uiIcons';
+import { getActiveSlot } from '../systems/SaveSystem';
 
 // ───────────────────────────── credits data ─────────────────────────────
 
@@ -190,9 +191,14 @@ export class CreditsRoll {
 
   // ─────────────────────────── trigger ───────────────────────────
 
-  private flagKey(): string { return `creditsSeen:${this.ctx.s.progression.state.name}`; }
+  /** Per save slot + name: two students with the same name in different slots each get their own roll. */
+  private flagKey(): string {
+    let slot = 0;
+    try { slot = getActiveSlot(); } catch { /* ignore */ }
+    return `creditsSeen:${slot}:${this.ctx.s.progression.state.name}`;
+  }
 
-  /** Has this character already seen the roll? (persisted per character name) */
+  /** Has this character already seen the roll? (persisted per save slot + character name) */
   seen(): boolean { return this.ctx.layout.getFlag(this.flagKey(), false); }
 
   /**

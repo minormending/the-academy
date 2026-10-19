@@ -1,6 +1,6 @@
 // OWNER: A9 (progression); save slots by P7a. New character + localStorage persistence (versioned, defensive, 6 slots).
 import type { BaseStats, EquipSlot, ItemStack, JobId, PlayerState, QuestProgress } from '../core/types';
-import { HOTBAR_SIZE } from '../core/types';
+import { HOTBAR_PAGE_SIZE, HOTBAR_SIZE } from '../core/types';
 import { MAX_LEVEL, SAVE_KEY, START_MAP, TOWN_MAP } from '../core/constants';
 import { Registry } from '../core/registry';
 import { computeDerived, deathExpLoss } from './progression/stats';
@@ -19,8 +19,11 @@ export function newUid(): string {
 export function newPlayerState(name: string): PlayerState {
   const hotbar: (string | null)[] = new Array(HOTBAR_SIZE).fill(null);
   hotbar[0] = 'app_arcane_bolt';
-  hotbar[10] = 'item:red_potion';
-  hotbar[11] = 'item:blue_potion';
+  // Potions on the 1 / 2 keys of every page, so they still work after flipping hotbar pages.
+  for (let p = 0; p * HOTBAR_PAGE_SIZE < HOTBAR_SIZE; p++) {
+    hotbar[p * HOTBAR_PAGE_SIZE + 10] = 'item:red_potion';
+    hotbar[p * HOTBAR_PAGE_SIZE + 11] = 'item:blue_potion';
+  }
   const state: PlayerState = {
     version: 1,
     name: (name || 'Apprentice').slice(0, 16),

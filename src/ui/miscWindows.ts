@@ -6,6 +6,7 @@ import type { UICtx } from './context';
 import { h, loadJson, safe, saveJson } from './dom';
 import { BRANCH_COLORS, BRANCH_NAMES, examinerName, schoolName } from './info';
 import { portraitEl } from './uiIcons';
+import { GRADUATION_QUEST_ID } from '../data/storyQuests';
 import { UIWindow, tabStrip } from './window';
 import { SLOT_ACTIONS, getBinding, getBindings, keyLabel, onBindingsChanged, type ActionId } from '../core/bindings';
 import { getSettings, onSettingsChanged, setSetting, type Settings } from '../core/settings';
@@ -182,7 +183,7 @@ export class JobsWindow extends UIWindow {
 
   protected signature(): string {
     const p = this.ctx.s.progression;
-    return JSON.stringify([p.state.job, p.state.level, safe(() => p.availableAdvancements(), [])]);
+    return JSON.stringify([p.state.job, p.state.level, safe(() => p.availableAdvancements(), []), p.state.quests[GRADUATION_QUEST_ID]?.status]);
   }
 
   protected render() {
@@ -212,14 +213,16 @@ export class JobsWindow extends UIWindow {
             if (safe(() => p.advanceJob(id), false)) { this.close(); }
             else { this.ctx.sfx('ui_error'); this.ctx.log('You cannot advance right now.', '#ff9b9b'); }
           },
-        }, j.tier === 2 ? `Declare ${BRANCH_NAMES[j.branch] ?? j.name}` : j.tier === 4 ? `Graduate as ${j.name}` : `Begin Year ${j.tier}`)));
+        }, j.tier === 2 ? `Declare ${BRANCH_NAMES[j.branch] ?? j.name}` : `Begin Year ${j.tier}`)));
     }
     if (!cards.childElementCount) {
       const next = cur ? safe(() => Registry.jobs(), [] as JobDef[]).filter(j => j.parent === cur.id) : [];
       const lvl = next.length ? Math.min(...next.map(j => j.requiredLevel)) : 0;
       cards.appendChild(h('div', { class: 'ax-empty-note' },
         next.length ? (st.level < lvl ? `Your Year-end Exam opens at level ${lvl}. Keep studying!` : `Speak with ${examinerName(next[0])} on campus to sit your exam.`)
-          : 'You have graduated — the Academy has nothing left to teach you. (For now.)'));
+          : st.quests[GRADUATION_QUEST_ID]?.status === 'turned_in'
+            ? 'You have graduated — the Academy has nothing left to teach you. (For now.)'
+            : 'This is your final Year. Your Final Thesis awaits — speak with Headmistress Maelis.'));
     }
     this.body.replaceChildren(
       h('div', { class: 'ax-help-intro' }, !cur ? '' : declaring

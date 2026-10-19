@@ -188,8 +188,11 @@ export class ShopWindow extends UIWindow {
   private junkStacks(): ItemStack[] {
     const st = this.ctx.s.progression.state;
     const needed = new Set<string>();
+    const branch = safe<Branch>(() => this.ctx.s.progression.jobDef().branch, 'none');
     for (const quest of Registry.quests()) {
       if (st.quests[quest.id]?.status === 'turned_in') continue;
+      // Another School's exam can never be taken once you've declared, so its materials are fair game.
+      if (branch !== 'none' && quest.requiredJobBranch && quest.requiredJobBranch !== 'none' && quest.requiredJobBranch !== branch) continue;
       for (const objective of quest.objectives) {
         if (objective.kind === 'collect') needed.add(objective.itemId);
       }

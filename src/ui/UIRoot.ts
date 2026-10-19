@@ -254,10 +254,13 @@ export class UIRoot implements IUI {
       if (this.dialog.handleKey(e)) { e.preventDefault(); return; }
       return; // other keys do nothing while talking
     }
-    if (e.repeat) return;
     // Window toggles follow core/bindings (rebindable); Esc always works as menu / close.
     const code = eventKeyCode(e);
     const acts = actionsForKey(code);
+    const UI_ACTS = ['menu', 'skills', 'inventory', 'stats', 'quests', 'help', 'minimap'] as const;
+    // A key bound to a UI action never also does its browser default (e.g. Spellbook on F5 must not reload).
+    if (UI_ACTS.some(a => acts.includes(a))) e.preventDefault();
+    if (e.repeat) return;
     if (e.code === 'Escape' || code === 27 || acts.includes('menu')) {
       const top = this.topmostOpen();
       if (top) top.close(); else this.openWindow('menu');
@@ -295,9 +298,7 @@ export class UIRoot implements IUI {
       prog.setHotbar(slot, p.entry);
       prog.setHotbar(p.fromSlot, other);
     } else {
-      // Move rather than duplicate if the entry is already on the bar.
-      const existing = hb.findIndex((e, i) => e === p.entry && i !== slot);
-      if (existing >= 0) prog.setHotbar(existing, null);
+      // Move rather than duplicate if the entry is already on the bar (items: on this page — setHotbar handles it).
       prog.setHotbar(slot, p.entry);
     }
     this.ctx.sfx('ui_click');

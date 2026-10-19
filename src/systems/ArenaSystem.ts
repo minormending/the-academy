@@ -153,10 +153,14 @@ export class ArenaSystem {
   private unsubs: (() => void)[] = [];
   private warned = false;
   private destroyed = false;
+  /** The player died during a run; endRun('fell') happens on the next update(). */
+  private fellPending = false;
 
   constructor(private scene: Phaser.Scene, private services: GameServices) {
     current = this;
-    this.unsubs.push(bus.on('player:died', () => { if (this.running()) this.endRun('fell'); }));
+    // Death ends the run from update() (tick sees isDead), never synchronously: player:died fires mid-way through a
+    // monster's own update (e.g. a boss hazard tick), and despawning that monster under its own feet breaks it.
+    this.unsubs.push(bus.on('player:died', () => { if (this.running()) this.fellPending = true; }));
   }
 
   // ─────────────────────────── public API ───────────────────────────
@@ -250,7 +254,7 @@ export class ArenaSystem {
   private tick(dt: number) {
     if (!this.running()) return;
     if (!this.inHall()) { this.endRun('left'); return; }
-    if (this.services.progression.isDead()) { this.endRun('fell'); return; }
+    if (this.fellPending || this.services.progression.isDead()) { this.endRun('fell'); return; }
     this.runMs += dt;
 
     if (this.phase === 'countdown') {
@@ -332,6 +336,8 @@ export class ArenaSystem {
   }
 
   private endRun(reason: ArenaEndReason) {
+    if (this.fellPending) reason = 'fell';
+    this.fellPending = false;
     if (!this.running()) return;
     const prog = this.services.progression;
     const best = Math.max(prog?.state?.arenaBest ?? 0, this.cleared);

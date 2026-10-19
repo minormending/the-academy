@@ -26,11 +26,11 @@ a resumed session (after a usage-limit pause) reads it to pick up exactly where 
   - [x] Gamepad bridge
   - [x] Trial Hall wave arena (+ GameScene wiring by lead)
   - [~] Pacing playthrough QA levels 1–25
-- [~] **6. Story & structure**
+- [x] **6. Story & structure**
   - [x] Main questline across the four Years (13 `story_` quests, all five Schools reach graduation).
   - [x] Year 1 orientation/tutorial assignment chain.
   - [x] Academy Merit shop (Bram → Merit Exchange; `buyWithMerits`).
-  - [ ] UI wiring: graduation credits screen on `quest:updated` for `GRADUATION_QUEST_ID` turned_in;
+  - [x] UI wiring: graduation credits screen on `quest:updated` for `GRADUATION_QUEST_ID` turned_in;
         quest log hides locked story steps (`storyStepUnlocked`, `STORY_QUEST_IDS`); no banner flash for
         talk-only steps that go straight to turned_in; rename `q_maelis_archon` to avoid name overlap.
 - [~] **7. Quality of life & polish** (save slots + controls in progress)

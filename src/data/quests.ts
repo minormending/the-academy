@@ -185,7 +185,7 @@ export const QUESTS: QuestDef[] = [
   // ───────────── Field Bounties (Prefect Finn; repeatable — Finn re-posts a bounty after it is handed in) ─────────────
   ...FIELD_BOUNTIES.map(b => bountyQuest(b)),
   {
-    id: 'q_maelis_archon', name: 'Final Thesis: The Lich Archon', giver: 'elder_maelis', minLevel: 46,
+    id: 'q_maelis_archon', name: 'Bounty: The Lich Archon (Repeat)', giver: 'elder_maelis', minLevel: 46,
     description: 'At the heart of the Sanctum, the Lich Archon hoards magic stolen from generations of students. Defeat it and bring the Headmistress its Sigil.',
     objectives: [{ kind: 'collect', itemId: 'archon_sigil', count: 1 }],
     rewards: { exp: xp(48, 0.8), mesos: 50000, items: [{ itemId: 'power_elixir', qty: 10 }] },

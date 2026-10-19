@@ -18,7 +18,8 @@ see below), with 3rd and 4th advancements at 25 and 40:
 > (Phase 9) + **40 per School** (32 across Years 2-4, +8 in Year 5). There are **fourteen maps**: the seven chained
 > world maps, `trial_hall`, the three branch zones, and the three Year 5 endgame maps (`astral_observatory`,
 > `void_rift`, `archon_spire`, home of the raid boss The Unwritten, `src/data/raidBosses.ts`). Students design
-> their look at enrolment ("Character creation") and phones get their own layout ("Phase 11"). The
+> their look at enrolment ("Character creation"), phones get their own layout ("Phase 11"), and the game is a
+**story game of classes and badges** in which Years advance only through the Headmistress ("Phase 12"). The
 > art is **mostly external CC0 / CC-BY pixel packs** (see "Art pivot" and `CREDITS.md`), with the procedural
 > generators kept as fallbacks; audio is still fully synthesized (WebAudio). The frame order, ids and ownership
 > rules below were updated where they changed; the Phase 3 / Phase 4 / Phase 9 sections and the two sections at the
@@ -391,3 +392,78 @@ subscribers. On a phone:
 - The HUD (`src/ui/hud.ts`) switches to short EXP text and a menu button in place of the quick buttons.
 New UI must be laid out for both sizes and must not assume 1280 × 720; subscribe with `onMobileLayoutChanged` rather
 than reading `innerWidth`.
+
+---
+
+## Phase 12: story mode
+
+Each Year is a **term of classes**. A class (`CourseDef`, `src/core/types.ts`) is taught by a teacher NPC and is an
+ordered chain of **missions**, which are ordinary `QuestDef`s (new ones with ids `m<year>_<slug>_<n>`, plus the
+existing story steps, Year-end / Fellowship exams and side quests, each listed in exactly one class). Handing in a
+class's last mission **passes** it: the teacher pays the class `rewards` and awards its **badge**. A `YearPlan`
+says how many of the Year's badges pass it (`badgesToPass`) and which kinds must be among them (`required`, from
+`'core' | 'major' | 'elective'`). Year = job tier: Year 1 ends when the student **declares a major** (their School),
+Years 2–4 end in a promotion ceremony, Year 5 in the finale. Data: `src/data/courses/year{1..5}.ts` (core and
+electives, plus each Year's `YEAR_<n>` plan) and `year{2..5}majors.ts` (one major per School), aggregated in
+`src/data/courses/index.ts` and served by `Registry.course(id)`, `Registry.courses()`, `Registry.yearPlan(year)` and
+`Registry.courseOfMission(questId)`. Authoring rules and the story bible: `src/data/courses/README.md`; integrity
+tests: `tests/courses.test.ts`.
+
+- **`CourseSystem`** (`src/systems/CourseSystem.ts`, implements `ICourses`; created in `GameScene.create` right
+  after `Progression` and exposed as `services.courses`). Queries: `year()`, `plan()`, `catalogue(year)` (the Year's
+  classes with majors filtered to the student's School), `status(id)` (`locked` / `open` / `enrolled` / `passed`),
+  `currentMission(id)`, `activeMissions()` (missions in progress first, then the next mission to pick up for each
+  started class and the core class, so the HUD can say "See &lt;teacher&gt;"), `badges(year)` and `yearProgress()`.
+  Actions: `passCourse(id)` (only once every mission is handed in; needs bag room for item rewards; emits
+  `course:passed` and `course:updated` and the "CLASS PASSED" banner), `declareMajor(school)` (Year 1 only) and
+  `promote()`. Both actions check `yearProgress().ready` and the next job's `requiredLevel`, then call
+  `progression.advanceJob`; promotion out of Year 4 also needs `hasGraduated` (Commencement handed in). Each
+  emits `year:promoted` (`FINALE_YEAR` = 6 for the finale). The pure helpers `yearOf`, `schoolOf`, `courseEligible`
+  and `canAcceptMission` are exported for `Progression`.
+- **Mission rules in `Progression`.** `canAcceptQuest` adds `canAcceptMission`: a class mission needs the class
+  eligible (its Year at most the student's, a major only for its own School) and every earlier mission of that class
+  handed in. Two once-only objective kinds join `kill` / `collect` / `level`: `visit` (counts on `map:changed`) and
+  `talk` (counts on `npc:talked`, which `NpcManager` emits before running the script, so a finished talk goal is
+  ready to hand in in the same conversation). While the Year has classes, `courseGate()` makes `advanceJob` and
+  `availableAdvancements` require the Year passed, so no older exam flow can skip a Year; level-ups no longer
+  announce advancements (the last badge does).
+- **`npcScripts` flows** (`src/data/npcScripts.ts`, story mode is on when `services.courses` exists; older test
+  harnesses without it run the old flows). Every teacher gets a **Classes** register: offer the next mission,
+  show progress, hand it in, and pin the badge (straight away when the last mission is handed in to the teacher,
+  otherwise from a "[Badge]" option). Missions handed out by someone else (story steps keep their own giver) are
+  offered by that NPC and listed as "elsewhere" by the teacher. A quest that belongs to a class is offered only
+  through its class (`hiddenFromOldFlows`). Headmistress Maelis adds the **report card**, **Declare my major**
+  (Year 1, with the School summaries), the **promotion** ceremony (Years 2–4, reading each `YearPlan.outro` /
+  `intro`) and the **finale** (Year 5). A Professor no longer advances the job when an exam is handed in: the
+  exam is the major class's last mission. The old level-10 "Declaration Day" is retired for new students
+  (`RETIRED_IN_STORY_MODE`); a save that already has it hands it in at the declaration.
+- **Classes window and tracker** (`src/ui/coursesWindow.ts`, `src/ui/missionTracker.ts`). The `quests` action
+  (**J**, labelled "Classes") opens `CoursesWindow`: a Classes tab (the Year's plan and badge progress, each class
+  with its status and current mission's objectives, the Badge Case) and an Assignments tab for the quests that
+  belong to no class. `coursesOf(services)` returns the service, or a read-only view derived from the Registry and
+  the quest log when it is absent. `MissionTracker` (top right; a compact strip on phones) shows up to two of
+  `activeMissions()` with progress and "Go to: &lt;map&gt;"; clicking it opens Classes. `UIRoot` redraws both on
+  `quest:updated`, `course:updated` and `year:promoted`, and `banners.badge` shows the awarded badge on
+  `course:passed`. Badge art is drawn by `src/art/badges.ts` (16×16 pixel medals in five `BadgeShape`s, glyph
+  picked from a hash of the badge id; `badgeDataUrl(badge, size, dim)`).
+- **Route guidance** (`src/world/route.ts`, `src/world/missionGuide.ts`). `missionTargetMap(mission)` picks where a
+  mission wants you: the giver's map when it is not picked up yet, else the first unfinished objective's map (a
+  `visit` target, the map with the most spawns of a `kill` target or of the monsters that drop a `collect` item,
+  a `talk` NPC's map), and the giver's map again once every goal is met. `nextPortalToward(from, to)` is a breadth-first search over visible portals. `MissionGuide`
+  (owned by `MapInstance`) floats a bobbing gold arrow and "→ &lt;map&gt;" label over each portal that leads toward an
+  active mission, and `guidePortals(mapId)` (cached, invalidated on `map:changed` / `quest:updated` /
+  `course:updated`) feeds the minimap's gold portal marker. Guidance is optional and never throws into the map.
+  Tests: `tests/route.test.ts`.
+- **State and saves.** `PlayerState.courses?: Record<courseId, CourseProgress>` (`{ status: 'enrolled' | 'passed',
+  passedAt?, credit? }`) and `PlayerState.storyComplete?: true`, set once the Year 5 finale has been held
+  (`promote()` returns false after that). `SaveSystem.repairCourses` keeps only well-formed entries for known
+  classes; an absent `courses` stays absent so the credit pass below can run. No save-version bump.
+- **Old-save credit.** `CourseSystem`'s constructor (`grandfather()`) runs once for a save without `courses`: for
+  every Year before the student's current one it marks the core class, the student's major and enough electives
+  (in catalogue order) to reach `badgesToPass` as passed with `credit: true`, so a Year 3 student starts on Year 3's
+  classes instead of sitting Year 1 again. A new student gets an empty record. Tests: `tests/courseSystem.test.ts`.
+
+Debug console: `arcana.classes()` (this Year's classes, status, current mission and Year progress) and
+`arcana.passClass('c1_orientation')` (hand in every mission of a class and pass it). The handbook's walkthrough is
+built around the same data: each Year opens with its `{ year }` plan and `{ classes }` table, and `{ finals }`
+shows each major's last mission (`docs/GUIDE.md`).

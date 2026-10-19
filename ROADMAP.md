@@ -93,7 +93,7 @@ Character creation shipped (a879717, cc02d5e). Then 20 agents were launched on d
   - Handbook still says Years 2–4 in builds.ts and front.ts; The Unwritten has no BOSS_NOTES entry
   - Character Select bakes one sprite sheet per saved look on first render (possible stall with many slots)
 
-## Phase 12: story mode (in progress)
+## Phase 12: story mode
 
 The user: "switch this to story based. Each year there are goals or missions to accomplish to pass a class… the teachers
 give you rewards and a badge for passing the class. When you pass enough classes, you move to the next year. At the
@@ -105,4 +105,4 @@ end of the 1st year, you choose your major." Contract and rules: `src/data/cours
 - [x] UI: Classes window (report card, badge case, assignments tab), HUD mission tracker, badge banner
 - [x] Guidance: route to the mission's map (portal arrow, minimap marker); pixel badge art
 - [x] Tests (tests/courses.test.ts, courseSystem.test.ts, route.test.ts); integrate, tsc/test/build, play Year 1 in the browser (desktop + phone), push
-- [ ] Docs: handbook walkthrough by Year/classes, README, ARCHITECTURE
+- [x] Docs: handbook walkthrough by Year/classes (Year plans, class tables, major finals), README, ARCHITECTURE, devdocs

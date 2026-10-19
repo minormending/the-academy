@@ -281,9 +281,11 @@
           to the hotbar, mesos footer. Gear you can't wear is marked <code>ax-unusable</code>.</td></tr>
       <tr><td>Character (P)</td><td><a data-src="src/ui/statsWindow.ts">statsWindow.ts</a></td>
         <td>Base stats with AP buttons, derived stats, a 3×3 equipment paper-doll around the portrait.</td></tr>
-      <tr><td>Assignments (J)</td><td><a data-src="src/ui/questsWindow.ts#L13">questsWindow.ts</a></td>
-        <td>In Progress / Available / Handed in, with objective progress; re-renders when bindings change because quest
-          text carries live key hints.</td></tr>
+      <tr><td>Classes (J)</td><td><a data-src="src/ui/coursesWindow.ts">coursesWindow.ts</a></td>
+        <td>Story mode's report card: a Classes tab (the Year's plan and badge progress, each class with its status and
+          current mission's objectives, the Badge Case) and an Assignments tab for quests that belong to no class. The
+          HUD's mission tracker (<a data-src="src/ui/missionTracker.ts">missionTracker.ts</a>, top right) opens it. See
+          <a href="#story-classes">story mode</a>. The older quest log (<code>questsWindow.ts</code>) is no longer opened.</td></tr>
       <tr><td>Academy Honors (O)</td><td><a data-src="src/ui/honorsWindow.ts#L17">honorsWindow.ts</a></td>
         <td>Honors by category with progress bars, earned dates, hidden secrets and a title selector. Not in UIRoot's
           <code>windows</code> map (UIRoot keeps it in its own field and toggles it from the key handler and the HUD's Honors

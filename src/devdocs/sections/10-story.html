@@ -1,4 +1,4 @@
-<section id="story" data-title="Story, quests, NPCs and the Trial Hall" data-summary="QuestDef and quest progress, Assignments, Year-end Exams and Field Bounties, the 13-step main questline, NPC dialog scripts, NpcManager, graduation credits and the Trial Hall wave arena.">
+<section id="story" data-title="Story, quests, NPCs and the Trial Hall" data-summary="QuestDef and quest progress, Assignments, Year-end Exams and Field Bounties, the 13-step main questline, story mode (Years, classes, badges, CourseSystem, the Classes window and route guidance), NPC dialog scripts, NpcManager, graduation credits and the Trial Hall wave arena.">
   <h2>Story, quests, NPCs and the Trial Hall</h2>
 
   <p>This section covers the game's "things to do": quests and how their progress is tracked, the main
@@ -11,6 +11,11 @@
   <p>The pieces talk through the event bus (<a href="#architecture">architecture</a>). An NPC script never touches
     the DOM: it emits <code>ui:dialog</code> or <code>ui:shop</code>, and the dialog's buttons call back into
     <code>Progression</code>, which owns all quest state.</p>
+
+  <aside class="note">Story mode (Phase 12) organises all of this into Years of classes: most quests below are now
+    missions of a class, the exams are the last mission of each major, and Years advance only through the
+    Headmistress. See <a href="#story-classes">Story mode: Years, classes and badges</a>. The exam and
+    declaration flows described further down still run where no course service exists (older test harnesses).</aside>
 
   <pre class="mermaid">flowchart LR
   K["Up key near NPC"] --> NM["NpcManager.interact"]
@@ -271,6 +276,156 @@ export function storyStepUnlocked(v: StoryStateView, id: string): boolean {
   </details>
 
   <!-- ===================================================================== -->
+  <h3 id="story-classes">Story mode: Years, classes and badges</h3>
+
+  <p>Since Phase 12 the game is a story game. Each Year is a term of <dfn>classes</dfn>. A class is taught by a
+    teacher NPC and is an ordered chain of <dfn>missions</dfn>, and a mission is an ordinary <code>QuestDef</code>:
+    new ones with ids <code>m&lt;year&gt;_&lt;slug&gt;_&lt;n&gt;</code>, plus the story steps, exams and side quests above,
+    each listed in exactly one class. Handing in a class's last mission <dfn>passes</dfn> it: the teacher pays the
+    class rewards and awards its <dfn>badge</dfn>. Enough badges, including the required kinds, pass the Year.</p>
+  <pre><code class="lang-ts">export type CourseKind = 'core' | 'major' | 'elective';
+export interface CourseDef {
+  id: string;             // c&lt;year&gt;_&lt;slug&gt;
+  year: YearNo;
+  name: string;
+  code: string;           // "SPL 101"
+  teacher: string;        // NPC id (awards the badge)
+  kind: CourseKind;
+  school?: 'fire' | 'ice' | 'lightning' | 'holy' | 'shadow';   // majors only
+  blurb: string;
+  missions: string[];     // quest ids, in order
+  badge: BadgeDef;
+  rewards: { exp?: number; mesos?: number; sp?: number; items?: { itemId: string; qty: number }[] };
+  passLine: string;
+}
+export interface YearPlan {
+  year: YearNo;
+  title: string;
+  intro: string;
+  badgesToPass: number;
+  required: CourseKind[];
+  outro: string;
+}</code></pre>
+  <p>(<a data-src="src/core/types.ts#L447">types.ts:447</a>, shortened.) The data is in
+    <a data-src="src/data/courses/index.ts">src/data/courses/</a>: <code>year1.ts</code> to <code>year5.ts</code> hold
+    each Year's plan, core class and electives, and <code>year2majors.ts</code> to <code>year5majors.ts</code> one major
+    per School. The Registry serves it as <code>course(id)</code>, <code>courses()</code>, <code>yearPlan(year)</code>
+    and <code>courseOfMission(questId)</code>. The authoring rules and the story every class must agree with are in
+    <a data-src="src/data/courses/README.md">the courses README</a>; <code>tests/courses.test.ts</code> checks every
+    reference.</p>
+
+  <table>
+    <thead><tr><th>Kind</th><th>Who takes it</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>core</code></td><td>Everyone</td><td>The Headmistress's story class; the story steps are its missions. Always required.</td></tr>
+      <tr><td><code>major</code></td><td>Only students of its <code>school</code> (one per School, Years 2–5)</td><td>Required from Year 2. In Years 2–4 its last mission is the old Year-end or Fellowship Exam (<code>q_job_*</code>).</td></tr>
+      <tr><td><code>elective</code></td><td>Everyone</td><td>Year 1's School samplers and Field Practicum; later the staff's classes. Fill up the badge count.</td></tr>
+    </tbody>
+  </table>
+
+  <p>A Year is still a job tier. Year 1 ends when the student <dfn>declares a major</dfn> (their School, which is
+    the Year 2 job of that branch); Years 2–4 end in a promotion ceremony and Year 5 in the finale. Only
+    Headmistress Maelis moves a student on:</p>
+  <pre class="mermaid">flowchart TD
+  T["Teacher's Classes register"] --> A["accept the class's<br>current mission"]
+  A --> O["objectives: kill, collect,<br>level, visit, talk"]
+  O --> H["hand in to its giver"]
+  H --> L{"last mission<br>of the class?"}
+  L -- no --> T
+  L -- yes --> P["CourseSystem.passCourse<br>rewards + badge"]
+  P --> R{"yearProgress().ready?"}
+  R -- no --> T
+  R -- yes --> M["Maelis: report card"]
+  M -- "Year 1" --> D["declareMajor(school)"]
+  M -- "Years 2-4" --> PR["promote()"]
+  M -- "Year 5" --> F["finale: storyComplete"]
+  D --> J["Progression.advanceJob<br>year:promoted"]
+  PR --> J</pre>
+
+  <h4>CourseSystem</h4>
+  <p><a data-src="src/systems/CourseSystem.ts">CourseSystem.ts</a> implements <code>ICourses</code>.
+    <code>GameScene</code> creates it right after <code>Progression</code> and stores it as
+    <code>services.courses</code>.</p>
+  <table>
+    <thead><tr><th>Method</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td><code>year()</code>, <code>plan(year?)</code></td><td>The student's Year (job tier, 1–5) and that Year's <code>YearPlan</code>.</td></tr>
+      <tr><td><code>catalogue(year?)</code></td><td>The Year's classes, with majors filtered to the student's School.</td></tr>
+      <tr><td><code>status(id)</code></td><td><code>locked</code> / <code>open</code> / <code>enrolled</code> / <code>passed</code>.</td></tr>
+      <tr><td><code>currentMission(id)</code></td><td>The first mission of the class not handed in yet.</td></tr>
+      <tr><td><code>activeMissions()</code></td><td>Missions in progress first, then the next mission to pick up for each started class and the core class (so the HUD can say "See &lt;teacher&gt;").</td></tr>
+      <tr><td><code>badges(year?)</code>, <code>yearProgress()</code></td><td>Passed classes; badges this Year against <code>badgesToPass</code>, the required kinds still missing, and <code>ready</code>.</td></tr>
+      <tr><td><code>passCourse(id)</code></td><td>Only once every mission is handed in and the bag has room: records the pass, pays the rewards, emits <code>course:passed</code>, <code>course:updated</code> and a banner, and logs "See Headmistress Maelis" if that was the Year's last badge.</td></tr>
+      <tr><td><code>declareMajor(school)</code>, <code>promote()</code></td><td>Check <code>ready</code> and the next job's level (and graduation before Year 5), call <code>advanceJob</code>, emit <code>year:promoted</code>. In Year 5 <code>promote()</code> sets <code>storyComplete</code> instead.</td></tr>
+    </tbody>
+  </table>
+  <p>Two rules live in <code>Progression</code> so no path can skip them. <code>canAcceptQuest</code> also asks the
+    exported <code>canAcceptMission</code> (<a data-src="src/systems/CourseSystem.ts#L49">CourseSystem.ts:49</a>): a
+    mission needs its class eligible (its Year at most the student's, a major only for its own School) and every
+    earlier mission of the class handed in. And while the student's Year has classes, <code>advanceJob</code> refuses
+    unless the Year is passed. Two once-only objective kinds join the old three: <code>visit</code> counts on
+    <code>map:changed</code> and <code>talk</code> on <code>npc:talked</code>, which <code>NpcManager</code> emits before
+    running the script, so a finished talk goal can be handed in in the same conversation.</p>
+
+  <h4>Teacher scripts</h4>
+  <p>Story mode is on in <code>npcScripts.ts</code> whenever <code>services.courses</code> exists; test harnesses
+    without it still run the older flows described below. Each teacher gets a <strong>Classes</strong> section
+    (<code>classEntries</code>, <a data-src="src/data/npcScripts.ts#L573">npcScripts.ts:573</a>) that offers each
+    class's current mission, shows progress, takes the hand-in and pins the badge: straight away when the last
+    mission is handed in to the teacher, otherwise from a "[Badge]" option. A mission with another giver (story
+    steps keep theirs) is offered by that NPC and shown by the teacher as "elsewhere". A quest that belongs to a
+    class is hidden from the old Assignment and exam flows, so nothing is offered twice. Maelis adds the report
+    card (<a data-src="src/data/npcScripts.ts#L988">npcScripts.ts:988</a>), <strong>Declare my major</strong>, the
+    promotion ceremony and the finale. Professors no longer advance the job when an exam is handed in, and the old
+    level-10 Declaration Day is retired (<code>RETIRED_IN_STORY_MODE</code>) unless a save already has it.</p>
+
+  <h4>Classes window, tracker and route guidance</h4>
+  <ul>
+    <li><strong>Classes window</strong> (<kbd>J</kbd>, <a data-src="src/ui/coursesWindow.ts">coursesWindow.ts</a>):
+      a Classes tab with the Year's plan, badge progress, every class with its status and current objectives, and the
+      Badge Case; and an Assignments tab for quests that belong to no class.</li>
+    <li><strong>Mission tracker</strong> (<a data-src="src/ui/missionTracker.ts">missionTracker.ts</a>): top right
+      (a two-line strip on phones), up to two of <code>activeMissions()</code> with progress and "Go to: &lt;map&gt;";
+      clicking it opens Classes. UIRoot redraws both on <code>quest:updated</code>, <code>course:updated</code> and
+      <code>year:promoted</code>, and shows the badge banner on <code>course:passed</code>.</li>
+    <li><strong>Route guidance</strong>: <code>missionTargetMap</code>
+      (<a data-src="src/world/route.ts#L40">route.ts:40</a>) picks the map a mission wants (the giver's before it is
+      picked up and after every goal is met; otherwise the first unfinished goal's map, the best spawn map for a
+      kill or collect), and <code>nextPortalToward</code> finds the first portal on the shortest path.
+      <code>MissionGuide</code> (<a data-src="src/world/missionGuide.ts">missionGuide.ts</a>) floats a gold arrow
+      and "→ &lt;map&gt;" over that portal, and the minimap marks the same portal.</li>
+    <li><strong>Badges</strong> are drawn by <a data-src="src/art/badges.ts">badges.ts</a>: 16×16 pixel medals in five
+      shapes, with a glyph picked from a hash of the badge id.</li>
+  </ul>
+
+  <h4>State and older saves</h4>
+  <p><code>PlayerState.courses</code> maps a class id to <code>{ status: 'enrolled' | 'passed', passedAt?, credit? }</code>,
+    and <code>PlayerState.storyComplete</code> is set once the finale has been held. <code>repairCourses</code>
+    (<a data-src="src/systems/SaveSystem.ts#L400">SaveSystem.ts:400</a>) keeps only well-formed entries for known
+    classes. A save from before story mode has no <code>courses</code> at all, and that is the signal for
+    <code>grandfather()</code> (<a data-src="src/systems/CourseSystem.ts#L286">CourseSystem.ts:286</a>): for every Year
+    before the student's own it marks the core class, the student's major and enough electives as passed with
+    <code>credit: true</code>, so a Year 3 student carries on with Year 3.</p>
+
+  <details class="advanced"><summary>Advanced: story-mode invariants</summary>
+    <ul>
+      <li><strong>One class per quest.</strong> <code>courseOfMission</code> returns the first class that lists a quest;
+        the course tests fail if two do. Class order is enforced in <code>Progression</code>, not only in the
+        dialog, so the Classes window, the NPC markers and a debug <code>acceptQuest</code> all agree.</li>
+      <li><strong>Absent is not empty.</strong> <code>repairCourses</code> keeps a missing <code>courses</code> missing so
+        the credit pass can run once; an empty object means a new student and gets no credit.</li>
+      <li><strong>Only kinds on offer are required.</strong> <code>yearProgress</code> drops a required kind the student is
+        not offered (a major missing from the data), so a data gap cannot soft-lock a Year.</li>
+      <li><strong>The level still applies.</strong> Promotion checks the next job's <code>requiredLevel</code>, so the
+        missions' <code>minLevel</code>s must carry a student to 10, 25, 40 and 55.</li>
+      <li><strong>Guidance never breaks a map.</strong> <code>guidePortals</code> and <code>MissionGuide</code> swallow
+        their own errors; a mission whose target is unreachable simply shows no arrow.</li>
+      <li>The handbook reads the same data: its walkthrough opens each Year with a plan and class table built from
+        <code>Registry.courses()</code> and <code>Registry.yearPlan()</code> (<code>docs/GUIDE.md</code>).</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
   <h3 id="story-npcs">NPCs and their scripts</h3>
 
   <p>An <code>NpcDef</code> is only a name, a title and a look (<a data-src="src/data/npcs.ts#L5">npcs.ts:5</a>);
@@ -401,6 +556,8 @@ const bye = (label = 'Goodbye.'): DialogOption =&gt; ({ label, closes: true });<
   <!-- ===================================================================== -->
   <h3 id="story-log">The Assignments window</h3>
 
+  <aside class="note">In story mode <kbd>J</kbd> opens the Classes window instead (<a href="#story-classes">story
+    mode</a>); quests that belong to no class are on its Assignments tab. The quest log described here is no longer opened by the game.</aside>
   <p>The quest log (<kbd>J</kbd>) has three tabs: In Progress, Available and Handed in. "Available" must not spoil
     the story, so locked story steps are filtered out with the same rule the NPCs use:</p>
   <pre><code class="lang-ts">    const storyView = { level: st.level, tier: safe(() =&gt; p.jobDef().tier, 1), quests: st.quests ?? {} };

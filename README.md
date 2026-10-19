@@ -22,8 +22,8 @@ to the Year 5 Fellowship and **The Unwritten** (level cap 70).
   endgame maps (the Astral Observatory, the Void Rift and the Archon Spire), with five rare field bosses, Field
   Bounties, the Lich Archon and the level-70 raid boss The Unwritten.
 - **Design your own mage** — pick skin, hair and accent colours (or Randomize) in the character creator when you enrol; the look is saved with the character and carries through every School robe and Year.
-- **41 classes, about 130 missions:** each Year has a core story class, five majors (one per School, you take yours) and electives with the faculty and staff. A Classes window (J) shows your report card and badge case, a HUD tracker shows your next step, and a gold arrow over the right portal leads you to the next map.
-- **Main questline**, orientation for new students, side assignments and Year-end Exams.
+- **42 classes, about 130 missions:** each Year has a core story class, five majors (one per School, you take yours) and electives with the faculty and staff. A Classes window (J) shows your report card and badge case, a HUD tracker shows your next step, and a gold arrow over the right portal leads you to the next map.
+- **Main questline** carried by each Year's core class, orientation for new students, and a few assignments outside the classes; each School's old Year-end Exam is now its major's final.
 - **Trial Hall** wave arena with Academy Merits and a Merit Exchange.
 - **Academy Honors** — 60 achievements in six categories that pay Merits and unlock titles for your name tag.
 - **Pip the owl familiar** auto-loots, two hotbar pages, six save slots with Character Select, full key

@@ -69,7 +69,7 @@ right line.
 | `07-progression.html` | `progression` | Balance curves, derived stats, SP/AP, jobs as school Years, exams, respec, merits |
 | `08-world.html` | `world` | MapDef, MapLoader, platforms/walls/ropes/portals, parallax and themes, ambient, the map graph |
 | `09-monsters.html` | `monsters` | MonsterDef, Monster AI, MonsterManager, drops, field bosses, the Lich Archon, Trial Hall waves |
-| `10-story.html` | `story` | Quests, story questline, NPC scripts, exams, Trial Hall, graduation |
+| `10-story.html` | `story` | Quests, story questline, story mode (Years, classes, badges, CourseSystem, Classes window, route guidance), NPC scripts, exams, Trial Hall, graduation |
 | `11-ui.html` | `ui` | DOM overlay, scaling, windows, HUD, dialogs, title menu |
 | `12-art.html` | `art` | Pixel-art pivot, manifests, palette swaps, character rig, icons, particles, licensing and credits |
 | `13-audio.html` | `audio` | Synthesized SFX and music |

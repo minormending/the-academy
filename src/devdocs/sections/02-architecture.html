@@ -1,0 +1,590 @@
+<section id="architecture" data-title="Architecture" data-summary="The service locator and GameServices, the contracts in types.ts, the Registry, the ownership model, the typed event bus, the VFX registry, the frame flow and the conventions.">
+  <h2>Architecture</h2>
+  <p>
+    The game was designed so that ten builder agents could write it in parallel without reading each other's code. That
+    goal explains almost every structural choice in <code>src/core/</code>. There are five pieces of plumbing:
+  </p>
+  <ul>
+    <li><strong>Contracts</strong>: one file, <a data-src="src/core/types.ts">src/core/types.ts</a>, that declares every
+      data shape (a skill, a monster, a map…) and every service interface (<code>IPlayer</code>,
+      <code>ISkillSystem</code>…). Modules depend on these interfaces, never on each other's classes.</li>
+    <li>A <dfn>service locator</dfn>: one object, <code>GameServices</code>, that holds the live instance of every
+      service. <code>GameScene</code> builds it and hands it to every system.</li>
+    <li>The <dfn>Registry</dfn>: read-only lookup of content by id (<code>Registry.skill('fire_fireball')</code>).</li>
+    <li>A typed <dfn>event bus</dfn>: fire-and-forget notifications (<code>monster:killed</code>,
+      <code>player:levelup</code>) that let one system react to another without a direct call.</li>
+    <li>The <dfn>VFX registry</dfn>: visual effects registered by string key and played with <code>playVfx</code>.</li>
+  </ul>
+  <p>
+    This section explains each piece, the ownership rules built on them, the order in which a frame runs, the main
+    cross-system flows (map change, death, level up, monster death), and the conventions every module follows.
+  </p>
+  <pre class="mermaid">flowchart TB
+  main["main.ts<br>Phaser.Game"] --> GS["GameScene.create()"]
+  GS -- "builds + setServices()" --> S[("GameServices")]
+  S --> P["Player"]
+  S --> SK["SkillSystem"]
+  S --> CB["CombatSystem"]
+  S --> PR["Progression"]
+  S --> MM["MonsterManager"]
+  S --> OT["DropManager, NpcManager,<br>audio, UIRoot"]
+  T{{"core/types.ts<br>(interfaces)"}}
+  R[("Registry<br>(content by id)")]
+  B(["bus<br>(events)"])
+  V(["playVfx<br>(VFX by key)"])
+  SK -. "codes against" .-> T
+  SK --> R
+  SK --> V
+  PR --> B
+  MM --> B</pre>
+
+  <h3 id="architecture-services">The service locator: GameServices</h3>
+  <p>
+    <a data-src="src/core/services.ts#L4">src/core/services.ts</a> is ten lines. It stores one
+    <code>GameServices</code> object in a module variable:
+  </p>
+  <pre><code class="lang-ts">let current: GameServices | null = null;
+export function setServices(s: GameServices | null) { current = s; }
+export function services(): GameServices {
+  if (!current) throw new Error('services not initialised');
+  return current;
+}
+export function maybeServices(): GameServices | null { return current; }</code></pre>
+  <p>The object itself is declared at the end of the contracts (<a data-src="src/core/types.ts#L610">types.ts:610</a>):</p>
+  <pre><code class="lang-ts">export interface GameServices {
+  scene: Phaser.Scene;   // the GameScene
+  game: IGameApi;
+  player: IPlayer;
+  monsters: IMonsterManager;
+  drops: IDropManager;
+  skills: ISkillSystem;
+  combat: ICombatSystem;
+  progression: IProgression;
+  npcs: INpcManager;
+  audio: IAudio;
+  ui: IUI;
+}</code></pre>
+  <table>
+    <thead><tr><th>Field</th><th>Interface</th><th>Concrete class</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>scene</code></td><td><code>Phaser.Scene</code></td><td><code>GameScene</code></td><td>The scene, for adding sprites, tweens, timers.</td></tr>
+      <tr><td><code>game</code></td><td><code>IGameApi</code></td><td><code>GameScene</code></td><td><code>changeMap</code>, <code>currentMap</code>, <code>setInputBlocked</code>, hotbar page.</td></tr>
+      <tr><td><code>player</code></td><td><code>IPlayer</code></td><td><a data-src="src/entities/Player.ts">Player</a></td><td>Movement, ropes, cast lock, hit reaction, blink.</td></tr>
+      <tr><td><code>monsters</code></td><td><code>IMonsterManager</code></td><td><a data-src="src/systems/MonsterManager.ts">MonsterManager</a></td><td>Spawning, respawn, spatial queries (<code>nearest</code>, <code>inRect</code>), contact damage.</td></tr>
+      <tr><td><code>drops</code></td><td><code>IDropManager</code></td><td><a data-src="src/systems/DropManager.ts">DropManager</a></td><td>Loot rolls, items and mesos on the ground, pickup.</td></tr>
+      <tr><td><code>skills</code></td><td><code>ISkillSystem</code></td><td><a data-src="src/systems/SkillSystem.ts">SkillSystem</a></td><td><code>tryCast</code>, cooldowns, buffs, summons, projectiles.</td></tr>
+      <tr><td><code>combat</code></td><td><code>ICombatSystem</code></td><td><a data-src="src/systems/CombatSystem.ts">CombatSystem</a></td><td>Damage rolls, statuses, damage numbers, hits on the player.</td></tr>
+      <tr><td><code>progression</code></td><td><code>IProgression</code></td><td><a data-src="src/systems/Progression.ts">Progression</a></td><td>The <code>PlayerState</code> save, derived stats, EXP, items, quests, jobs.</td></tr>
+      <tr><td><code>npcs</code></td><td><code>INpcManager</code></td><td><a data-src="src/systems/NpcManager.ts">NpcManager</a></td><td>NPC sprites and talking.</td></tr>
+      <tr><td><code>audio</code></td><td><code>IAudio</code></td><td><code>getAudio()</code> singleton</td><td>SFX and music (shared with the Title screen).</td></tr>
+      <tr><td><code>ui</code></td><td><code>IUI</code></td><td><a data-src="src/ui/UIRoot.ts">UIRoot</a></td><td>The DOM overlay; only <code>update</code> and <code>destroy</code> are public.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Systems receive the object in their constructor and keep the reference; a few read it lazily through a getter
+    (<code>new AttackRunner(scene, () =&gt; this.services, …)</code>). Code that is not handed the object, such as a VFX
+    function, calls <code>services()</code>, or <code>maybeServices()</code> when it may also run outside a game (on the
+    Title screen, in the handbook).
+  </p>
+  <details class="advanced">
+    <summary>Advanced: why constructors must not call other services</summary>
+    <p>
+      <code>GameScene.create()</code> starts from an empty object, <code>const s = {} as GameServices</code>, and
+      fills it field by field, passing the <em>same</em> object to each constructor. When <code>Progression</code> is
+      constructed, <code>s.player</code> and <code>s.ui</code> do not exist yet. A constructor may store
+      <code>s</code> and subscribe to the bus; it must not call <code>s.player.x</code> or
+      <code>s.progression.derived()</code>. Real work happens later in <code>bindMap</code>, <code>update</code> or
+      event handlers, when every field is set. This is ground rule 4 in <code>ARCHITECTURE.md</code>.
+    </p>
+    <ul>
+      <li><strong><code>setServices(s)</code> runs before <code>UIRoot</code> is built</strong>, so <code>UIRoot</code>
+        (and anything it calls) can use <code>services()</code>, but <code>s.ui</code> itself is still undefined until
+        its constructor returns.</li>
+      <li><strong>Not every system is a service.</strong> <code>PetSystem</code> (Pip the familiar) and
+        <code>ArenaSystem</code> (Trial Hall) are private fields of <code>GameScene</code>, added after the contract was
+        frozen. Other code reaches the arena through its own module helper (<code>getArena()</code>), not the
+        locator.</li>
+      <li><strong>One game at a time.</strong> The locator is a module-level singleton. <code>teardown()</code> sets it
+        back to <code>null</code>; any code that calls <code>services()</code> after Quit to Title throws, which is why
+        callbacks that can outlive a run (timers, tweens, DOM listeners) use <code>maybeServices()</code> or are
+        cancelled on <code>SHUTDOWN</code>.</li>
+      <li><strong>Testing in isolation</strong> is possible because every field is an interface: a fake
+        <code>GameServices</code> with stub objects is enough to drive one system.</li>
+    </ul>
+  </details>
+
+  <h3 id="architecture-contracts">The contracts in types.ts</h3>
+  <p>
+    <a data-src="src/core/types.ts">types.ts</a> (about 620 lines) is the shared language. Its header says builder agents
+    must not edit it; contract changes went through the lead. It has two kinds of declaration:
+    <dfn>data definitions</dfn> (plain objects authored in <code>src/data/</code> and <code>src/skills/</code>) and
+    <dfn>service interfaces</dfn> (the live systems above).
+  </p>
+  <table>
+    <thead><tr><th>Block</th><th>Main types</th><th>Authored in</th></tr></thead>
+    <tbody>
+      <tr><td><a data-src="src/core/types.ts#L11">Elements, jobs</a></td><td><code>Element</code>, <code>Branch</code> (a School), <code>JobId</code>, <code>JobDef</code>, <code>CharacterLook</code></td><td><code>data/jobs.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L48">Stats</a></td><td><code>BaseStats</code> (STR/DEX/INT/LUK), <code>DerivedStats</code> (matk, crit, speed, element bonuses, cdr…), <code>StatModifier</code></td><td>Progression</td></tr>
+      <tr><td><a data-src="src/core/types.ts#L98">Status effects</a></td><td><code>StatusKind</code> (burn, chill, freeze, shock, stun, poison, curse), <code>StatusSpec</code>, <code>StatusInstance</code></td><td>skills</td></tr>
+      <tr><td><a data-src="src/core/types.ts#L124">Skills</a></td><td><code>SkillDef</code>, <code>AttackSpec</code> and its seven <code>AttackPattern</code>s, <code>BuffSpec</code>, <code>SummonSpec</code>, <code>MovementSpec</code>, <code>SkillContext</code></td><td><code>skills/*.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L234">VFX</a></td><td><code>VfxOptions</code>, <code>VfxFn</code></td><td><code>skills/*Vfx.ts</code>, <code>art/particles.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L259">Audio</a></td><td><code>SfxKey</code>, <code>MusicKey</code></td><td><code>systems/audio/</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L270">Items</a></td><td><code>ItemDef</code>, <code>ItemStack</code>, <code>DropEntry</code>, <code>EquipSlot</code></td><td><code>data/items.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L301">Monsters</a></td><td><code>MonsterDef</code>, <code>IMonster</code></td><td><code>data/monsters.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L346">Maps</a></td><td><code>MapDef</code> with platforms, walls, ropes, portals, spawns, NPC placements; <code>IMapInstance</code></td><td><code>data/maps.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L394">NPCs, dialog, quests</a></td><td><code>NpcDef</code>, <code>DialogSpec</code>, <code>ShopSpec</code>, <code>QuestDef</code>, <code>QuestProgress</code></td><td><code>data/npcs.ts</code>, <code>data/quests.ts</code>, <code>data/storyQuests.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L429">Player state</a></td><td><code>PlayerState</code> (the save), <code>HOTBAR_SIZE</code> = 24, <code>HOTBAR_PAGE_SIZE</code> = 12</td><td><code>SaveSystem.newPlayerState</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L456">Service interfaces</a></td><td><code>IPlayer</code>, <code>IMonsterManager</code>, <code>IDropManager</code>, <code>ISkillSystem</code>, <code>ICombatSystem</code>, <code>IProgression</code>, <code>INpcManager</code>, <code>IAudio</code>, <code>IGameApi</code>, <code>IUI</code>, <code>GameServices</code></td><td>systems, entities, UI</td></tr>
+    </tbody>
+  </table>
+  <p>
+    A service interface is deliberately narrow. The skill engine, for example, exposes only what other systems need
+    (<a data-src="src/core/types.ts#L512">types.ts:512</a>):
+  </p>
+  <pre><code class="lang-ts">export interface ISkillSystem {
+  tryCast(skillId: string): CastResult;
+  getCooldownRemaining(skillId: string): number;
+  getCooldownTotal(skillId: string): number;
+  getActiveBuffs(): ActiveBuff[];
+  getBuffModifiers(): StatModifier[];
+  cancelBuff(skillId: string): void;
+  update(time: number, delta: number): void;
+  /** Destroy projectiles/summons on map change (buffs persist). */
+  clearWorld(): void;
+}</code></pre>
+  <p>
+    Data definitions are mostly plain fields, but anything that scales with skill level is a function of the level,
+    e.g. <code>damagePct: (lv: number) =&gt; number</code> and <code>mpCost: (lv: number) =&gt; number</code> in
+    <code>SkillDef</code> (<a data-src="src/core/types.ts#L190">types.ts:190</a>). Content is therefore TypeScript
+    modules, type-checked against the contract, rather than JSON. The details of each definition are in the sections
+    that own them: <a href="#skills">Skills</a>, <a href="#monsters">Monsters</a>, <a href="#world">World</a>,
+    <a href="#progression">Progression</a>, <a href="#story">Story</a>.
+  </p>
+
+  <h3 id="architecture-registry">The Registry</h3>
+  <p>
+    Every content module exports a plain array (<code>MONSTERS</code>, <code>MAPS</code>, <code>ITEMS</code>…), and
+    <a data-src="src/core/registry.ts#L12">src/core/registry.ts</a> indexes them by id the first time anyone asks:
+  </p>
+  <pre><code class="lang-ts">function index&lt;T extends { id: string }&gt;(arr: T[], what: string): Map&lt;string, T&gt; {
+  const m = new Map&lt;string, T&gt;();
+  for (const x of arr) { if (m.has(x.id)) console.warn(`[registry] duplicate ${what} id ${x.id}`); m.set(x.id, x); }
+  return m;
+}
+// …
+function ensure() {
+  if (_skills) return;
+  _skills = index(ALL_SKILLS, 'skill'); _monsters = index(MONSTERS, 'monster'); _maps = index(MAPS, 'map');
+  _items = index(ITEMS, 'item'); _jobs = index(JOBS, 'job'); _npcs = index(NPCS, 'npc'); _quests = index([...QUESTS, ...STORY_QUESTS], 'quest');
+}
+
+export const Registry = {
+  skill(id: string) { ensure(); return _skills.get(id); },
+  skills() { ensure(); return [..._skills.values()]; },
+  skillsForJob(job: JobId) { ensure(); return [..._skills.values()].filter(s =&gt; s.job === job); },
+  // … monster(s), map(s), item(s), job(s), npc, quest(s)
+  /** Job lineage from tier 1 to `job` inclusive, e.g. [apprentice, pyromancer, flamebinder]. */
+  jobLineage(job: JobId): JobDef[] { /* … walks JobDef.parent */ },
+};</code></pre>
+  <ul>
+    <li><strong>Lookups return <code>undefined</code></strong> for unknown ids (except <code>job()</code>, which is
+      non-null asserted). Callers check: <code>GameScene.changeMap</code> warns and returns for an unknown map, and
+      <code>create()</code> falls back to <code>START_MAP</code> if a save names a map that no longer exists.</li>
+    <li><strong>Duplicate ids warn, last one wins.</strong> Watch the console after adding content.</li>
+    <li><strong>Normal and story quests share one index</strong>, so a <code>story_</code> id and a
+      <code>q_</code> id are looked up the same way.</li>
+    <li><strong>The list methods copy</strong> (<code>[...values()]</code>); filtering or sorting the result is
+      safe.</li>
+  </ul>
+  <details class="advanced">
+    <summary>Advanced: the Registry and import cycles</summary>
+    <p>
+      <code>core/registry.ts</code> imports <code>skills/index.ts</code> and six <code>data/</code> modules, and all of
+      those import <code>core/</code> (types, constants, balance, often the Registry itself). So <code>core</code> is
+      not a leaf: <code>core ⇄ data</code> and <code>core ⇄ skills</code> are cycles at folder level. They are safe
+      because <code>ensure()</code> builds the maps on the first <em>call</em>, not at import time; by then every module
+      has finished evaluating. Two rules keep it that way:
+    </p>
+    <ul>
+      <li>Never call <code>Registry.*</code> at the top level of a data or skill module (for example to build a
+        derived table in a <code>const</code>). Compute such tables lazily or inside a function.</li>
+      <li>Never cache the arrays from <code>Registry.skills()</code> in a module-level variable during import; read
+        them when needed.</li>
+    </ul>
+    <p>
+      The indexes are built once and never invalidated. Content is static for the life of the page; there is no
+      hot-adding of skills or maps at runtime.
+    </p>
+  </details>
+
+  <h3 id="architecture-ownership">The ownership model</h3>
+  <p>
+    The contracts made it possible to split the game between a <dfn>lead</dfn> (the orchestrating session) and ten
+    builder agents, A1 to A10, each owning a disjoint set of files (<a data-src="ARCHITECTURE.md">ARCHITECTURE.md</a>,
+    "Ownership"):
+  </p>
+  <table>
+    <thead><tr><th>Owner</th><th>Area</th><th>Files</th></tr></thead>
+    <tbody>
+      <tr><td>lead</td><td>Contracts, boot, game scene orchestration</td><td><code>src/core/*</code>, <code>src/main.ts</code>, <code>scenes/BootScene.ts</code>, <code>scenes/GameScene.ts</code>, <code>skills/index.ts</code></td></tr>
+      <tr><td>A1 player</td><td>Movement, physics, ropes, one-way platforms, blink, hit reaction</td><td><code>entities/Player.ts</code>, <code>entities/player/*</code></td></tr>
+      <tr><td>A2 skill engine</td><td>Casting, attack patterns, buffs, summons, combat math, statuses, damage numbers, Apprentice skills</td><td><code>systems/SkillSystem.ts</code>, <code>systems/CombatSystem.ts</code>, <code>systems/skill/*</code>, <code>skills/apprentice.ts</code></td></tr>
+      <tr><td>A3–A5 trees</td><td>Fire, Ice, Lightning skills and VFX (Holy and Shadow were added the same way in Phase 3)</td><td><code>skills/fire*.ts</code>, <code>skills/fire/*</code>, and likewise per School</td></tr>
+      <tr><td>A6 monsters</td><td>Monster defs, art, AI, spawning, bosses, drops</td><td><code>data/monsters.ts</code>, <code>entities/Monster.ts</code>, <code>entities/monsters/*</code>, <code>MonsterManager</code>, <code>DropManager</code>, <code>art/monsterArt.ts</code></td></tr>
+      <tr><td>A7 world</td><td>Maps, map loader, terrain and parallax art, portals, weather</td><td><code>data/maps.ts</code>, <code>world/*</code>, <code>art/tileArt.ts</code>, <code>art/world/*</code></td></tr>
+      <tr><td>A8 UI</td><td>Title, HUD, every window, dialogs, minimap, settings</td><td><code>ui/*</code>, <code>scenes/TitleScene.ts</code></td></tr>
+      <tr><td>A9 progression</td><td>Player state, stats, levels, items, shops, NPCs, quests, saves</td><td><code>Progression</code>, <code>SaveSystem</code>, <code>NpcManager</code>, <code>systems/progression/*</code>, <code>data/items|jobs|npcs|quests|npcScripts.ts</code></td></tr>
+      <tr><td>A10 art and audio</td><td>Character art, icons, shared particles, common VFX, synthesized audio</td><td><code>art/characters.ts</code>, <code>art/icons.ts</code>, <code>art/particles.ts</code>, <code>art/char/*</code>, <code>AudioSystem</code>, <code>systems/audio/*</code></td></tr>
+    </tbody>
+  </table>
+  <p>The ground rules that made parallel work safe, in short:</p>
+  <ol>
+    <li>Edit only the files you own; create new files only in your own namespace.</li>
+    <li>Keep every exported name and signature of your stub; add exports freely.</li>
+    <li><strong>Code only against <code>types.ts</code> + <code>Registry</code> + <code>bus</code> +
+      <code>playVfx</code></strong>; never import another agent's concrete class.</li>
+    <li>Constructors must not call other services (see above).</li>
+    <li>Your files typecheck with zero errors; no new npm dependencies.</li>
+    <li>Be robust: missing textures or data degrade gracefully, never throw in <code>update</code>.</li>
+  </ol>
+  <p>
+    The only concrete cross-owner imports allowed were a short list of <dfn>shared helpers</dfn>:
+    <code>iconDataUrl</code> / <code>iconTexture</code> from <code>art/icons.ts</code>; <code>playerTextureKey</code>,
+    <code>playerAnimKey</code>, <code>npcTextureKey</code>, <code>portraitDataUrl</code> from
+    <code>art/characters.ts</code>; <code>newPlayerState</code>, <code>loadSave</code>, <code>hasSave</code>,
+    <code>writeSave</code>, <code>deleteSave</code> from <code>SaveSystem.ts</code>; and <code>getAudio()</code> from
+    <code>AudioSystem.ts</code>. The real import graph between folders today:
+  </p>
+  <figure data-chart="module-graph"><figcaption>Top-level src/ folders and the imports between them. Notice how many arrows end at core: that is the contract doing its job. Also notice the arrows out of core (to data and skills, through the Registry) and the edges from ui into systems, which go beyond the original shared-helper list.</figcaption></figure>
+  <details class="advanced">
+    <summary>Advanced: where today's code departs from the rule</summary>
+    <p>The ownership rule was strict while agents worked in parallel; later phases relaxed it in a few places. Before
+      you copy any of these patterns, know that they are exceptions:</p>
+    <ul>
+      <li><code>ui/hud.ts</code> imports <code>MAX_INVENTORY_STACKS</code> from <code>systems/Progression.ts</code>;
+        <code>ui/arenaPanel.ts</code> imports <code>getArena</code> and tuning from <code>systems/ArenaSystem.ts</code>;
+        <code>ui/controlsWindow.ts</code> imports the pad map from <code>systems/GamepadBridge.ts</code>;
+        <code>ui/creditsRoll.ts</code> and <code>ui/titleMenu.ts</code> import save-slot functions beyond the original
+        five.</li>
+      <li><code>scenes/TitleScene.ts</code> imports <code>applySavedVolumes</code> from <code>ui/miscWindows.ts</code>
+        (same owner, A8, so within the rule).</li>
+      <li><code>data/npcScripts.ts</code> has a type-only import of <code>Progression</code>, so NPC scripts can use
+        methods that are not on <code>IProgression</code>. Type-only imports vanish at runtime, but they still couple the
+        script to the concrete class.</li>
+      <li><code>MonsterManager</code> imports <code>Monster</code>, <code>LichArchon</code> and the field-boss classes
+        directly. Both sides belong to A6, so this is allowed.</li>
+    </ul>
+    <p>
+      The safe way to need something new from another module is still the original one: if it is a stable, widely
+      useful fact, put the type or constant in <code>core/</code>; if it is behaviour, add a method to the service
+      interface and implement it in the owning class; if it is a one-off notification, add an event to
+      <code>GameEvents</code>.
+    </p>
+  </details>
+
+  <h3 id="architecture-events">The typed event bus</h3>
+  <p>
+    <a data-src="src/core/events.ts#L5">src/core/events.ts</a> wraps one Phaser <code>EventEmitter</code> in a class
+    whose methods are typed by a single map of event names to payloads:
+  </p>
+  <pre><code class="lang-ts">export interface GameEvents {
+  'monster:damaged': { monster: IMonster; amount: number; crit: boolean; element: Element };
+  'monster:killed': { monster: IMonster };
+  'player:damaged': { amount: number };
+  // …
+  'ui:banner': { text: string; sub?: string; color?: string };
+}
+
+class Bus {
+  private ee = new Phaser.Events.EventEmitter();
+  on&lt;K extends keyof GameEvents&gt;(ev: K, fn: Handler&lt;GameEvents[K]&gt;, ctx?: unknown) { this.ee.on(ev, fn, ctx); return () =&gt; this.ee.off(ev, fn, ctx); }
+  // … once, off
+  emit&lt;K extends keyof GameEvents&gt;(ev: K, payload: GameEvents[K]) { this.ee.emit(ev, payload); }
+  removeAll() { this.ee.removeAllListeners(); }
+}
+
+export const bus = new Bus();</code></pre>
+  <p>
+    A typo in an event name or a wrong payload field is a compile error. <code>on</code> returns an unsubscribe
+    function, which is how windows and per-map objects clean up. The events, who emits them and who listens (found by
+    searching the source):
+  </p>
+  <table>
+    <thead><tr><th>Event</th><th>Emitted by</th><th>Listened to by</th></tr></thead>
+    <tbody>
+      <tr><td><code>monster:killed</code></td><td><code>Monster.die()</code>, once per death</td><td>Progression (EXP, kill counts), DropManager (loot), MonsterManager (respawn timer), FieldBoss, LichArchon</td></tr>
+      <tr><td><code>monster:damaged</code></td><td>CombatSystem</td><td>nobody yet</td></tr>
+      <tr><td><code>player:damaged</code></td><td>CombatSystem</td><td>UIRoot (HP bar hit flash)</td></tr>
+      <tr><td><code>player:healed</code></td><td>Progression</td><td>nobody yet</td></tr>
+      <tr><td><code>player:levelup</code></td><td>Progression</td><td>GameScene (VFX, SFX), UIRoot (banner)</td></tr>
+      <tr><td><code>player:job</code></td><td>Progression</td><td>GameScene (<code>setJob</code>, VFX, SFX), UIRoot (banner)</td></tr>
+      <tr><td><code>player:died</code></td><td>Progression</td><td>GameScene, SkillSystem, ArenaSystem, Holy casts</td></tr>
+      <tr><td><code>player:revived</code></td><td>Progression</td><td>GameScene (revive, return to campus), UIRoot</td></tr>
+      <tr><td><code>player:changed</code></td><td>Progression, SkillSystem, <code>art/icons.ts</code></td><td>UIRoot (marks every panel dirty), <code>skills/apprentice.ts</code></td></tr>
+      <tr><td><code>skill:cast</code> / <code>skill:fail</code></td><td>SkillSystem / GameScene</td><td>UIRoot</td></tr>
+      <tr><td><code>hotbar:page</code></td><td>GameScene</td><td><code>ui/hud.ts</code></td></tr>
+      <tr><td><code>item:gained</code>, <code>mesos:gained</code></td><td>Progression</td><td>UIRoot (chat log)</td></tr>
+      <tr><td><code>map:changed</code></td><td>GameScene</td><td>UIRoot (minimap, "Entered …" log line), Holy casts</td></tr>
+      <tr><td><code>quest:updated</code></td><td>Progression, NPC scripts</td><td>UIRoot (log, graduation credits)</td></tr>
+      <tr><td><code>ui:dialog</code>, <code>ui:shop</code></td><td>NPC scripts</td><td>UIRoot (and the handbook's script context)</td></tr>
+      <tr><td><code>ui:banner</code>, <code>ui:log</code></td><td>Many (GameScene, Progression, MonsterManager, ArenaSystem…)</td><td>UIRoot</td></tr>
+      <tr><td><code>ui:death</code></td><td>GameScene</td><td>UIRoot (death prompt)</td></tr>
+      <tr><td><code>ui:open</code>, <code>ui:closeDialog</code></td><td>no emitter in the code today</td><td>UIRoot</td></tr>
+    </tbody>
+  </table>
+  <details class="advanced">
+    <summary>Advanced: dispatch is synchronous, and other bus pitfalls</summary>
+    <ul>
+      <li><strong>Handlers run inside <code>emit</code>.</strong> When <code>Progression.loseHp</code> emits
+        <code>player:died</code>, every listener runs before <code>loseHp</code> returns, which may be in the middle of
+        a monster's own <code>update</code> (a boss hazard tick). <code>ArenaSystem</code> documents this and only sets
+        a flag, ending the run on its next <code>update</code>: "despawning that monster under its own feet breaks
+        it." Follow that pattern whenever a handler would destroy objects.</li>
+      <li><strong>A throwing handler propagates to the emitter.</strong> <code>Monster.die()</code> wraps its emit in
+        <code>try/catch</code> so one broken subscriber cannot leave a half-dead monster; Progression wraps its own
+        <code>monster:killed</code> handler the same way. Do the same in new handlers.</li>
+      <li><strong>Subscription order is construction order.</strong> For <code>monster:killed</code>, Progression
+        (built first) gets EXP before DropManager spawns loot. Nothing depends on that today; do not start depending
+        on it.</li>
+      <li><strong><code>teardown()</code> calls <code>bus.removeAll()</code></strong>, so systems that subscribe in
+        their constructor never unsubscribe themselves; the next run gets a clean bus. Code that subscribes outside a
+        game run (for example, at module load) would be wiped too, so don't.</li>
+      <li><strong>Adding an event</strong> is a contract change in <code>core/events.ts</code>: add the name and
+        payload type to <code>GameEvents</code>, emit it from the owning system, and keep payloads small (ids and
+        numbers, not whole state objects).</li>
+    </ul>
+  </details>
+
+  <h3 id="architecture-vfx">The VFX registry</h3>
+  <p>
+    Visual effects are functions registered under a string key. Skill data names keys
+    (<code>vfx: { cast: 'fire_fireball_cast', hit: 'fire_fireball_hit' }</code>); the skill engine plays them without
+    knowing what they draw (<a data-src="src/core/vfx.ts#L9">vfx.ts:9</a>):
+  </p>
+  <pre><code class="lang-ts">export function registerVfx(key: string, fn: VfxFn): void {
+  if (registry.has(key)) console.warn(`[vfx] duplicate key ${key} (overwriting)`);
+  registry.set(key, fn);
+}
+
+export function hasVfx(key: string): boolean { return registry.has(key); }
+
+/** Play a VFX. Missing keys fall back to a generic puff so nothing crashes. */
+export function playVfx(scene: Phaser.Scene, key: string | undefined, o: VfxOptions): Phaser.GameObjects.GameObject | void {
+  if (!key) return;
+  const fn = registry.get(key);
+  if (fn) return fn(scene, o);
+  if (!warned.has(key)) { warned.add(key); console.warn(`[vfx] missing key "${key}"`); }
+  const c = scene.add.circle(o.x, o.y, 10, 0xffffff, 0.8).setDepth(DEPTH.VFX);
+  scene.tweens.add({ targets: c, scale: 2.5, alpha: 0, duration: 250, onComplete: () =&gt; c.destroy() });
+}</code></pre>
+  <p>
+    A <code>VfxFn</code> receives a <code>VfxOptions</code> (position, <code>facing</code>, optional target point, area
+    size, angle, <code>groundY</code>). One-shot effects clean themselves up and return nothing; persistent visuals
+    (projectiles, auras, summons) return a game object that the engine moves each frame and destroys when done. Every
+    key is registered once at boot by <code>registerAllVfx()</code> in
+    <a data-src="src/skills/index.ts#L23">skills/index.ts</a>; per-School keys go through <code>lazyRegister</code>,
+    which builds that School's textures on the first play (see <a href="#boot-lazy">lazy art generation</a>). The full
+    call conventions per pattern are in <a href="#skills">Skills</a>.
+  </p>
+
+  <h3 id="architecture-frame">The frame flow</h3>
+  <p>
+    <code>GameScene</code> (<a data-src="src/scenes/GameScene.ts#L63">GameScene.ts:63</a>) builds the services in a fixed
+    order, then wires events, keys and settings, loads the saved map and fades in:
+  </p>
+  <pre><code class="lang-ts">  create() {
+    const state = this.initialState;
+    const s = {} as GameServices;
+    s.scene = this;
+    s.game = this;
+    s.audio = getAudio();
+    s.progression = new Progression(s, state);
+    s.combat = new CombatSystem(this, s);
+    s.skills = new SkillSystem(this, s);
+    s.monsters = new MonsterManager(this, s);
+    s.drops = new DropManager(this, s);
+    this.arena = new ArenaSystem(this, s);
+    s.npcs = new NpcManager(this, s);
+    s.player = new Player(this, s, 200, 200, state.job);
+    this.pet = new PetSystem(this, s);
+    this.s = s;
+    setServices(s);
+    s.ui = new UIRoot(this, s);
+
+    this.wireEvents();
+    this.wireKeys();
+    this.wireSettings();
+
+    const startMap = Registry.map(state.mapId) ? state.mapId : START_MAP;
+    this.loadMapNow(startMap);
+    this.cameras.main.fadeIn(400, 0, 0, 0);
+
+    this.exposeDebug();
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =&gt; this.teardown());
+  }</code></pre>
+  <p>Every frame, Phaser calls <code>update(time, delta)</code>, which runs each system once, in this order (<a data-src="src/scenes/GameScene.ts#L326">GameScene.ts:326</a>):</p>
+  <pre class="mermaid">flowchart LR
+  a["progression<br>regen, autosave"] --> b["player<br>move, physics"]
+  b --> c["monsters<br>AI, contact dmg"]
+  c --> d["skills<br>projectiles, buffs"]
+  d --> e["combat<br>damage numbers"]
+  e --> f["drops"]
+  f --> g["pet"]
+  g --> h["arena"]
+  h --> i["npcs"]
+  i --> j["map<br>parallax"]
+  j --> k["handleInput<br>hotbar, Up, Z"]
+  k --> l["ui<br>DOM HUD"]</pre>
+  <p>
+    The order matters in a few places. Input is handled <em>after</em> the world update: a cast starts inside <code>handleInput</code>
+    (<code>tryCast</code> spends MP, sets the cooldown and cast lock and starts the attack, buff or summon), and
+    whatever it leaves running (projectiles, scheduled hit lines) is advanced by <code>SkillSystem.update</code> from
+    the next frame on. The UI runs last, so it always shows the
+    state the frame ended with. The whole <code>update</code> is skipped while <code>this.map</code> is
+    <code>null</code>. Arcade physics itself steps inside Phaser's own loop, around the scene update, not in this list.
+  </p>
+
+  <h3 id="architecture-flows">Cross-system flows</h3>
+  <h4 id="architecture-flow-map">Map change</h4>
+  <p>
+    Portals (<kbd>Up</kbd>), the death respawn and <code>arcana.warp</code> all call
+    <code>services().game.changeMap(mapId, portalId?)</code>. The fade, the <code>pendingDest</code> rule and
+    <code>loadMapNow</code> are covered in <a href="#boot-maps">Scenes and boot</a>; the order in which systems are
+    cleared and re-bound is:
+  </p>
+  <pre class="mermaid">sequenceDiagram
+  participant C as caller
+  participant G as GameScene
+  participant S as systems
+  participant L as MapLoader
+  participant U as UIRoot
+  C->>G: changeMap(mapId, portalId)
+  G->>G: fadeOut(220)
+  G->>S: skills.clearWorld, arena.clear, monsters.clear,<br>drops.clear, npcs.clear, pet.clear
+  G->>L: old map.destroy(), loadMap(scene, mapId)
+  G->>S: player.bindMap, placeAt(portal), camera follow
+  G->>S: monsters / drops / npcs / pet / arena .bindMap
+  G->>S: audio.playMusic(map.def.music)
+  G-->>U: bus map:changed, ui:banner
+  G->>S: progression.save()
+  G->>G: fadeIn(320)</pre>
+
+  <h4 id="architecture-flow-death">Death and respawn</h4>
+  <pre class="mermaid">sequenceDiagram
+  participant M as monster / hazard
+  participant CB as CombatSystem
+  participant PR as Progression
+  participant G as GameScene
+  participant U as UIRoot
+  M->>CB: hitPlayer(raw, fromX)
+  CB->>PR: loseHp(amount)
+  PR-->>G: player:died (hp reached 0)
+  G->>G: player.onDeath(), sfx death
+  G-->>U: ui:death
+  U->>U: death prompt, "Return to Town"
+  U->>PR: respawn()
+  PR->>PR: lose 5% of the level's EXP,<br>HP to 50%, MP at least 50%
+  PR-->>G: player:revived
+  G->>G: player.revive(), respawn VFX
+  G->>G: changeMap(TOWN_MAP)</pre>
+  <p>
+    The EXP penalty is <code>deathExpLoss</code>: 5% of <code>expToNext(level)</code>, never more than the EXP you have
+    and nothing at level 50 (<a data-src="src/systems/progression/stats.ts#L11">stats.ts:11</a>). While dead,
+    <code>handleInput</code> ignores the hotbar and <code>SkillSystem</code> and <code>ArenaSystem</code> react to
+    <code>player:died</code> on their own.
+  </p>
+
+  <h4 id="architecture-flow-level">Level up and job advance</h4>
+  <p>
+    <code>Progression.gainExp</code> loops while EXP covers <code>expToNext(level)</code>, adding 3 SP and 5 AP per
+    level, refills HP and MP (unless dead) and emits <code>player:levelup</code> <em>once</em> with the final level,
+    however many levels were gained. <code>GameScene</code> plays the <code>levelup</code> VFX and sound; UIRoot shows
+    the banner. <code>advanceJob</code> (from an NPC script or <code>arcana.job</code>) emits <code>player:job</code>;
+    <code>GameScene</code> calls <code>player.setJob(job)</code>, which swaps to that job's sprite sheet (building it if
+    needed), and plays the <code>job_advance</code> effect.
+  </p>
+
+  <h4 id="architecture-flow-kill">Monster death</h4>
+  <pre class="mermaid">flowchart TB
+  hit["CombatSystem.damageMonster()"] --> td["monster.takeDamage()"]
+  td --> zero{"hp &lt;= 0?"}
+  zero -- no --> aggro["hit anim, aggro"]
+  zero -- yes --> die["Monster.die()<br>clears statuses, disables body"]
+  die --> ev(["bus: monster:killed (once)"])
+  ev --> pr["Progression<br>EXP x level multiplier,<br>quest kill counts"]
+  ev --> dm["DropManager<br>dropFromMonster()"]
+  ev --> mm["MonsterManager<br>respawn timer"]
+  ev --> fb["FieldBoss / LichArchon<br>own bookkeeping"]</pre>
+  <p>
+    MonsterManager's respawn delay is the spawn's <code>respawnMs</code>, else 7 s for normal monsters and 300 s for
+    bosses (<a data-src="src/systems/MonsterManager.ts#L12">MonsterManager.ts:12</a>); field bosses use their own
+    timers. Contact damage runs the other way: each frame <code>MonsterManager</code> checks monsters that can touch (alive,
+    not spawning, not frozen or stunned) against <code>player.getBounds()</code> and calls
+    <code>combat.hitPlayer</code> for the first overlap only, one contact hit per frame.
+  </p>
+  <details class="advanced">
+    <summary>Advanced: edge cases in the flows</summary>
+    <ul>
+      <li><strong>Respawn during a portal fade.</strong> If you die while a fade is running, the respawn's
+        <code>changeMap(TOWN_MAP)</code> replaces the pending destination instead of being dropped
+        (<code>pendingDest</code>), so you never arrive at the portal's map dead.</li>
+      <li><strong>EXP after death.</strong> A burn tick or an in-flight projectile can kill a monster after you die.
+        Progression still grants the EXP but does not refill HP on a resulting level-up, so a level-up never revives
+        you.</li>
+      <li><strong>The first map load has no fade-out.</strong> <code>create()</code> calls <code>loadMapNow</code>
+        directly and then fades in from black over 400 ms. Its <code>map:changed</code> is emitted after every system and
+        UIRoot exist, so all subscribers see the first map too.</li>
+      <li><strong>Saves happen on every map load</strong> (the last step of <code>loadMapNow</code>), on
+        <code>respawn()</code>, on job advance and on teardown, plus Progression's autosave every 30 s
+        (<code>AUTOSAVE_MS</code>).</li>
+    </ul>
+  </details>
+
+  <h3 id="architecture-conventions">Coordinates and conventions</h3>
+  <ul>
+    <li><strong>World Y grows downward, and an entity's <code>y</code> is its feet</strong>, not its center. A monster's
+      hit point is <code>(x, y − h/2)</code>. The player frame is 64×80 with feet at the bottom center, and the physics
+      hitbox is 26×58, bottom-aligned (<a data-src="src/core/constants.ts#L15">constants.ts:15</a>).</li>
+    <li><strong>Physics numbers:</strong> <code>GRAVITY</code> 1500 px/s², base walk 200 px/s, base jump 560 px/s.
+      Platforms reachable by jumping must be at most 90 px apart vertically and 120 px horizontally; otherwise add a
+      rope or ladder (see <a href="#physics">Physics</a>).</li>
+    <li><strong>Draw order uses <code>DEPTH</code></strong> (<a data-src="src/core/constants.ts#L8">constants.ts:8</a>),
+      never a literal number:</li>
+  </ul>
+  <pre><code class="lang-ts">export const DEPTH = {
+  SKY: -1000, PARALLAX_FAR: -900, PARALLAX_MID: -800, PARALLAX_NEAR: -700,
+  TERRAIN: 0, DECOR: 5, ROPE: 6, PORTAL: 7, NPC: 8, DROP: 9,
+  MONSTER: 10, PLAYER: 20, SUMMON: 22, VFX: 30, VFX_TOP: 35, DAMAGE_TEXT: 50, NAMETAG: 45,
+} as const;</code></pre>
+  <ul>
+    <li><strong>Colors</strong> are <code>0xRRGGBB</code> numbers in data and Phaser code; CSS strings only in the DOM UI.</li>
+    <li><strong>Ids are <code>snake_case</code></strong> and never renamed (saves store them).</li>
+  </ul>
+  <table>
+    <thead><tr><th>Prefix / key</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>app_</code>, <code>fire_</code>, <code>ice_</code>, <code>ltn_</code>, <code>holy_</code>, <code>shd_</code></td><td>Skill ids per Year 1 / School; VFX keys and generated textures use the same prefix.</td></tr>
+      <tr><td><code>q_</code>, <code>q_job_*</code>, <code>story_</code></td><td>Side assignments, Year-end Exams, the main questline.</td></tr>
+      <tr><td><code>src_*</code></td><td>Raw source images loaded from <code>public/assets</code> (never drawn directly).</td></tr>
+      <tr><td><code>player_&lt;job&gt;</code>, <code>monster_&lt;id&gt;</code></td><td>Generated sprite sheets; animations are <code>&lt;sheet&gt;_&lt;anim&gt;</code>.</td></tr>
+      <tr><td><code>px_*</code>, <code>pxs_*</code> / <code>pxa_*</code></td><td>Shared white particle textures; pixel VFX sheets and their animations.</td></tr>
+      <tr><td><code>w_</code>, <code>d_</code>, <code>t_</code></td><td>World textures: terrain and backdrops, decor, town buildings.</td></tr>
+      <tr><td><code>arcana-story-save-v1:slot0</code>…<code>slot5</code>, <code>:meta</code></td><td>The six save slots and their summary (localStorage).</td></tr>
+      <tr><td><code>academy-bindings-v1</code>, <code>academy-settings-v1</code>, <code>arcana-audio</code></td><td>Key bindings, settings, volumes (localStorage).</td></tr>
+    </tbody>
+  </table>
+  <details class="advanced">
+    <summary>Advanced: conventions that bite</summary>
+    <ul>
+      <li><strong>Feet-based y with Arcade bodies.</strong> Arcade bodies are positioned by their top-left corner. Every
+        entity converts between its feet <code>y</code> and the body's position; use <code>placeAt(x, y)</code> and the
+        entity getters rather than writing <code>sprite.y</code> yourself.</li>
+      <li><strong><code>NAMETAG</code> (45) is below <code>DAMAGE_TEXT</code> (50)</strong> although it is listed after
+        it, so damage numbers always cover name tags.</li>
+      <li><strong>Projectile visuals are drawn pointing right</strong> (+x) at rotation 0; the engine rotates them to
+        their heading. Summons face by <code>scaleX</code> sign. Mirroring by hand on top of that flips them twice.</li>
+      <li><strong>Renaming an id</strong> (skill, item, map, quest, job) silently breaks every save that contains it.
+        Add a new id and migrate in <code>SaveSystem</code> instead (see <a href="#saves">Saves</a>).</li>
+    </ul>
+  </details>
+</section>

@@ -1,0 +1,427 @@
+<section id="saves" data-title="Saves, slots and migration" data-summary="SaveSystem: PlayerState, six localStorage slots plus a meta record, the active slot, repair of damaged and dead saves, legacy migration, when the game saves, Character Select, and why ids never change.">
+  <h2>Saves, slots and migration</h2>
+
+  <p>The whole game state that outlives a session is one plain object, the <code>PlayerState</code>, written as
+    JSON to the browser's <dfn>localStorage</dfn> (a small per-site key/value store that survives reloads).
+    <a data-src="src/systems/SaveSystem.ts">src/systems/SaveSystem.ts</a> owns it: creating a new character, the
+    six save slots, reading and writing, and <dfn>repair</dfn>, which turns anything it finds in storage (an old
+    format, a hand-edited value, half a corrupted string) into a valid state or reports the slot as damaged. The
+    title screen's Character Select (<a data-src="src/ui/titleMenu.ts">src/ui/titleMenu.ts</a>) is the only UI
+    that works with slots directly.</p>
+
+  <p>The design goal is that a save is never the reason the game won't start. Every read is defensive, every
+    write is wrapped, and repair falls back to a fresh character rather than throwing.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="saves-state">What is saved: PlayerState</h3>
+
+  <pre><code class="lang-ts">export interface PlayerState {
+  version: 1;
+  name: string;
+  level: number;
+  exp: number;
+  job: JobId;
+  base: BaseStats;
+  ap: number;
+  sp: number;
+  hp: number;
+  mp: number;
+  skills: Record&lt;string, number&gt;;          // skillId -&gt; learned level
+  hotbar: (string | null)[];               // length HOTBAR_SIZE; skill id, or "item:&lt;itemId&gt;"
+  inventory: ItemStack[];
+  equipment: Partial&lt;Record&lt;EquipSlot, ItemStack&gt;&gt;;
+  mesos: number;
+  mapId: string;
+  quests: Record&lt;string, QuestProgress&gt;;
+  playTimeMs: number;
+  /** Academy Merits — earned in the Trial Hall, spent at the Academy (optional for old saves). */
+  merits?: number;
+  /** Best Trial Hall wave reached. */
+  arenaBest?: number;
+}</code></pre>
+  <p>(<a data-src="src/core/types.ts#L429">types.ts:429</a>.) Everything else is derived on load: max HP, matk and
+    the other stats are recomputed from this (<a href="#progression-stats">derived stats</a>), monsters and drops
+    are respawned, buffs start empty. Notice what the state refers to by <strong>id</strong>: the job, every
+    skill, every item, the map and every quest. That is the root of the
+    <a href="#saves-ids">"ids never change"</a> rule.</p>
+  <p>The two Phase 5 fields, <code>merits</code> and <code>arenaBest</code>, were added as optional so the type
+    still describes saves written before them; repair fills them with 0. <code>version</code> is still 1: no
+    change so far has needed a format migration, only defaults.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="saves-new">A new character</h3>
+
+  <pre><code class="lang-ts">export function newPlayerState(name: string): PlayerState {
+  const hotbar: (string | null)[] = new Array(HOTBAR_SIZE).fill(null);
+  hotbar[0] = 'app_arcane_bolt';
+  // Potions on the 1 / 2 keys of every page, so they still work after flipping hotbar pages.
+  for (let p = 0; p * HOTBAR_PAGE_SIZE &lt; HOTBAR_SIZE; p++) {
+    hotbar[p * HOTBAR_PAGE_SIZE + 10] = 'item:red_potion';
+    hotbar[p * HOTBAR_PAGE_SIZE + 11] = 'item:blue_potion';
+  }
+  const state: PlayerState = {
+    version: 1,
+    name: (name || 'Apprentice').slice(0, 16),
+    level: 1,
+    exp: 0,
+    job: 'apprentice',
+    base: { str: 4, dex: 4, int: 10, luk: 6 },
+    ap: 0,
+    sp: 3,
+    hp: 1,
+    mp: 1,
+    skills: { app_arcane_bolt: 1 },
+    hotbar,
+    inventory: [
+      { uid: newUid(), itemId: 'red_potion', qty: 10 },
+      { uid: newUid(), itemId: 'blue_potion', qty: 10 },
+    ],
+    equipment: {
+      weapon: { uid: newUid(), itemId: 'oak_wand', qty: 1 },
+      robe: { uid: newUid(), itemId: 'apprentice_robe', qty: 1 },
+    },
+    mesos: 50,
+    mapId: START_MAP,
+    quests: {},
+    playTimeMs: 0,
+  };
+  fillVitals(state);
+  return state;
+}</code></pre>
+  <p>(<a data-src="src/systems/SaveSystem.ts#L19">SaveSystem.ts:19</a>.) The starting kit: a level 1 Apprentice on
+    campus (<code>START_MAP</code> is <code>mistvale</code>, the original id of the Academy grounds), INT 10 /
+    LUK 6 / STR 4 / DEX 4, Arcane Bolt level 1 on <kbd>Q</kbd>, 3 SP, 10 Red and 10 Blue Potions on keys
+    <kbd>1</kbd> and <kbd>2</kbd> of both hotbar pages, the Oak Wand and Apprentice Robe equipped, and 50 mesos.
+    <code>fillVitals</code> then sets HP and MP to the computed maximums. Every inventory and equipment stack gets a
+    <code>uid</code> from <code>newUid()</code> (time, random and a counter in base 36) so the UI can tell two
+    stacks of the same item apart.</p>
+  <p>The title menu accepts names of 2 to 12 characters (letters, digits, spaces, <code>-</code>, <code>_</code>,
+    <code>'</code>); the save layer itself only truncates to 16.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="saves-slots">Six slots and the meta record</h3>
+
+  <p>Phase 7 replaced the single save with six <dfn>slots</dfn> (one student each), MapleStory-style. The
+    storage layout is documented at the top of the slot code:</p>
+  <pre><code class="lang-ts">// Storage layout (localStorage):
+//   `${SAVE_KEY}:slot0` … `${SAVE_KEY}:slot5`  one envelope per slot: { format, savedAt, slot, state }
+//   `${SAVE_KEY}:meta`                         SlotsMeta: last played slot + a cached summary per slot
+//   `${SAVE_KEY}`                              legacy single save; migrated into slot 0 on first run and
+//                                              kept as a backup until slot 0 is successfully re-written
+//                                              (or the player deletes slot 0).
+// The slot envelopes are the source of truth; the meta summaries are a cache (used to label a slot that
+// has since become unreadable). The legacy exports (hasSave/loadSave/writeSave/deleteSave) act on the
+// *active* slot, which the title screen sets before starting the game.
+
+export const SAVE_SLOTS = 6;</code></pre>
+  <p>(<a data-src="src/systems/SaveSystem.ts#L71-L83">SaveSystem.ts:71</a>.) <code>SAVE_KEY</code> is
+    <code>'arcana-story-save-v1'</code> (<a data-src="src/core/constants.ts#L32">constants.ts:32</a>), from the
+    game's earlier title "Arcana Story". It was deliberately not renamed for The Academy, because renaming it would
+    orphan every existing save.</p>
+
+  <pre class="mermaid">flowchart TB
+  subgraph LS["localStorage"]
+    direction TB
+    S0["arcana-story-save-v1:slot0<br>{ format: 1, savedAt, slot: 0, state }"]
+    S1["…:slot1 … :slot5<br>same envelope, or absent = empty"]
+    MT["arcana-story-save-v1:meta<br>{ v: 1, lastSlot, legacyPending?, slots: [summary or null ×6] }"]
+    LG["arcana-story-save-v1<br>legacy single save (backup)"]
+  end
+  A["activeSlot (module variable)"] -- "writeSave / loadSave / hasSave" --> S0
+  W["writeSave"] -- "also updates" --> MT
+  LG -. "migrated once" .-> S0</pre>
+
+  <ul>
+    <li><strong>Envelope.</strong> Each slot holds <code>{ format: 1, savedAt, slot, state }</code>.
+      <code>readSlotRaw</code> also accepts a bare <code>PlayerState</code> (the shape older builds wrote), and
+      requires at least a string <code>name</code>, a finite numeric <code>level</code> and a string
+      <code>job</code>; anything less is an error ("Save data is corrupt", "Character data is missing")
+      (<a data-src="src/systems/SaveSystem.ts#L152">SaveSystem.ts:152</a>).</li>
+    <li><strong>Meta.</strong> The last played slot, and per slot a cached name, level, job, map, play time and
+      save time. Only the cache: if a slot becomes unreadable, its card can still say who used to be there.</li>
+    <li><strong>The active slot.</strong> A module-level <code>activeSlot</code>. The original single-save API
+      (<code>hasSave</code>, <code>loadSave</code>, <code>writeSave</code>, <code>deleteSave</code>) kept its
+      signatures and now acts on the active slot, so Progression's autosave and every other caller didn't change
+      at all when slots were added.</li>
+  </ul>
+
+  <table>
+    <thead><tr><th>Function</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>listSlots()</code></td><td>Six <code>SlotSummary</code>s (<code>'empty' | 'ok' | 'damaged'</code>, name, level, Year, School, map, play time…). Never throws.</td></tr>
+      <tr><td><code>getActiveSlot()</code> / <code>setActiveSlot(i)</code></td><td>Read or point the save API at slot <code>i</code>.</td></tr>
+      <tr><td><code>lastPlayedSlot()</code></td><td>The meta's last slot, if it is still readable (what Continue loads).</td></tr>
+      <tr><td><code>firstEmptySlot()</code></td><td>Lowest empty slot; damaged slots count as taken.</td></tr>
+      <tr><td><code>loadSlot(i)</code></td><td>The repaired state, or null when empty or unreadable.</td></tr>
+      <tr><td><code>deleteSlot(i)</code></td><td>Removes the envelope and its meta entry (and the legacy backup, for a migrated slot 0).</td></tr>
+      <tr><td><code>hasSave()</code>, <code>loadSave()</code>, <code>writeSave(state)</code>, <code>deleteSave()</code></td><td>The original API, on the active slot.</td></tr>
+    </tbody>
+  </table>
+
+  <pre><code class="lang-ts">/** Persist into the active slot (Progression autosave / manual save / map change all land here). */
+export function writeSave(state: PlayerState): void {
+  ensureInit();
+  const st = storage();
+  if (!st) return;
+  const slot = activeSlot;
+  const savedAt = Date.now();
+  try {
+    const raw = JSON.stringify({ format: SAVE_FORMAT, savedAt, slot, state });
+    st.setItem(slotKey(slot), raw);
+    const meta = readMeta() ?? emptyMeta();
+    meta.slots[slot] = metaEntry(state, savedAt);
+    meta.lastSlot = slot;
+    if (slot === 0 &amp;&amp; meta.legacyPending &amp;&amp; st.getItem(slotKey(0)) === raw) {
+      try { st.removeItem(SAVE_KEY); } catch { /* ignore */ }
+      meta.legacyPending = false;
+    }
+    writeMeta(meta);
+  } catch (e) {
+    console.warn('[save] write failed', e);
+  }
+}</code></pre>
+  <p>(<a data-src="src/systems/SaveSystem.ts#L321">SaveSystem.ts:321</a>.) The slot is written first, then the
+    meta. Writing also makes this slot the "last played" one, which is how Continue knows where to go.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="saves-load">Loading and repair</h3>
+
+  <pre class="mermaid">flowchart TD
+  T["Title screen opens"] --> I["ensureInit() (first call only)"]
+  I --> M{"meta record exists?"}
+  M -- yes --> AS["activeSlot = meta.lastSlot ?? 0"]
+  M -- no --> SC["scan slot0..slot5, rebuild meta summaries"]
+  SC --> LQ{"no slot at all, and a legacy save?"}
+  LQ -- yes --> MG["copy legacy into slot0<br>legacyPending = true, lastSlot = 0"]
+  LQ -- no --> LS["lastSlot = most recently saved slot"]
+  MG --> WM["write meta"]
+  LS --> WM
+  WM --> AS
+  AS --> CS["Character Select: listSlots()"]
+  CS --> PICK["player picks slot i"]
+  PICK --> RD{"readSlotRaw(i)"}
+  RD -- "missing / corrupt" --> DMG["damaged card (Delete only)"]
+  RD -- ok --> RP["repairState(candidate)"]
+  RP --> SET["setActiveSlot(i)"]
+  SET --> GS["GameScene with the state;<br>Progression repairs again"]</pre>
+
+  <p><code>repairState</code> coerces <em>anything</em> into a valid <code>PlayerState</code>, starting from a fresh
+    character and copying over each field that checks out:</p>
+  <table>
+    <thead><tr><th>Field</th><th>Rule</th></tr></thead>
+    <tbody>
+      <tr><td>name</td><td>Non-blank string, cut to 16; else "Apprentice".</td></tr>
+      <tr><td>level, exp, ap, sp, mesos, merits, arenaBest</td><td>Finite numbers, floored, clamped (level 1–50, others ≥ 0); else defaults.</td></tr>
+      <tr><td>job</td><td>Must be a registered job id; else <code>apprentice</code>.</td></tr>
+      <tr><td>base stats</td><td>Each at least 1; else the starting value.</td></tr>
+      <tr><td>mapId</td><td>Must be a registered map; else the start map (kept as-is if no maps are registered yet).</td></tr>
+      <tr><td>skills</td><td>Known skills clamped to their <code>maxLevel</code>, the excess refunded as SP. Unknown skills are refunded in full.</td></tr>
+      <tr><td>hotbar</td><td>Rebuilt at 24 entries; entries pointing at unknown items or unlearned skills are cleared.</td></tr>
+      <tr><td>inventory</td><td>Unknown items dropped, quantities clamped to 1..maxStack, duplicate uids replaced, at most 48 stacks.</td></tr>
+      <tr><td>equipment</td><td>Only known items whose <code>equip.slot</code> matches the slot they are in.</td></tr>
+      <tr><td>quests</td><td>Only known quest ids; invalid statuses become <code>active</code>; counts resized to the current objectives.</td></tr>
+      <tr><td>hp, mp</td><td>Clamped to the derived maximums.</td></tr>
+    </tbody>
+  </table>
+  <p>(<a data-src="src/systems/SaveSystem.ts#L367">SaveSystem.ts:367</a>.) One case gets special treatment, a save
+    written while the student was dead (the tab was closed at the death prompt):</p>
+  <pre><code class="lang-ts">    // Saved while dead (closed/reloaded before pressing respawn): apply the normal respawn —
+    // EXP penalty, 50% HP/MP, back in town — instead of reviving in place on a hostile map.
+    if (typeof s.hp === 'number' &amp;&amp; s.hp &lt;= 0) {
+      out.exp -= deathExpLoss(out.level, out.exp);
+      out.hp = Math.max(1, Math.ceil(d.maxHp * 0.5));
+      out.mp = Math.max(out.mp, Math.ceil(d.maxMp * 0.5));
+      if (Registry.map(TOWN_MAP) || Registry.maps().length === 0) out.mapId = TOWN_MAP;
+    }</code></pre>
+  <p>(<a data-src="src/systems/SaveSystem.ts#L466">SaveSystem.ts:466</a>, from the progression QA pass
+    <code>7faacd7</code>.) It mirrors <code>Progression.respawn()</code> exactly (see
+    <a href="#progression-death">death and respawn</a>), so reloading neither skips the penalty nor revives the
+    student next to whatever killed them.</p>
+
+  <details class="advanced"><summary>Advanced: repair invariants and trade-offs</summary>
+    <ul>
+      <li><strong>Never throws.</strong> The whole body is in a try/catch that falls back to a fresh character. A
+        save that can't be repaired at all therefore loads as a new level 1 student with the old name lost; the
+        envelope-level checks in <code>readSlotRaw</code> (name, level, job present) exist so that a badly damaged
+        slot shows as <em>damaged</em> instead of silently becoming that.</li>
+      <li><strong>Repair runs more than once.</strong> <code>listSlots</code> repairs each slot to build its card,
+        <code>loadSlot</code> repairs the chosen one, and the <code>Progression</code> constructor repairs its state
+        again. It is idempotent (repairing a repaired state changes nothing), so this is wasted work but harmless.
+        It does build a throwaway fresh character and compute derived stats each time; at six slots that is
+        negligible.</li>
+      <li><strong>Registry timing.</strong> Repair checks ids against the Registry. If skills or maps aren't
+        registered yet (repair running unusually early), it keeps unknown skill and map ids instead of refunding or
+        resetting them, so a load order slip can't wipe a build.</li>
+      <li><strong>Lossy by design.</strong> An item, skill or quest the game no longer knows is gone after repair
+        (skills at least refund their SP). The next save makes the loss permanent. That is acceptable for genuinely
+        removed content and a disaster for a <em>renamed</em> id, which looks exactly like a removed one.</li>
+      <li><strong>Failure modes of storage.</strong> If localStorage is unavailable (some private modes, blocked
+        site data), <code>storage()</code> returns null: nothing is written and every slot reads empty. A full quota
+        makes <code>setItem</code> throw, which <code>writeSave</code> catches and logs as
+        <code>[save] write failed</code>; the game keeps running on the in-memory state.</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="saves-migration">Migrating the legacy single save</h3>
+
+  <p>Before slots, the game kept one save directly under <code>arcana-story-save-v1</code>.
+    <code>ensureInit</code> migrates it the first time the slot code runs:</p>
+  <pre><code class="lang-ts">      // Migrate the pre-slots single save into slot 0 — only on a truly fresh slot store, so a lost
+      // meta key never duplicates a character that was already migrated.
+      const legacy = st.getItem(SAVE_KEY);
+      if (!anySlot &amp;&amp; legacy) {
+        st.setItem(slotKey(0), legacy);
+        if (st.getItem(slotKey(0)) === legacy) {
+          meta.legacyPending = true;
+          meta.migratedAt = Date.now();
+          meta.lastSlot = 0;
+          // … cache slot 0's summary in the meta
+          console.info('[save] migrated legacy save into slot 1');
+        }
+      }</code></pre>
+  <p>(<a data-src="src/systems/SaveSystem.ts#L191">SaveSystem.ts:191</a>; "slot 1" is the player-facing, 1-based
+    number of slot 0.) The legacy value is copied verbatim, a bare <code>PlayerState</code>, which
+    <code>readSlotRaw</code> accepts. The original key is <strong>kept as a backup</strong> while
+    <code>legacyPending</code> is set, and removed only when <code>writeSave</code> has written slot 0 and read the
+    same bytes back, or when the player deletes slot 0.</p>
+
+  <details class="advanced"><summary>Advanced: why the migration is shaped this way</summary>
+    <ul>
+      <li><strong>Only on a fresh slot store.</strong> Migration runs only when there is no meta record
+        <em>and</em> no slot has data. If the meta key alone were lost later, the scan rebuilds it from the slots
+        instead of copying the legacy save in a second time.</li>
+      <li><strong>Verify before trusting.</strong> Both the copy and the backup removal compare what was written
+        with what is read back, so a quota failure halfway can't lose the only copy.</li>
+      <li><strong>The meta is rebuilt, never required.</strong> If the meta is missing or malformed,
+        <code>readMeta</code> returns null and init reconstructs summaries from the envelopes; every reader treats
+        the meta as optional.</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="saves-when">When the game saves</h3>
+
+  <p>There is no "save point". <code>Progression.save()</code> calls <code>writeSave(state)</code>, and it is
+    called at every milestone:</p>
+  <table>
+    <thead><tr><th>Trigger</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td>Every map change, including the first map load</td><td><a data-src="src/scenes/GameScene.ts#L172">GameScene.ts:172</a></td></tr>
+      <tr><td>Autosave every 30 s of play (<code>AUTOSAVE_MS</code>)</td><td><a data-src="src/systems/Progression.ts#L748">Progression.ts:748</a></td></tr>
+      <tr><td>Level-up, job advancement, respawn</td><td><code>gainExp</code>, <code>advanceJob</code>, <code>respawn</code></td></tr>
+      <tr><td>Quest turn-in (and again after a story step's after-hook)</td><td><code>turnInQuest</code>, <code>storyTurnIn</code></td></tr>
+      <tr><td>Merit Exchange purchase</td><td><code>buyWithMerits</code></td></tr>
+      <tr><td>End of a Trial Hall run</td><td><code>ArenaSystem.endRun</code></td></tr>
+      <tr><td>Menu: Save Game, Quit to Title</td><td><a data-src="src/ui/miscWindows.ts#L70">miscWindows.ts:70</a></td></tr>
+      <tr><td>Game scene shutdown (teardown)</td><td><a data-src="src/scenes/GameScene.ts#L343">GameScene.ts:343</a></td></tr>
+      <tr><td>A new character, before the game starts</td><td>Title menu <code>begin()</code></td></tr>
+    </tbody>
+  </table>
+  <aside class="note">Buying, selling, looting, accepting quests, learning spells and spending AP do not save
+    on their own; they ride along with the next autosave or milestone. There is no <code>beforeunload</code>
+    handler, so closing the tab can lose up to 30 seconds of those smaller changes. Anything that grants EXP,
+    Merits or a new Year is saved immediately.</aside>
+
+  <!-- ===================================================================== -->
+  <h3 id="saves-title">Character Select</h3>
+
+  <p>The title menu has three entry points: <strong>Continue</strong> (the last played slot, else the most
+    recently saved readable one), <strong>Character Select</strong> (the six cards) and <strong>New Game</strong>
+    (the first empty slot, or a "replace a student" picker when all six are taken). Each card comes from a
+    <code>SlotSummary</code>:</p>
+  <ul>
+    <li><strong>A student card</strong> shows the slot number, "School of Fire" (or "Core Curriculum" before the
+      declaration) tinted in the School's colour, the animated job sprite, the name, a line like
+      "Lv 27 · Year 3 · Flamebinder", the map, play time and how long ago it was saved, plus a "Last" badge on the
+      slot Continue would load (<a data-src="src/ui/titleMenu.ts#L292">titleMenu.ts:292</a>). The Year and School
+      come from <code>yearOfTier</code> and <code>SCHOOL_NAME</code>.</li>
+    <li><strong>A damaged card</strong> says "Damaged save", the reason, and "Was Mira · Lv 31" from the meta cache
+      when it remembers who was there. It can't be played, only deleted (or replaced by New Game).</li>
+    <li><strong>An empty card</strong> offers "Enrol a new student".</li>
+  </ul>
+
+  <pre class="mermaid">flowchart TD
+  NG["New Game"] --> E{"empty slot?"}
+  E -- yes --> NAME["name entry for that slot"]
+  E -- no --> REP["select in replace mode<br>(preselects a damaged slot, else the oldest)"]
+  REP --> CF["confirm: 'Replace Mira?'<br>Cancel is the default"]
+  CF -- Replace --> NAME
+  NAME --> BG["Begin: validate name"]
+  BG --> RC{"slot still empty?<br>(or replacing)"}
+  RC -- no --> ALT["use another empty slot,<br>or back to replace mode"]
+  RC -- yes --> W["deleteSlot if replacing,<br>setActiveSlot, writeSave(newPlayerState)"]
+  W --> GO["fade to GameScene"]</pre>
+
+  <p>Deleting asks "Withdraw Mira?" with Cancel selected by default, so a stray <kbd>Enter</kbd> never deletes a
+    student (<a data-src="src/ui/titleMenu.ts#L330">titleMenu.ts:330</a>). Playing a slot loads it with
+    <code>loadSlot</code>, calls <code>setActiveSlot</code> and hands the state to <code>TitleScene.startGame</code>,
+    which fades out and starts the game scene with <code>{ state }</code>
+    (<a data-src="src/scenes/TitleScene.ts#L67">TitleScene.ts:67</a>). Quitting to the title saves first and reopens
+    Character Select.</p>
+
+  <details class="advanced"><summary>Advanced: Character Select safety rules</summary>
+    <ul>
+      <li><strong>Never overwrite silently.</strong> <code>begin()</code> re-reads the slots before writing. If the
+        slot chosen as empty now has data (another tab wrote it), it moves to another empty slot, or back to
+        replace mode if none is left (<a data-src="src/ui/titleMenu.ts#L451">titleMenu.ts:451</a>).</li>
+      <li><strong>Damaged slots stay put.</strong> They count as taken for <code>firstEmptySlot</code>, so New Game
+        never writes over unreadable data without asking. They are preselected in replace mode because they are the
+        least valuable thing to overwrite.</li>
+      <li><strong>The title is a separate scene</strong> that never constructs <code>Progression</code>, so nothing can
+        autosave into a slot while the player is choosing one.</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="saves-other">Other per-player storage</h3>
+
+  <p>Not everything about a player lives in the save. These keys are per browser, shared by all six slots:</p>
+  <table>
+    <thead><tr><th>Key</th><th>Contents</th><th>Owner</th></tr></thead>
+    <tbody>
+      <tr><td><code>arcana-ui-layout-v1</code></td><td>Window positions and UI flags, including the per-slot credits flag <code>creditsSeen:&lt;slot&gt;:&lt;name&gt;</code></td><td><a data-src="src/ui/context.ts#L24">ui/context.ts</a></td></tr>
+      <tr><td><code>academy-bindings-v1</code></td><td>Key bindings</td><td><a data-src="src/core/bindings.ts#L90">core/bindings.ts</a></td></tr>
+      <tr><td><code>academy-settings-v1</code></td><td>Screen shake, damage-number size, familiar on/off</td><td><a data-src="src/core/settings.ts#L19">core/settings.ts</a></td></tr>
+      <tr><td><code>arcana-audio</code>, <code>arcana-ui-volumes</code></td><td>Sound and music volumes</td><td>AudioSystem, miscWindows</td></tr>
+    </tbody>
+  </table>
+  <p>The credits flag is keyed by slot <em>and</em> name (final QA, <code>b2a181f</code>): before that, a second
+    student who graduated would never see the roll because the first one already had. Because it lives in the UI
+    layout rather than the save, deleting a slot does not clear it; a new student with the same name in the same
+    slot would skip the roll.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="saves-ids">Why ids never get renamed</h3>
+
+  <p>Phase 4 turned "Arcana Story" into "The Academy": the Elder became the Headmistress, instructors became
+    Professors, quests became Assignments. ARCHITECTURE.md is explicit that this was "a re-theme of names and
+    text": the save key and <strong>all existing ids</strong> (skills, jobs, maps, items, NPCs, quests) stayed the
+    same. That is why the code still says <code>elder_maelis</code>, <code>scout_finn</code>,
+    <code>mistvale</code>, <code>mesos</code> and <code>arcana-story-save-v1</code>, and why the quest file opens
+    with "every id is unchanged from Arcana Story so saves keep working". Even the rename of the old Lich side quest
+    in Phase 6 changed only its <code>name</code>; its id is still <code>q_maelis_archon</code>.</p>
+  <p>The reason is the repair table above. An id that disappears from the Registry is indistinguishable from
+    removed content, so a renamed item vanishes from bags, a renamed skill is refunded and unlearned, a renamed
+    quest loses its progress (a renamed story step would even reopen the chain), a renamed map sends the student
+    back to campus, and a renamed job demotes them to Apprentice.</p>
+
+  <details class="advanced"><summary>Advanced: changing the save safely</summary>
+    <ul>
+      <li><strong>Rename display text, never ids.</strong> Names and descriptions are free to change; ids are
+        storage keys.</li>
+      <li><strong>If an id really must change</strong>, add an explicit mapping in <code>repairState</code> that
+        rewrites the old id to the new one in skills, hotbar, inventory, equipment and quests before the
+        "unknown id" filters run, and keep it for as long as old saves may exist.</li>
+      <li><strong>New fields</strong> should be optional on <code>PlayerState</code> (or always defaulted in
+        <code>repairState</code>), as <code>merits</code> and <code>arenaBest</code> were. Repair starts from a fresh
+        character and copies known fields one by one, so a new field that repair doesn't copy is dropped (or reset to
+        whatever <code>newPlayerState</code> gives it) on every load. Add it to repair in the same change.</li>
+      <li><strong>Format changes</strong> would bump <code>SAVE_FORMAT</code> in the envelope (or
+        <code>version</code> in the state) and branch on it in <code>readSlotRaw</code> / <code>repairState</code>.
+        Nothing has needed that yet.</li>
+      <li><strong>Test with a real old save.</strong> Export a slot's value from the browser's storage panel before the
+        change, load it after, and check bag, spells, hotbar and quest log.</li>
+    </ul>
+  </details>
+</section>

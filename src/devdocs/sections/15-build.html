@@ -1,0 +1,290 @@
+<section id="build" data-title="Build, deploy and these docs" data-summary="Vite's three-page build, the Phaser chunk, the relative base, the GitHub Pages workflow, the Artifact build, and how this page is assembled.">
+  <h2>Build, deploy and these docs</h2>
+  <p>
+    The Academy ships as a folder of static files. There is no server code: <dfn>Vite</dfn> bundles the
+    TypeScript into JavaScript chunks, copies <code>public/</code> (the pixel-art PNGs and fonts) next to them,
+    and the result runs from any static host. One build produces three pages that share code: the game
+    (<code>index.html</code>), the Student Handbook (<code>guide.html</code>) and this page
+    (<code>devdocs.html</code>). This section walks through the build configuration, the GitHub Pages workflow,
+    the one-file Artifact build used before the repository was public, and how the developer docs themselves are
+    put together.
+  </p>
+
+  <h3 id="build-scripts">Scripts</h3>
+  <p>Everything goes through the four scripts in <a data-src="package.json#L6">package.json</a>:</p>
+  <pre><code class="lang-json">  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit &amp;&amp; vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  },</code></pre>
+  <ul>
+    <li><code>npm run dev</code> starts the dev server on port 5199 (set in <code>vite.config.ts</code>). Vite serves
+      each module on demand, so the first load of the game requests a few hundred files; edits hot-reload.</li>
+    <li><code>npm run build</code> typechecks first. Vite itself only strips types (it uses esbuild), so without
+      <code>tsc --noEmit</code> a type error would happily ship. A failing typecheck stops the deploy.</li>
+    <li><code>npm run preview</code> serves <code>dist/</code> exactly as a static host would, which is the only way
+      to test the relative base and the chunk split locally.</li>
+  </ul>
+  <p>
+    The only runtime dependency is <code>phaser</code>; <code>typescript</code> and <code>vite</code> are dev
+    dependencies. Audio is synthesized (<a href="#audio">Synthesized audio</a>) and all art is PNG under
+    <code>public/assets/</code> (<a href="#art">Art pipeline</a>), so there are no loaders or plugins for media.
+  </p>
+
+  <h3 id="build-vite">vite.config.ts</h3>
+  <p>The whole configuration, minus the developer-docs plugin described <a href="#build-docs">below</a>
+    (<a data-src="vite.config.ts#L51">vite.config.ts:51</a>):</p>
+  <pre><code class="lang-ts">export default defineConfig({
+  base: './',
+  server: { port: 5199 },
+  plugins: [devdocsSource()],
+  build: {
+    chunkSizeWarningLimit: 4000,
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        guide: resolve(__dirname, 'guide.html'),
+        devdocs: resolve(__dirname, 'devdocs.html'),
+      },
+      // Phaser rarely changes between releases; a separate chunk keeps it cached across game updates.
+      output: { manualChunks: { phaser: ['phaser'] } },
+    },
+  },
+});</code></pre>
+  <table>
+    <thead><tr><th>Setting</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><code>base: './'</code></td><td>Every URL Vite writes into the HTML is relative, so <code>dist/</code> works at
+        <code>https://minormending.github.io/the-academy/</code>, at a domain root, or opened from any folder. Added in
+        the commit "Build: relative base so the static build runs from any path".</td></tr>
+      <tr><td><code>input</code> (three pages)</td><td>A multi-page build: each HTML file is an entry, and modules they
+        share (the data files, the Registry, Phaser) become shared chunks instead of being duplicated.</td></tr>
+      <tr><td><code>manualChunks: { phaser }</code></td><td>Phaser is about 1.2 MB minified. In its own file
+        (<code>assets/phaser-&lt;hash&gt;.js</code>) its hash only changes when Phaser is upgraded, so returning players
+        re-download only the game's own code after an update.</td></tr>
+      <tr><td><code>chunkSizeWarningLimit: 4000</code></td><td>Silences Vite's 500 kB warning: the Phaser chunk is big by
+        nature and splitting it further would not help.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Runtime asset paths follow the same rule. The art manifests never hard-code <code>/assets/…</code>; they go through
+    <a data-src="src/art/assets.ts#L29">assetUrl()</a>, which prefixes Vite's <code>BASE_URL</code>:
+  </p>
+  <pre><code class="lang-ts">export function assetUrl(path: string): string {
+  return `${import.meta.env.BASE_URL}assets/${path}`;
+}</code></pre>
+  <p>CSS is different: <code>url("/assets/ui/fonts/KenneyPixel.ttf")</code> in a stylesheet is rewritten by Vite at build
+    time to a path relative to the emitted CSS file, so root-relative URLs are fine there.</p>
+
+  <h3 id="build-output">What the build emits</h3>
+  <pre class="mermaid">flowchart LR
+  subgraph pages["HTML entries"]
+    I["index.html"]
+    G["guide.html"]
+    D["devdocs.html"]
+  end
+  subgraph chunks["dist/assets/"]
+    M["main-hash.js<br>(game)"]
+    GU["guide-hash.js"]
+    DD["devdocs-hash.js"]
+    S["shared chunks<br>(data, Registry, skills)"]
+    P["phaser-hash.js"]
+  end
+  PUB["public/assets/**<br>(PNGs, fonts, licences)"] --> COPY["dist/assets/**<br>(copied as-is)"]
+  I --> M
+  G --> GU
+  D --> DD
+  M --> S
+  GU --> S
+  DD -.->|"lazy, for spell charts"| S
+  S --> P
+  M --> P</pre>
+  <p>
+    Files under <code>public/</code> are copied verbatim (no hashing), which is why the art manifests can name them by
+    path. Everything imported from TypeScript gets a content hash in its file name, so a static host can cache it
+    forever.
+  </p>
+  <details class="advanced">
+    <summary>Advanced: why the docs page loads Phaser for some charts</summary>
+    <p>
+      The spell definitions in <code>src/skills/*.ts</code> import <code>playVfx</code> from
+      <a data-src="src/core/vfx.ts">src/core/vfx.ts</a>, which imports Phaser, and the Registry imports every skill. So
+      any page that needs the spell list pulls in Phaser, even though it never creates a <code>Phaser.Game</code>.
+      Importing Phaser has no side effects beyond defining the library, so this is safe, only heavy. The developer docs
+      therefore import the pure data modules (balance, maps, monsters, jobs, items, quests) statically and load
+      skills, derived stats and saves with a dynamic <code>import()</code> in
+      <a data-src="src/devdocs/charts/index.ts#L54">charts/index.ts:54</a>, only when a spell chart scrolls near or
+      the page is idle. The chunk is the same <code>phaser-&lt;hash&gt;.js</code> the game uses, so a reader who has
+      played is served it from cache.
+    </p>
+    <p>
+      Splitting the VFX imports out of the skill definitions would make the spell data Phaser-free, but it would mean
+      editing all six School files and the contract that VFX keys are strings resolved at cast time already provides
+      most of the decoupling. It was not worth it for a documentation page.
+    </p>
+  </details>
+
+  <h3 id="build-pages">GitHub Pages workflow</h3>
+  <p>
+    Every push to <code>main</code> typechecks, builds and deploys all three pages
+    (<a data-src=".github/workflows/pages.yml#L6">.github/workflows/pages.yml</a>). It is the standard two-job Pages
+    workflow: <code>build</code> uploads <code>dist/</code> as a Pages artifact, <code>deploy</code> publishes it.
+  </p>
+  <pre><code class="lang-yaml">on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One run at a time: a newer push cancels any queued or running one, so only the newest commit deploys.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck and bundle
+        run: npm run build
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+  # … deploy: needs build, runs actions/deploy-pages@v5</code></pre>
+  <ul>
+    <li><strong>Least privilege:</strong> the token can read the repo and write Pages; <code>id-token: write</code> is
+      what <code>deploy-pages</code> uses to prove the artifact came from this workflow.</li>
+    <li><strong><code>npm ci</code></strong> installs exactly <code>package-lock.json</code>, so CI builds what was
+      tested locally.</li>
+    <li><strong><code>cancel-in-progress</code></strong>: two quick pushes never race to deploy an older build last.</li>
+    <li>The repository's Pages source must be set to <em>GitHub Actions</em> (a one-time setting) for
+      <code>deploy-pages</code> to publish.</li>
+  </ul>
+  <aside class="note">
+    <p>Node 22 in CI also runs <code>vite.config.ts</code>, which imports <code>src/devdocs/check.mjs</code> and through it
+      two <code>.ts</code> files. That file is bundled by Vite's config loader (esbuild), so it does not depend on Node's
+      own TypeScript support. Running <code>node src/devdocs/check.mjs</code> by hand does: it needs Node 22.6 or newer.</p>
+  </aside>
+
+  <h3 id="build-artifact">The one-file Artifact build</h3>
+  <p>
+    Before the repository went public, the playable build was shared as a private Artifact page. The host of such a
+    page supplies the document skeleton, so <a data-src="scripts/make-publish-page.mjs#L1">scripts/make-publish-page.mjs</a>
+    reads the built <code>dist/index.html</code>, keeps only its <code>&lt;script&gt;</code> and <code>&lt;link&gt;</code>
+    tags, and wraps them with the game's stage markup into <code>dist/academy.html</code>:
+  </p>
+  <pre><code class="lang-js">const html = readFileSync('dist/index.html', 'utf8');
+const tags = [...html.matchAll(/&lt;(script|link)[^&gt;]*&gt;(&lt;\/script&gt;)?/g)].map(m =&gt; m[0]).join('\n');
+const page = `&lt;title&gt;The Academy&lt;/title&gt;
+// …
+${tags}
+&lt;div id="stage"&gt;
+  &lt;div id="game"&gt;&lt;/div&gt;
+  &lt;div id="ui-root"&gt;&lt;/div&gt;
+&lt;/div&gt;
+`;
+writeFileSync('dist/academy.html', page);</code></pre>
+  <p>
+    It works only because of <code>base: './'</code>: the script tags point at <code>./assets/…</code>, which resolve
+    next to the page wherever <code>dist/</code> is uploaded. ROADMAP.md records the republish command:
+    <code>npm run build &amp;&amp; node scripts/make-publish-page.mjs</code>.
+  </p>
+
+  <h3 id="build-docs">How these developer docs are built</h3>
+  <p>
+    This page follows the same design as the developer docs of the sister project Verdant Reach: writers supply
+    <strong>HTML fragments</strong>, one per section, and a page shell turns them into the page. The full write-up is
+    <a data-src="docs/DEVDOCS.md">docs/DEVDOCS.md</a>; the rules for writers are in
+    <a data-src="src/devdocs/CONTRACT.md">src/devdocs/CONTRACT.md</a>.
+  </p>
+  <pre class="mermaid">flowchart TB
+  F["sections/NN-slug.html<br>(fragments)"] -->|"import.meta.glob ?raw"| S["sections.ts"]
+  S --> M["main.ts shell"]
+  M --> C["cover, contents,<br>scroll-spy, search"]
+  M --> E["enhance: source links,<br>callouts, code, tables"]
+  M --> MD["mermaid.ts<br>(CDN, lazy)"]
+  M --> CH["charts/index.ts"]
+  CH --> DATA["charts/data.ts<br>(pure, game modules)"]
+  CH --> V["virtual:devdocs-source<br>(vite.config.ts)"]
+  CHK["check.mjs + validate.ts"] -.->|"node, build, dev banner"| F</pre>
+  <ul>
+    <li><strong>Fragments</strong> live in <code>src/devdocs/sections/</code> and are bundled as raw strings. The shell
+      parses them with a <code>&lt;template&gt;</code>, numbers the headings, and builds the contents and search index
+      from what it finds (<a data-src="src/devdocs/main.ts#L432">main.ts:432</a>).</li>
+    <li><strong>Source links</strong> are plain <code>&lt;a data-src="src/core/balance.ts#L7"&gt;</code>; the shell
+      turns them into GitHub links on <code>main</code> (<a data-src="src/devdocs/main.ts#L96">enhance()</a>).</li>
+    <li><strong>Diagrams</strong> are Mermaid source in <code>&lt;pre class="mermaid"&gt;</code>. Mermaid is not an npm
+      dependency: <a data-src="src/devdocs/mermaid.ts#L11">mermaid.ts</a> imports a pinned ESM build from jsDelivr at
+      runtime, on this page only, when the first diagram nears the viewport. If the CDN is unreachable each diagram
+      shows its source instead.</li>
+    <li><strong>Charts</strong> are <code>&lt;figure data-chart="NAME"&gt;</code>. Their numbers are computed in the
+      browser from the game's own modules (<code>expToNext</code>, <code>MONSTERS</code>, <code>ALL_SKILLS</code>,
+      <code>computeDerived</code>…) and drawn as plain SVG with tooltips and a "Show data" table, so they cannot drift
+      from the build.</li>
+  </ul>
+  <p>
+    Some charts need facts about the source tree that the browser cannot see: the <code>module-graph</code> in
+    <a href="#architecture">Architecture</a> and the line counts in <a href="#overview">the overview</a>. A small Vite
+    plugin computes them at build time.
+  </p>
+  <p>
+    That plugin, <code>devdocsSource</code> (<a data-src="vite.config.ts#L20">vite.config.ts:20</a>), serves two
+    <dfn>virtual modules</dfn>: modules with no file on disk whose code the plugin generates. Only
+    <code>devdocs.html</code> imports them, so the game bundle never contains them.
+  </p>
+  <pre><code class="lang-ts">    load(id) {
+      if (id === `\0${SOURCE}`) {
+        const files = Object.entries(repoFiles(root))
+          .filter(([p]) =&gt; p.startsWith('src/') &amp;&amp; p.endsWith('.ts'))
+          .map(([path, text]) =&gt; ({ path, text }));
+        return `export default ${JSON.stringify(sourceStats(files))};`;
+      }
+      if (id === `\0${FILES}`) {
+        const lines = Object.fromEntries(Object.entries(repoFiles(root)).map(([p, t]) =&gt; [p, lineCount(t)]));
+        return `export default ${JSON.stringify(lines)};`;
+      }
+      return undefined;
+    },</code></pre>
+  <ul>
+    <li><code>virtual:devdocs-source</code>: lines and files per <code>src/</code> folder and the import statements
+      between folders (a few hundred bytes of JSON instead of the 38,000 lines of source).</li>
+    <li><code>virtual:devdocs-files</code>: the line count of every text file in the repository, imported only in dev so
+      the page can check that every <code>data-src</code> path exists and its <code>#L</code> line is in range.</li>
+  </ul>
+  <p>The same fragment checks run three ways:</p>
+  <pre><code class="lang-bash">node src/devdocs/check.mjs          # lists every problem, exits 1 if there are any
+npm run build                       # prints them as warnings
+DEVDOCS_STRICT=1 npm run build      # fails the build on them</code></pre>
+  <details class="advanced">
+    <summary>Advanced: what the checker catches and what it cannot</summary>
+    <p>
+      <a data-src="src/devdocs/validate.ts">validate.ts</a> is pure string scanning with no DOM and no imports, so the
+      browser, Node and the Vite plugin all run the same code. It rejects anything outside a small allow-list of
+      elements (an unknown element is almost always an unescaped <code>&lt;</code> in a code sample, such as
+      <code>Map&lt;string, T&gt;</code>), scripts, styles, inline handlers, images, duplicate or unprefixed ids, unknown
+      chart names and code languages, <code>#links</code> to ids that do not exist, and source links to missing files or
+      past the end of a file.
+    </p>
+    <p>
+      It cannot tell whether <code>#L120</code> still points at the function the text describes. Line links drift when
+      code above them changes. The checker guarantees the link resolves; keeping it <em>right</em> is a review job:
+      after a refactor, grep the sections for the file name and re-check the numbers with <code>grep -n</code>.
+    </p>
+    <p>
+      Problems are warnings in a normal build on purpose: a stale docs link should not block a game fix from deploying.
+      CI could opt into <code>DEVDOCS_STRICT=1</code> once the docs are part of the review routine.
+    </p>
+  </details>
+</section>

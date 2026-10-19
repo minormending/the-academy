@@ -1,0 +1,473 @@
+<section id="physics" data-title="Player movement and physics" data-summary="The Player controller: Arcade body and feet, speed/jump/gravity and the map rules they imply, the state machine, one-way platforms, ropes, blink, hit reaction and the QA fixes.">
+  <h2>Player movement and physics</h2>
+
+  <p>The player character is one class, <a data-src="src/entities/Player.ts">src/entities/Player.ts</a>, with three
+    helpers in <code>src/entities/player/</code>: <a data-src="src/entities/player/tuning.ts">tuning.ts</a> (every feel
+    constant, exported as <code>PT</code>), <a data-src="src/entities/player/NameTag.ts">NameTag.ts</a> and
+    <a data-src="src/entities/player/fallbackTexture.ts">fallbackTexture.ts</a>. It aims at MapleStory's controls:
+    you walk at a constant speed, jumps have a fixed height, you can drop down through thin platforms, and you
+    climb ropes and ladders.</p>
+
+  <p>Some terms first. <dfn>Arcade Physics</dfn> is Phaser's simple physics engine: every body is an axis-aligned
+    rectangle, with velocity, gravity and collision but no rotation or friction. A <dfn>dynamic body</dfn> moves (the
+    player); a <dfn>static body</dfn> never moves and is cheap to collide against (ground, walls, platforms). A
+    <dfn>collider</dfn> is a rule "separate body A from group B", with optional callbacks. Throughout the game, an
+    entity's <code>y</code> means its <dfn>feet</dfn>: world Y grows downward, and <code>player.y</code> is the bottom
+    edge of the hitbox, not the sprite's centre.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="physics-body">Body, hitbox and feet</h3>
+
+  <p>Two constants in <a data-src="src/core/constants.ts#L15">constants.ts</a> fix the geometry:
+    <code>PLAYER_FRAME</code> is 64×80 px (every character sheet frame), and <code>PLAYER_HITBOX</code> is 26×58 px.
+    The hitbox is much narrower than the frame, so the staff and robe can overlap a monster without counting as a
+    touch. It is centred horizontally and placed at the bottom, so the feet sit 2 px above the frame's bottom edge
+    (the art draws feet at y = 78; <code>PT.feetInsetFromBottom = 2</code>).</p>
+  <pre><code class="lang-ts">  private applyBodySize() {
+    const s = this.sprite;
+    const body = this.body;
+    if (!body) return;
+    const fw = s.frame?.realWidth || s.width || 64;
+    const fh = s.frame?.realHeight || s.height || 80;
+    const w = PLAYER_HITBOX.w, h = PLAYER_HITBOX.h;
+    const offX = (fw - w) / 2;
+    const offY = Math.max(0, fh - PT.feetInsetFromBottom - h);
+    body.setSize(w, h, false);
+    body.setOffset(offX, offY);
+    this.feetOff.x = offX + w / 2 - s.displayOriginX;
+    this.feetOff.y = offY + h - s.displayOriginY;
+  }</code></pre>
+  <p>Source: <a data-src="src/entities/Player.ts#L858">Player.ts:858</a></p>
+
+  <p>The public position comes from the body, not the sprite: <code>x</code> is the body's centre and <code>y</code>
+    its bottom (<a data-src="src/entities/Player.ts#L175">Player.ts:175</a>). Code that moves the player calls
+    <code>placeFeet(x, y)</code>. It positions the sprite with the stored <code>feetOff</code>, syncs the body at once
+    and also overwrites the body's <code>prev</code> and <code>prevFrame</code> positions. Without that last step, the
+    one-way platform test below would compare against the position <em>before</em> the teleport and could
+    let the player fall through, or snap them onto a platform they were never above.</p>
+
+  <aside class="note">Until the job's real sprite sheet has been generated (sheets are built lazily; see
+    <a href="#art">Art</a>), the Player uses a 64×80 placeholder mage drawn with Phaser Graphics
+    (<code>ensureFallbackTexture</code>). <code>maybeUpgradeTexture()</code> swaps in the real sheet the first frame
+    it exists, and re-applies the body size while keeping the feet where they were.</aside>
+
+  <!-- ===================================================================== -->
+  <h3 id="physics-numbers">Speed, jump, gravity and the map rule</h3>
+
+  <table>
+    <thead><tr><th>Quantity</th><th>Value</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td>Gravity</td><td>1500 px/s²</td><td><code>GRAVITY</code>, <a data-src="src/core/constants.ts#L4">constants.ts:4</a>, set as the Arcade world gravity in <a data-src="src/main.ts#L29">main.ts:29</a></td></tr>
+      <tr><td>Walk speed</td><td>200 px/s</td><td><code>derived().speed</code> base, <a data-src="src/systems/progression/stats.ts#L32">stats.ts:32</a> (fallback <code>PT.defaultSpeed</code>)</td></tr>
+      <tr><td>Jump velocity</td><td>560 px/s up</td><td><code>derived().jump</code> base, <a data-src="src/systems/progression/stats.ts#L33">stats.ts:33</a> (fallback <code>PT.defaultJump</code>)</td></tr>
+      <tr><td>Max velocity</td><td>650 px/s horizontal, 900 px/s vertical</td><td><code>PT.maxVx</code>, <code>PT.maxVy</code></td></tr>
+    </tbody>
+  </table>
+
+  <p>Speed and jump are <em>stats</em>: <code>readStats()</code> reads <code>progression.derived()</code> every frame,
+    so gear and buffs apply at once. Wind Boots, for example, add +20 speed and +30 jump. Progression floors them at
+    60 and 200 (<a data-src="src/systems/progression/stats.ts#L84">stats.ts:84</a>).</p>
+
+  <p>For a jump with no air resistance, the apex is <code>v² / 2g</code> and the air time is <code>2v / g</code>:</p>
+  <ul>
+    <li>Apex: 560² / (2 × 1500) = 313,600 / 3,000 ≈ <strong>104.5 px</strong>.</li>
+    <li>Air time back to the same height: 2 × 560 / 1500 ≈ 0.747 s. At 200 px/s that covers ≈ <strong>149 px</strong>
+      horizontally.</li>
+    <li>Landing on a ledge 90 px higher: the feet pass 90 px on the way down after ≈ 0.51 s
+      (solving 560t − 750t² = 90), ≈ 102 px of horizontal travel.</li>
+    <li>With Wind Boots (jump 590) the apex is ≈ 116 px.</li>
+  </ul>
+  <p>Those numbers give the <dfn>map design rule</dfn> in <code>ARCHITECTURE.md</code>: one-way platforms that
+    must be reached by jumping are stacked <strong>at most 90 px apart vertically</strong> (about 15 px of headroom
+    below the base apex), and horizontal gaps are <strong>at most 120 px</strong>. Anything taller is connected
+    with a rope or ladder. The rule assumes the <em>base</em> stats, so every map can be finished by a new character
+    with no gear. See <a href="#world">World</a> for how maps are laid out.</p>
+
+  <details class="advanced"><summary>Advanced: physics steps once per render frame</summary>
+    <p>By default Arcade Physics runs at a fixed 60 steps per second, however fast the screen refreshes. On a
+      120 Hz or 144 Hz display, some render frames then contain no physics step and others contain one, so the
+      player (and the camera following them) moves in uneven jumps. The QA pass fixed this with one config flag
+      (commit <code>3ddfd19</code>):</p>
+    <pre><code class="lang-ts">  physics: { default: 'arcade', arcade: { gravity: { x: 0, y: GRAVITY }, debug, fixedStep: false } },</code></pre>
+    <p>Source: <a data-src="src/main.ts#L29">main.ts:29</a>. With <code>fixedStep: false</code>,
+      <code>World.update</code> takes exactly one step per frame, using that frame's delta. Phaser's game loop
+      already smooths the delta to avoid spikes. The trade-offs, and what covers each one:</p>
+    <ul>
+      <li><strong>Frame-rate-dependent results.</strong> Integration with a variable step changes the jump apex by a
+        pixel or two between 60 Hz and 144 Hz. The map rule leaves about 15 px of headroom for this.</li>
+      <li><strong>Tunnelling on long frames.</strong> At the 900 px/s fall cap, a 50 ms frame moves the feet 45 px,
+        far more than the 12 px thickness of a one-way platform body. Three things cover this:
+        <code>platformProcess</code>'s slack grows with fall speed, <code>sweepPlatforms()</code> catches crossings
+        of up to 48 px, and embed recovery handles the rest (all described below). The Player's own acceleration and
+        deceleration math clamps <code>dt</code> to 50 ms.</li>
+      <li><strong>Order within a frame.</strong> Arcade steps the world on the scene's <code>UPDATE</code> event,
+        <em>before</em> <code>GameScene.update</code> runs <code>player.update</code>. Velocities the Player sets
+        are therefore integrated on the <em>next</em> frame, and collider callbacks have already fired by the time
+        <code>step()</code> reads the contact timestamps.</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="physics-frame">One frame of the Player</h3>
+
+  <p><code>update()</code> wraps <code>step()</code> in a <code>try/catch</code> that logs the first error only. A bug
+    in movement must not stop the game loop (ground rule 8 in <code>ARCHITECTURE.md</code>). <code>step()</code> runs
+    in this order:</p>
+  <pre class="mermaid">flowchart TD
+  A["maybeUpgradeTexture()<br>readStats()"] --> B["readInput(now)<br>keys + latched taps"]
+  B --> C["grounded / landing bookkeeping"]
+  C --> D{"dead? on rope?"}
+  D -- "dead" --> E["decelerate to 0"]
+  D -- "rope" --> F["updateClimb()"]
+  D -- "else" --> G["updateNormal()<br>rope grab, prone, jump,<br>drop-through, walk / air steer"]
+  E --> H["sweepPlatforms()"]
+  F --> H
+  G --> H
+  H --> I["checkFallOut()<br>embed recovery, fell off map"]
+  I --> J["computeState()"]
+  J --> K["updateVisuals()<br>anim, flip, alpha, tint, name tag"]</pre>
+
+  <!-- ===================================================================== -->
+  <h3 id="physics-states">The state machine</h3>
+
+  <p><code>player.state</code> is one of <code>idle</code>, <code>walk</code>, <code>jump</code>, <code>fall</code>,
+    <code>climb</code>, <code>prone</code>, <code>cast</code>, <code>hit</code>, <code>dead</code> (the
+    <code>IPlayer</code> contract in <code>src/core/types.ts</code>). The state is <em>not</em> stored and
+    changed by events. It is recomputed every frame from a few flags and timers, in priority order:</p>
+  <pre><code class="lang-ts">  private computeState(now: number): PState {
+    if (this.dead) return 'dead';
+    if (this.rope) return 'climb';
+    if (now &lt; this.hitLockUntil) return 'hit';
+    if (now &lt; this.castLockUntil) return 'cast';
+    const body = this.body;
+    if (this.isGrounded()) {
+      if (this.prone) return 'prone';
+      return Math.abs(body.velocity.x) &gt; 1 ? 'walk' : 'idle';
+    }
+    return body.velocity.y &lt; 0 ? 'jump' : 'fall';
+  }</code></pre>
+  <p>Source: <a data-src="src/entities/Player.ts#L770">Player.ts:770</a>. The diagram shows the transitions those
+    flags produce:</p>
+
+  <pre class="mermaid">stateDiagram-v2
+  [*] --> idle
+  idle --> walk: direction held
+  walk --> idle: no direction
+  idle --> prone: Down on ground
+  prone --> idle: Down released
+  idle --> jump: Jump (or held, auto-hop)
+  walk --> jump: Jump
+  jump --> fall: vy turns positive
+  walk --> fall: walks off / drop-through
+  fall --> idle: lands
+  idle --> climb: Up at rope / Down above rope
+  fall --> climb: Up at rope
+  climb --> jump: Jump + direction
+  climb --> idle: top or bottom reached
+  idle --> cast: playCast(lock)
+  fall --> cast: playCast(lock)
+  cast --> idle: lock ends
+  idle --> hit: onHit(fromX)
+  climb --> hit: onHit(fromX)
+  hit --> fall: 350 ms lock ends
+  hit --> dead: HP reaches 0
+  dead --> idle: revive()</pre>
+
+  <p>Every state can go to <code>hit</code> and to <code>dead</code>; the diagram shows only a few of those arrows.
+    <code>isGrounded()</code> means "not on a rope, not moving up faster than 1 px/s, and the body is blocked or
+    touching below" (<a data-src="src/entities/Player.ts#L178">Player.ts:178</a>). <code>isBusy()</code>, which the
+    skill system checks before every cast, is true when dead, climbing, in a cast lock or in hit-stun.</p>
+
+  <aside class="tip">The animation follows the state with a fallback chain (<code>ANIM_FALLBACK</code>): a sheet
+    without a <code>fall</code> animation plays <code>jump</code>, then <code>idle</code>. While climbing, the
+    animation pauses whenever the player is not moving on the rope.</aside>
+
+  <!-- ===================================================================== -->
+  <h3 id="physics-jump">Walking, jumping and air control</h3>
+
+  <p><code>updateNormal()</code> (<a data-src="src/entities/Player.ts#L425">Player.ts:425</a>) handles everything
+    except climbing. On the ground the horizontal velocity is set directly to <code>dir × speed</code>: there is no
+    acceleration, as in MapleStory, so the character starts and stops instantly. Jumping has four helpers that
+    make it feel reliable:</p>
+  <table>
+    <thead><tr><th>Mechanic</th><th>Value</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><dfn>Jump buffer</dfn></td><td><code>jumpBufferMs</code> 100</td><td>A Jump pressed up to 100 ms before
+        landing (or before a cast lock ends) still jumps.</td></tr>
+      <tr><td><dfn>Coyote time</dfn></td><td><code>coyoteMs</code> 80</td><td>Jump still works for 80 ms after walking
+        off a ledge.</td></tr>
+      <tr><td>Auto-hop</td><td><code>autoJumpGapMs</code> 140</td><td>Holding Jump re-jumps on landing, with at least
+        140 ms between jumps.</td></tr>
+      <tr><td>Air steering</td><td><code>airAccel</code> 520, <code>airSteerFrac</code> 0.4</td><td>In the air, a held
+        direction accelerates <code>vx</code> toward a cap at 520 px/s². The cap is the take-off speed, but at least
+        0.4 × walk speed (80 px/s). With no direction held, momentum is kept.</td></tr>
+    </tbody>
+  </table>
+  <p>A jump sets <code>vx = dir × speed</code> at take-off, so a jump from a standstill with a direction held gets
+    full walking speed at once. Down + Jump never jumps: it either drops through a one-way platform or does
+    nothing.</p>
+
+  <h4 id="physics-latch">The jump latch</h4>
+  <p>The QA pass (commit <code>5bc80f6</code>, "jump latch") fixed taps that were lost. Comparing
+    <code>isDown</code> with last frame's value misses a key that went down and up between two frames. The Player
+    now listens to the Jump keys' <code>'down'</code> event and keeps the press until <code>readInput()</code>
+    reads it. Left and Right taps are latched the same way, so a very short tap still turns the character
+    around:</p>
+  <pre><code class="lang-ts">    const pressed = (raw.jump &amp;&amp; !this.prevJumpDown) || this.jumpLatched;
+    this.prevJumpDown = raw.jump;
+    this.jumpLatched = false;
+    const tap = this.tapDirLatched;
+    this.tapDirLatched = 0;
+    // …
+    if (pressed) this.jumpBufferedAt = now;
+    let dir = ((raw.right ? 1 : 0) - (raw.left ? 1 : 0)) as -1 | 0 | 1;
+    // A tap released before this frame still counts for one frame (turn around / nudge).
+    if (dir === 0 &amp;&amp; tap !== 0 &amp;&amp; !raw.left &amp;&amp; !raw.right) dir = tap;</code></pre>
+  <p>Source: <a data-src="src/entities/Player.ts#L892">Player.ts:892</a>. The keys come from
+    <code>core/bindings</code> and are rebuilt when the player rebinds them; see
+    <a href="#input">Input, bindings and gamepad</a>, which also covers the matching latch for hotbar keys.
+    <code>readInput()</code> returns "nothing held" while control is disabled, the player is dead, or
+    <code>game.isInputBlocked()</code> is true.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="physics-oneway">One-way platforms</h3>
+
+  <p>A <dfn>one-way platform</dfn> can be jumped up through from below and stood on from above. The map loader
+    builds each one as a thin static body whose only colliding face is the top
+    (<a data-src="src/world/MapLoader.ts#L231">MapLoader.ts:231</a>):</p>
+  <pre><code class="lang-ts">    for (const p of this.def.platforms) {
+      const w = Math.max(1, p.x2 - p.x1);
+      if (p.oneWay) {
+        const z = this.zone(this.platforms, p.x1, p.y, w, ONE_WAY_BODY_H);
+        const b = z.body as Phaser.Physics.Arcade.StaticBody | null;
+        if (b) { b.checkCollision.down = false; b.checkCollision.left = false; b.checkCollision.right = false; b.checkCollision.up = true; }
+        z.setData('platform', p);
+      } else {
+        // solid column from the surface to below the map bottom
+        const z = this.zone(this.solids, p.x1, p.y, w, Math.max(32, H - p.y + 200));
+        z.setData('platform', p);
+      }
+    }</code></pre>
+  <p>Source: <a data-src="src/world/MapLoader.ts#L233">MapLoader.ts:233</a>. <code>ONE_WAY_BODY_H</code> is 12 px.
+    Solid ground is a column from its surface to 200 px below the map, so nothing can fall under it. Walls and two
+    off-map edge walls go into the same <code>solids</code> group.</p>
+
+  <p><code>checkCollision</code> alone is not enough. A player rising through a platform from below would still be
+    pushed onto it when their feet passed the top face partway through a step. <code>bindMap()</code> therefore adds
+    the platform collider with a <dfn>process callback</dfn>: Arcade calls it before separating the two bodies, and
+    returning <code>false</code> skips the collision for that step.</p>
+  <pre><code class="lang-ts">  private platformProcess = (_a: unknown, b: unknown): boolean =&gt; {
+    if (this.rope || this.now() &lt; this.dropUntil) return false;
+    const body = this.body;
+    if (!body || body.velocity.y &lt; 0) return false;
+    const pb = bodyOf(b);
+    if (!pb) return true;
+    const prevBottom = Math.min(body.prev.y, body.prevFrame.y) + body.height;
+    const slack = PT.oneWaySlack + Math.max(0, body.velocity.y) / 60;
+    return prevBottom &lt;= pb.y + slack;
+  };</code></pre>
+  <p>Source: <a data-src="src/entities/Player.ts#L611">Player.ts:611</a>. The platform collides only if the player is
+    not climbing, not dropping through, not moving up, and their feet were at or above the platform top (plus
+    6 px, plus one 60 Hz frame of fall) at the start of the step.</p>
+
+  <h4 id="physics-drop">Down + Jump: dropping through</h4>
+  <p>Down + Jump on the ground calls <code>dropThrough()</code> only if <code>standingOnOneWay()</code> agrees. That
+    check uses timestamps written by the collider callbacks (<code>onPlatformCollide</code> and
+    <code>onSolidCollide</code>, which record contact within 3 px of the feet). A recent one-way contact with no
+    recent solid contact (both within 80 ms) means yes. Without contact data it falls back to
+    <code>map.platformAt()</code>. A drop sets <code>dropUntil = now + 250 ms</code>, during which
+    <code>platformProcess</code> ignores every platform, and gives a small 60 px/s downward push. On solid ground,
+    Down + Jump does nothing, as in MapleStory.</p>
+
+  <h4 id="physics-sweep">The sweep safety net</h4>
+  <p><code>sweepPlatforms()</code> (<a data-src="src/entities/Player.ts#L644">Player.ts:644</a>) runs after movement
+    each frame while falling. It checks the platform <em>data</em> (not the bodies): if the feet crossed a platform's
+    top since the last frame (by less than 48 px) while horizontally over it, the player is snapped onto the highest
+    such platform and <code>vy</code> is zeroed. This catches the tunnelling a long frame can cause. It is skipped
+    during a drop-through and while climbing.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="physics-ropes">Ropes and ladders</h3>
+
+  <p>Ropes and ladders have <strong>no physics bodies</strong>. A <code>RopeDef</code> is just
+    <code>{ x, top, bottom, kind }</code>, and <code>kind</code> only changes how the loader draws it. The Player
+    finds ropes by distance, through <code>map.getRopeAt()</code> with a fallback scan of
+    <code>map.def.ropes</code>.</p>
+  <ul>
+    <li><strong>Grab with Up</strong> (<code>findRopeAround</code>, <a data-src="src/entities/Player.ts#L592">Player.ts:592</a>):
+      probes 12, 30 and 50 px above the feet for a rope within <code>ropeTolX</code> = 16 px whose top is more than
+      8 px above the feet. That last condition stops Up from grabbing a rope that starts at your feet. It works in
+      the air too, so you can jump onto a rope.</li>
+    <li><strong>Grab with Down</strong> while standing (<code>findRopeBelow</code>): a rope whose top is within 12 px of
+      the feet, which lets you climb down from a ledge. The player starts at <code>top + 4</code>.</li>
+    <li><strong>Climbing</strong> (<a data-src="src/entities/Player.ts#L501">Player.ts:501</a>): gravity off, x snapped
+      to the rope, Up/Down move at <code>climbSpeed</code> 140 px/s.</li>
+    <li><strong>Leaving</strong>: climbing past the top places the feet on <code>rope.top</code> (counted as
+      grounded); climbing down past the bottom, or onto the ground once 80 ms have passed since the grab, lets go.
+      Jump + a direction hops off sideways at 0.7 × speed and 0.6 × jump velocity (140 px/s and 336 px/s at base
+      stats). Jump with no direction does nothing. After any release, regrabbing is blocked for 250 ms
+      (<code>ropeRegrabMs</code>), so a hop does not immediately catch the same rope.</li>
+    <li><strong>No casting on ropes.</strong> <code>playCast()</code> returns early and <code>isBusy()</code> is true,
+      so a spell tapped on a rope is kept in GameScene's cast buffer and fires only if you get off within 350 ms.</li>
+  </ul>
+
+  <p><strong>Up near a rope or a portal.</strong> Up is both the Player's <code>up</code> and GameScene's
+    <code>interact</code>. <code>player.update</code> runs before <code>GameScene.handleInput</code>. If a rope is
+    in reach, the Player grabs it first; GameScene then sees <code>isClimbing()</code> and does not enter the portal
+    or talk to an NPC. While climbing, Up never activates a portal (commit <code>6492f47</code>). Maps therefore keep
+    ropes away from the portal reach window (40 px horizontal, 60 px vertical:
+    <code>PORTAL_REACH</code>, <a data-src="src/world/MapLoader.ts#L22">MapLoader.ts:22</a>).</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="physics-blink">Blink</h3>
+
+  <p>Movement spells call <code>player.blink(dx, dy)</code>. The contract (<code>IPlayer</code>) says it must clamp
+    within the map and never end inside a solid. The target is first clamped to 20 px (<code>blinkMargin</code>) inside
+    the map edges, and at least one hitbox height plus 20 px below the top. The player then walks from the origin
+    toward the target in 6 px steps (<code>blinkStep</code>), testing the hitbox against every solid at each step,
+    and stops at the last clear spot.</p>
+  <pre><code class="lang-ts">      // Horizontal blinks may climb over low ledges (hills / steps) instead of stopping at their face.
+      const horizontal = Math.abs(ty - oy) &lt; 1;
+      let lift = 0;
+      for (let i = 1; i &lt;= steps; i++) {
+        const t = i / steps;
+        const cx = ox + (tx - ox) * t;
+        let cy = oy + (ty - oy) * t - lift;
+        if (this.overlapsSolid(cx, cy)) {
+          if (!horizontal) break;
+          let up = 0;
+          while (up &lt; PT.blinkStepUp &amp;&amp; this.overlapsSolid(cx, cy - up)) up += 3;
+          if (this.overlapsSolid(cx, cy - up)) break;
+          lift += up; cy -= up;
+        }
+        fx = cx; fy = cy;
+      }</code></pre>
+  <p>Source: <a data-src="src/entities/Player.ts#L293">Player.ts:293</a>. The <dfn>step-up</dfn> was added in the QA
+    pass: before it, a horizontal blink into a 20 px hill stopped dead at the hill's face. Now it rises in 3 px
+    increments, up to <code>blinkStepUp</code> = 64 px. A taller wall still stops it. Diagonal and vertical blinks
+    never step up.</p>
+  <ul>
+    <li>Only <em>solids</em> are tested. One-way platforms do not block a blink, so a blink can end in mid-air and the
+      player then falls normally.</li>
+    <li>After the move the rope is released, horizontal velocity is kept and vertical velocity is zeroed, and the
+      sprite fades in over 160 ms (<code>blinkFlashMs</code>).</li>
+    <li>If the origin itself is inside a solid, the search runs the other way: from the target back toward the
+      origin, taking the first clear spot.</li>
+  </ul>
+
+  <!-- ===================================================================== -->
+  <h3 id="physics-hit">Hit reaction</h3>
+
+  <p>Monsters and hazards damage the player through the combat system, which checks
+    <code>player.isInvulnerable()</code> first and then calls <code>player.onHit(fromX)</code>. HP itself belongs
+    to Progression; the Player only handles the physical reaction:</p>
+  <pre><code class="lang-ts">  onHit(fromX: number) {
+    if (this.dead) return;
+    const now = this.now();
+    if (now &lt; this.invulnUntil) return;
+    const dir = this.x &gt;= fromX ? 1 : -1;
+    this.releaseRope();
+    this.prone = false;
+    this.castLockUntil = 0;
+    this.dropUntil = 0;
+    this.lastGroundedAt = -Infinity;
+    this.jumpBufferedAt = -Infinity;
+    this.body?.setVelocity(dir * PT.hitKnockVx, PT.hitKnockVy);
+    this.hitLockUntil = now + PT.hitLockMs;
+    this.invulnUntil = now + PT.iFramesMs;
+    this.tintUntil = now + PT.hitTintMs;
+    this.state = 'hit';
+  }</code></pre>
+  <p>Source: <a data-src="src/entities/Player.ts#L254">Player.ts:254</a></p>
+  <table>
+    <thead><tr><th>Effect</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Knockback</td><td>220 px/s away from the attacker, 250 px/s up (a hop of ≈ 21 px)</td></tr>
+      <tr><td>Hit-stun (no control, no casting)</td><td>350 ms; on the ground <code>vx</code> slows at 900 px/s²</td></tr>
+      <tr><td><dfn>I-frames</dfn> (invulnerability frames)</td><td>1500 ms; the sprite flickers between alpha 0.35 and 0.9 every 70 ms</td></tr>
+      <tr><td>Red tint</td><td>140 ms (<code>0xff9a9a</code>)</td></tr>
+      <tr><td>After <code>revive()</code></td><td>2000 ms of i-frames</td></tr>
+    </tbody>
+  </table>
+  <p>A hit cancels the cast lock and knocks the player off a rope. The spell that was cast has already fired
+    (<code>tryCast</code> runs the attack at once), so getting hit only shortens the cast animation.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="physics-embed">Embed recovery and falling off the map</h3>
+
+  <p>Arcade separates overlapping bodies by pushing them apart along the axis of least overlap. That works for a body
+    that just touched a wall. It does not work for one deeply inside a solid, which can happen after a teleport
+    or a very long frame. The QA pass added a recovery step to <code>checkFallOut()</code>
+    (<a data-src="src/entities/Player.ts#L701">Player.ts:701</a>):</p>
+  <ul>
+    <li>If the hitbox overlaps a solid for <strong>3 frames in a row</strong> (not while climbing), find the highest
+      top edge among the overlapping solids (<code>solidTopAbove</code>). If the feet can stand there without
+      overlapping anything, place them there with zero velocity.</li>
+    <li>Otherwise teleport to the map's default spawn.</li>
+    <li>Independently, feet more than 100 px below the map bottom (<code>fallOutMargin</code>) also return the player
+      to the default spawn.</li>
+  </ul>
+
+  <!-- ===================================================================== -->
+  <h3 id="physics-cast">Cast lock</h3>
+
+  <p>The skill system calls <code>player.playCast(lockMs)</code> on every successful cast. The lock length is the
+    spell's cast time reduced by <code>castSpeed</code> (see <a href="#skills">Skills</a>).</p>
+  <pre><code class="lang-ts">  playCast(lockMs: number) {
+    if (this.dead || this.rope) return;
+    const now = this.now();
+    this.castLockUntil = Math.max(this.castLockUntil, now + Math.max(0, lockMs || 0));
+    this.castSerial++;
+    this.prone = false;
+    if (this.isGrounded()) this.body?.setVelocityX(0);
+    this.state = 'cast';
+  }</code></pre>
+  <p>Source: <a data-src="src/entities/Player.ts#L244">Player.ts:244</a></p>
+  <ul>
+    <li>The lock never gets shorter: a second <code>playCast</code> only extends it.</li>
+    <li>On the ground, horizontal movement stops for the whole lock. In the air the player keeps their momentum but
+      cannot steer, and gravity still applies, so a mid-air cast follows its arc.</li>
+    <li>No jumping, rope grabbing or prone during the lock. A Jump pressed in the last 100 ms is buffered and
+      happens when the lock ends.</li>
+    <li><code>castSerial</code> restarts the cast animation for back-to-back casts, which would otherwise look like
+      one long cast because the state never leaves <code>cast</code>.</li>
+  </ul>
+
+  <!-- ===================================================================== -->
+  <h3 id="physics-nametag">Name tag and landing effects</h3>
+
+  <p><code>NameTag</code> draws the character's name on a dark pixel plate (2 px outline with cut corners) in the
+    16 px Kenney Mini pixel font, 3 px below the feet. Its depth is <code>DEPTH.NAMETAG</code> (45), above the player
+    (20) and below damage numbers (50). <code>updateVisuals()</code> passes the name from
+    <code>progression.state.name</code> every frame; <code>setName()</code> returns early when the name has not
+    changed, so the plate is only redrawn on a change. The tag is hidden while the name is empty.</p>
+  <p>Landing after a fall of at least 170 px from the apex (<code>hardLandFall</code>), or at 760 px/s or more
+    (<code>hardLandVy</code>), plays the <code>land</code> sound and a puff of seven <code>px_smoke</code> particles.
+    Ordinary hops land silently.</p>
+
+  <details class="advanced"><summary>Advanced: invariants and how to extend the controller safely</summary>
+    <ul>
+      <li><strong>Teleport with <code>placeFeet</code> or <code>placeAt</code>, never <code>sprite.setPosition</code>.</strong>
+        Only <code>placeFeet</code> keeps the feet offset and resets <code>body.prev</code>/<code>prevFrame</code>,
+        which <code>platformProcess</code> and <code>sweepPlatforms</code> depend on. <code>placeAt</code> also
+        releases the rope, zeroes velocity and resets the airtime tracking. Use it for spawns and portals.</li>
+      <li><strong>State is derived, not stored.</strong> Add a new state by adding a flag or timer and a line in
+        <code>computeState()</code> at the right priority, plus an <code>ANIM_FALLBACK</code> entry and the
+        <code>IPlayer['state']</code> union in <code>types.ts</code>. Do not assign <code>this.state</code> elsewhere
+        and expect it to stick: <code>step()</code> overwrites it every frame.</li>
+      <li><strong>Gravity is per body.</strong> <code>grabRope</code> turns gravity off and <code>releaseRope</code>
+        turns it back on. Any new way of leaving a rope must go through <code>releaseRope()</code>, or the player
+        will float.</li>
+      <li><strong>Timers use <code>scene.time.now</code></strong> (<code>this.now()</code>), which pauses with the
+        scene. Do not mix in <code>performance.now()</code>.</li>
+      <li><strong>Prone does not shrink the hitbox.</strong> It only stops movement and changes the animation.
+        Making ducking avoid projectiles would need a body resize and a matching <code>feetOff</code> update.</li>
+      <li><strong>Collider lifetime.</strong> <code>bindMap()</code> destroys the previous map's colliders before it
+        creates new ones. A collider left over after <code>map.destroy()</code> would point at destroyed static
+        bodies.</li>
+      <li><strong>Map authors:</strong> keep jump tiers ≤ 90 px and gaps ≤ 120 px, give every rope a top that meets a
+        walkable surface (the climb ends by putting the feet on <code>rope.top</code>), and keep ropes out of
+        portal reach.</li>
+    </ul>
+  </details>
+</section>

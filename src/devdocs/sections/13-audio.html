@@ -1,0 +1,351 @@
+<section id="audio" data-title="Synthesized audio" data-summary="AudioSystem and WebAudio: no audio files at all — 35 sound effects built from oscillators and noise, and eight looping songs played by a lookahead step sequencer.">
+  <h2>Synthesized audio</h2>
+
+  <p>The game ships no audio files: no MP3, OGG or WAV anywhere in <code>public/</code>. Every sound is built at the
+    moment it plays from <dfn>WebAudio</dfn> nodes (the browser's audio graph API): oscillators, a looping noise buffer,
+    filters and gain envelopes. Music is the same voices driven by a small step sequencer reading songs written as
+    text. This section covers the four files involved:</p>
+  <table>
+    <thead><tr><th>File</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td><a data-src="src/systems/AudioSystem.ts">AudioSystem.ts</a></td><td>The <code>IAudio</code> service:
+        context unlock, buses, volumes, SFX rate limits, music crossfades. One shared instance.</td></tr>
+      <tr><td><a data-src="src/systems/audio/synth.ts">audio/synth.ts</a></td><td>The toolkit: <code>tone</code>,
+        <code>noise</code>, <code>bell</code>, envelopes, note names.</td></tr>
+      <tr><td><a data-src="src/systems/audio/sfx.ts">audio/sfx.ts</a></td><td>One recipe function per
+        <code>SfxKey</code>, plus per-key gain and rate limits.</td></tr>
+      <tr><td><a data-src="src/systems/audio/music.ts">audio/music.ts</a></td><td>Eight songs in tracker notation and
+        <code>SongPlayer</code>, the lookahead sequencer.</td></tr>
+    </tbody>
+  </table>
+
+  <p>Terms used below: a <dfn>voice</dfn> is one sounding note (an oscillator or noise source plus its gain node); an
+    <dfn>envelope</dfn> is the gain curve over a voice's life (attack up, optional hold, release down); a <dfn>bus</dfn>
+    is a gain node many voices connect to, so their volume can be changed in one place.</p>
+
+  <pre class="mermaid">flowchart LR
+  subgraph sfxside["SFX (per play)"]
+    R["SFX[key] recipe"] --> V1["tone / noise / bell voices"]
+    V1 --> OG["out gain (1/√n)"]
+  end
+  subgraph musicside["Music (per song)"]
+    SP["SongPlayer.playStep"] --> V2["lead / counter / arp voices"]
+    SP --> V3["bass / pad / drums"]
+    V2 --> LB["leadBus"]
+    LB --> EC["echo: delay + lowpass + feedback"]
+    LB --> SB["song bus (fade in/out)"]
+    EC --> SB
+    V3 --> SB
+  end
+  OG --> SFXB["sfxBus (sfx volume)"]
+  SB --> MB["musicBus (music × 0.7)"]
+  SFXB --> M["master 0.9"]
+  MB --> M
+  M --> C["DynamicsCompressor"]
+  C --> D["speakers"]</pre>
+
+  <!-- ===================================================================== -->
+  <h3 id="audio-system">AudioSystem: one context, two buses</h3>
+
+  <p>Both scenes and the UI use the same instance through <code>getAudio()</code>
+    (<a data-src="src/systems/AudioSystem.ts#L177">AudioSystem.ts:177</a>): TitleScene and the title menu import it
+    directly, and GameScene stores it as <code>services.audio</code>. A singleton matters here because an
+    <code>AudioContext</code> is expensive and, more importantly, can only start after a user gesture; creating it once
+    and keeping it across Title → Game → Title means the player unlocks audio once per page load.</p>
+
+  <h4 id="audio-unlock">Unlocking on the first input</h4>
+  <p>Browsers' <dfn>autoplay policy</dfn> keeps an <code>AudioContext</code> suspended until the page receives a user
+    gesture. The constructor only loads saved volumes and registers capture-phase, passive listeners for
+    <code>pointerdown</code>, <code>keydown</code>, <code>touchstart</code> and <code>mousedown</code>. The first one
+    calls <code>unlock()</code> (<a data-src="src/systems/AudioSystem.ts#L47">AudioSystem.ts:47</a>), which builds the
+    graph inside the gesture handler:</p>
+  <pre><code class="lang-ts">        const ctx = new C();
+        const comp = ctx.createDynamicsCompressor();
+        comp.threshold.value = -16; comp.knee.value = 12; comp.ratio.value = 5;
+        comp.attack.value = 0.004; comp.release.value = 0.2;
+        const master = ctx.createGain(); master.gain.value = 0.9;
+        const sfxBus = ctx.createGain(); sfxBus.gain.value = this.vol.sfx;
+        const musicBus = ctx.createGain(); musicBus.gain.value = this.vol.music * 0.7;
+        sfxBus.connect(master); musicBus.connect(master); master.connect(comp); comp.connect(ctx.destination);</code></pre>
+  <p>(<a data-src="src/systems/AudioSystem.ts#L53">AudioSystem.ts:53</a>). <code>C</code> is
+    <code>AudioContext</code> or the older <code>webkitAudioContext</code>. Once the context reports
+    <code>running</code>, the gesture listeners are removed and any music requested earlier starts. Until then
+    <code>play()</code> is a no-op and <code>playMusic(key)</code> only records <code>wantMusic</code>, which is why the
+    title theme begins on your first click or key press. A <code>visibilitychange</code> listener suspends the context
+    while the tab is hidden and resumes it on return.</p>
+
+  <h4 id="audio-volumes">Volumes</h4>
+  <p>Defaults are SFX 0.7 and music 0.4, stored as <code>{ sfx, music }</code> in
+    <code>localStorage["arcana-audio"]</code>. <code>setVolumes</code> moves the bus gains with
+    <code>setTargetAtTime</code> (time constants 0.03 s and 0.05 s) rather than jumping, so dragging the Settings sliders
+    does not crackle. The music bus is always <code>music × 0.7</code>: songs are mixed hotter than effects, and the
+    factor keeps the slider's 100% from burying combat sounds. The Settings sliders also save the pair to
+    <code>localStorage["arcana-ui-volumes"]</code>, and TitleScene and UIRoot re-apply that copy through
+    <code>applySavedVolumes</code> (<a data-src="src/ui/miscWindows.ts#L18">miscWindows.ts:18</a>); both stores always
+    hold the same values.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="audio-synth">The synth toolkit</h3>
+
+  <p><a data-src="src/systems/audio/synth.ts">synth.ts</a> exports three voice builders. Each takes a
+    <code>SynthCtx</code> (<code>{ ctx, out, t0 }</code>: the context, the node to connect to, and a start time on
+    the audio clock) and schedules everything up front: start, stop, envelope and glides are all set as automation
+    events, so nothing runs in JavaScript while the sound plays.</p>
+  <ul>
+    <li><strong><code>tone(s, opts)</code></strong> (<a data-src="src/systems/audio/synth.ts#L86">synth.ts:86</a>):
+      one oscillator (<code>sine</code>, <code>triangle</code>, <code>square</code>, <code>sawtooth</code>) with an
+      optional pitch glide (<code>f → f2</code>, exponential by default), detune, vibrato (a second oscillator, the LFO,
+      modulating <code>detune</code> in cents and fading in after <code>delay</code>), an optional biquad filter with its
+      own cutoff sweep, stereo pan, and the envelope.</li>
+    <li><strong><code>noise(s, opts)</code></strong> (<a data-src="src/systems/audio/synth.ts#L117">synth.ts:117</a>):
+      a looping 2-second white-noise buffer, created once per context and cached in a <code>WeakMap</code>, started at a
+      random offset so repeated hits never sound identical, through up to two filters.</li>
+    <li><strong><code>bell(s, f, t, dur, v, ratio, index)</code></strong>
+      (<a data-src="src/systems/audio/synth.ts#L136">synth.ts:136</a>): two-operator <dfn>FM</dfn> (frequency
+      modulation): a modulator at <code>f × ratio</code> wobbles the carrier's frequency by up to
+      <code>f × index</code> Hz, decaying to 5% over the note, which gives the bright-then-pure strike of a bell.</li>
+  </ul>
+
+  <p>All three share one envelope:</p>
+  <pre><code class="lang-ts">function envelope(g: GainNode, t: number, v: number, a: number, hold: number, dur: number, release: 'exp' | 'lin' = 'exp') {
+  const p = g.gain;
+  p.setValueAtTime(0.0001, t);
+  p.linearRampToValueAtTime(Math.max(0.0002, v), t + Math.max(0.002, a));
+  if (hold &gt; 0) p.setValueAtTime(Math.max(0.0002, v), t + a + hold);
+  if (release === 'lin') p.linearRampToValueAtTime(0.0001, t + dur);
+  else p.exponentialRampToValueAtTime(0.0001, t + dur);
+}</code></pre>
+  <p>(<a data-src="src/systems/audio/synth.ts#L59">synth.ts:59</a>). The floor of 0.0001 rather than 0 is required:
+    <code>exponentialRampToValueAtTime</code> cannot reach or start from zero. Notes are written by name:
+    <code>noteFreq("C#5")</code> converts to MIDI and then to Hz with A4 = 440. <code>shaperCurve(amount)</code> returns a
+    cached soft-clip curve for a <code>WaveShaperNode</code>, used by the SFX for grit.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="audio-sfx">Sound effects</h3>
+
+  <p><code>SfxKey</code> has 35 members (<a data-src="src/core/types.ts#L259">types.ts:259</a>), and
+    <code>SFX</code> (<a data-src="src/systems/audio/sfx.ts#L27">sfx.ts:27</a>) is a
+    <code>Record&lt;SfxKey, SfxRecipe&gt;</code>, so TypeScript fails the build if a key has no recipe. A recipe gets
+    the synth context, a pitch multiplier <code>p</code> and a volume multiplier <code>v</code>. Gameplay code never
+    builds sounds; it names one, either directly (<code>audio.play('levelup')</code>) or through data, as each skill
+    definition does with its <code>sfx</code> field (the most used are <code>buff</code>, <code>cast_holy</code>,
+    <code>cast_shadow</code> and <code>cast_fire</code>).</p>
+
+  <table>
+    <thead><tr><th>Key</th><th>How it is built</th></tr></thead>
+    <tbody>
+      <tr><td><code>jump</code></td><td>Triangle sweeping 320 → 760 Hz in 0.1 s, plus a quiet filtered square an octave
+        up.</td></tr>
+      <tr><td><code>land</code></td><td>Sine thump 150 → 55 Hz and a 70 ms lowpassed noise puff.</td></tr>
+      <tr><td><code>pickup</code></td><td>Two triangle blips A5 then E6, with a faint E7 sparkle.</td></tr>
+      <tr><td><code>mesos</code></td><td>Coin "ching": filtered squares B6 then E7 with inharmonic sine partials
+        (×2.01, ×2.76) for a metallic edge.</td></tr>
+      <tr><td><code>levelup</code></td><td>Six-note C-major arpeggio (squares and triangles 70 ms apart), then a detuned
+        sawtooth chord swell, six FM bell sparkles and a high noise shimmer.</td></tr>
+      <tr><td><code>monster_hit</code></td><td>Bandpassed noise crack at about 1.9 kHz and a sine thud 190 → 70 Hz, pitch
+        randomised ±8% per hit so a multi-hit spell does not machine-gun.</td></tr>
+      <tr><td><code>boss_roar</code></td><td>Sawtooth and square 85 → 48 Hz with deep vibrato (9 and 13 Hz) and
+        lowpassed noise, all through a heavy waveshaper (<code>gritty(s, 12)</code>).</td></tr>
+      <tr><td><code>cast_fire</code></td><td>Noise swept through a bandpass 320 → 1600 Hz (the whoosh), a low rumble, and
+        9 random highpassed noise ticks (<code>crackles</code>) for the crackle.</td></tr>
+      <tr><td><code>cast_ice</code></td><td>Five FM bells E6, B6, G#6, E7, B7, 45 ms apart, alternating left and right
+        (pan ±0.3), over a high noise hiss.</td></tr>
+      <tr><td><code>cast_lightning</code></td><td>Sawtooth zap 1300 → 180 Hz, a 70 Hz square with 60 Hz, 900-cent vibrato
+        (an electric buzz), highpassed noise and crackles.</td></tr>
+      <tr><td><code>explosion</code></td><td>Noise lowpassed 1800 → 90 Hz and a sine drop 110 → 32 Hz through a waveshaper,
+        a 60 ms high crack and trailing crackles.</td></tr>
+      <tr><td><code>thunder</code></td><td>Sharp highpassed crack, then 1.7 s of distorted lowpassed rumble with five
+        randomly spaced pulses and a 55 Hz drop.</td></tr>
+      <tr><td><code>ui_click</code> / <code>ui_error</code></td><td>A 35 ms 1.5 kHz sine tick / two 170 Hz square buzzes
+        100 ms apart.</td></tr>
+    </tbody>
+  </table>
+
+  <h4 id="audio-codex-voices">The Holy, Shadow and curse voices</h4>
+  <p>When the Holy and Shadow Schools were added (Phase 3), the contract added three keys before anyone had designed them,
+    and the first version aliased existing recipes: <code>cast_holy</code> was <code>heal</code> pitched up,
+    <code>cast_shadow</code> and <code>curse</code> were <code>whoosh</code> pitched down. Commit <code>c09fa9c</code>
+    replaced the aliases with bespoke voices written by Codex
+    (<a data-src="src/systems/audio/sfx.ts#L217">sfx.ts:217</a>):</p>
+  <pre><code class="lang-ts">  cast_holy: (s, p, v) =&gt; {
+    // Soft choir triad with octave air and quiet, harmonic bell shimmer.
+    ['C5', 'E5', 'G5'].forEach((n, i) =&gt; {
+      const f = N(n) * p;
+      tone(s, { type: 'sine', f, t: i * 0.015, dur: 0.5 - i * 0.015, v: 0.055 * v, a: 0.07, hold: 0.04, detune: (i - 1) * 4, vib: { rate: 5, depth: 7, delay: 0.06 } });
+      tone(s, { type: 'sine', f: f * 2, t: i * 0.015, dur: 0.46 - i * 0.015, v: 0.015 * v, a: 0.09, detune: (1 - i) * 5 });
+      bell(s, f * 2, 0.06 + i * 0.025, 0.4 - i * 0.025, 0.018 * v, 2, 0.45);
+    });
+    noise(s, { dur: 0.5, v: 0.025 * v, a: 0.09, filter: { type: 'highpass', f: 5500 * p } });
+  },</code></pre>
+  <p><code>cast_shadow</code> is a breathy falling sweep: two sawtooths a minor second apart (D3 gliding to Db3,
+    detuned ±9 cents) through a closing lowpass and a light waveshaper, under bandpassed noise sweeping down from
+    900 Hz. <code>curse</code> is a descending tritone (B4 → F4 over a B3 → F3 shadow) with wide, uneasy vibrato and a
+    fading hiss. Each sets the mood of its School with intervals: a major triad for Holy, a minor second and a tritone for
+    Shadow.</p>
+
+  <h4 id="audio-limits">Rate limits and the voice budget</h4>
+  <p>A chain-lightning cast can produce dozens of hits in a few frames. <code>play()</code>
+    (<a data-src="src/systems/AudioSystem.ts#L87">AudioSystem.ts:87</a>) applies three limits before building
+    anything:</p>
+  <pre><code class="lang-ts">    // global voice budget
+    this.recent = this.recent.filter(t =&gt; nowMs - t &lt; 100);
+    if (this.recent.length &gt;= 14) return;
+    // per-key rate limit
+    const [gap, per100] = SFX_LIMIT[key] ?? [25, 3];
+    const hist = (this.lastPlay.get(key) ?? []).filter(t =&gt; nowMs - t &lt; 100);
+    if (hist.length &amp;&amp; nowMs - hist[hist.length - 1] &lt; gap) return;
+    if (hist.length &gt;= per100) return;
+    // …
+      // the more copies of this key are ringing, the quieter each new one is
+      out.gain.value = 1 / Math.sqrt(hist.length);</code></pre>
+  <ul>
+    <li>At most 14 SFX starts per 100 ms in total.</li>
+    <li>Per key, a minimum gap and a maximum per 100 ms from <code>SFX_LIMIT</code>
+      (<a data-src="src/systems/audio/sfx.ts#L256">sfx.ts:256</a>), for example <code>monster_hit</code> [28 ms, 4],
+      <code>thunder</code> [140 ms, 1], <code>job_advance</code> [1000 ms, 1]; unlisted keys get [25 ms, 3].</li>
+    <li>The n-th copy of a key within 100 ms plays at <code>1/√n</code>, so a burst sounds denser rather than
+      louder.</li>
+  </ul>
+  <p>Each play gets its own output gain (also scaled by <code>SFX_GAIN[key]</code>, default 0.85, and the caller's
+    <code>volume</code>), starts 5 ms in the future (<code>t0 = ctx.currentTime + 0.005</code>) so all of its voices are
+    scheduled before the first one sounds, and is disconnected after 4 s; the longest recipe, <code>job_advance</code>,
+    ends at about 2.7 s.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="audio-music">Music</h3>
+
+  <p><code>MusicKey</code> has eight values. Each map names its track in data (<code>MapDef.music</code>), GameScene
+    calls <code>playMusic(map.def.music)</code> on every map load, TitleScene plays <code>title</code>, and the
+    graduation credits roll borrows <code>title</code> and then restores the map's track.</p>
+  <table>
+    <thead><tr><th>Key</th><th>Used by</th><th>Tempo, metre</th><th>Lead</th><th>Loop length</th><th>Character</th></tr></thead>
+    <tbody>
+      <tr><td><code>title</code></td><td>Title screen, credits</td><td>92 bpm, 4/4</td><td>brass</td><td>8 bars ≈ 20.9 s</td><td>Hopeful anthem, crash on each loop</td></tr>
+      <tr><td><code>town</code></td><td>Academy Grounds</td><td>138 bpm, 3/4</td><td>flute</td><td>16 bars ≈ 20.9 s</td><td>Waltz, music-box counter-melody</td></tr>
+      <tr><td><code>forest</code></td><td>Whisperwood</td><td>128 bpm, 4/4</td><td>pluck</td><td>8 bars = 15.0 s</td><td>Bouncy, bell arpeggio</td></tr>
+      <tr><td><code>cave</code></td><td>Shroom Hollow</td><td>84 bpm, 4/4</td><td>bell</td><td>8 bars ≈ 22.9 s</td><td>Sparse, long echo (0.535 s, feedback 0.45)</td></tr>
+      <tr><td><code>snow</code></td><td>Frostfang Cliffs</td><td>100 bpm, 4/4</td><td>music box</td><td>8 bars = 19.2 s</td><td>Twinkly, hats only</td></tr>
+      <tr><td><code>volcano</code></td><td>Cinder Caverns</td><td>150 bpm, 4/4</td><td>square</td><td>8 bars = 12.8 s</td><td>Driving minor key, octave-up on repeats</td></tr>
+      <tr><td><code>storm</code></td><td>Stormspire Peak</td><td>138 bpm, 4/4</td><td>saw</td><td>8 bars ≈ 13.9 s</td><td>Tense C minor</td></tr>
+      <tr><td><code>boss</code></td><td>Arcane Sanctum, Trial Hall</td><td>168 bpm, 4/4</td><td>square</td><td>8 bars ≈ 11.4 s</td><td>Fast A minor, brass counter-line</td></tr>
+    </tbody>
+  </table>
+  <p>Loop length is <code>bars × beats × 60 / bpm</code>; for example <code>title</code> is 8 × 4 × 60 / 92 ≈ 20.9 s.</p>
+
+  <h4 id="audio-notation">Songs as text</h4>
+  <p>A song (<a data-src="src/systems/audio/music.ts#L17">music.ts:17</a>) is a tempo, a metre, a resolution
+    (<code>res: 2</code>: eighth-note steps), one chord per bar, and pattern strings with one token per step. Melody
+    tokens are note names, <code>-</code> holds, <code>.</code> rests; bass uses <code>R</code>/<code>3</code>/<code>5</code>/<code>O</code>
+    (root, third, fifth, octave) relative to the current chord; arpeggios use chord-tone indexes; drums use
+    <code>x</code> and <code>o</code> (accent or open hat). <code>|</code> is a bar line for readability. The title theme
+    (<a data-src="src/systems/audio/music.ts#L38">music.ts:38</a>):</p>
+  <pre><code class="lang-ts">  title: {
+    bpm: 92, beats: 4, res: 2,
+    chords: ['C', 'G', 'Am', 'F', 'C', 'G', 'F', 'G'],
+    melody: `G4 - C5 - E5 - G5 - | F5 - E5 - D5 - - - | E5 - A5 - C6 - B5 A5 | A5 - - - G5 - F5 - |
+             E5 - G5 - C6 - - - | B5 - A5 - G5 - D5 - | C5 - F5 - A5 - G5 F5 | D5 - - - G4 - B4 D5`,
+    lead: 'brass', leadVol: 0.13,
+    // …
+    bass: { pattern: ['R - - - - - 5 -', 'R - - - 5 - - -'], inst: 'tri', octave: 2, vol: 0.32 },
+    pad: { octave: 4, cutoff: 1800, vol: 0.05 },
+    arp: { pattern: ['0 1 2 3 2 1 2 3'], octave: 5, inst: 'pluck', vol: 0.04, everyOther: true },
+    drums: { kick: ['x . . . x . . .'], snare: ['. . . . . . . .', '. . . . . . x x'], hat: ['. . x . . . x .'], vol: 0.8, crashOnLoop: true },
+    echo: { time: 0.33, feedback: 0.25, mix: 0.18 },
+  },</code></pre>
+  <p><code>compile()</code> (<a data-src="src/systems/audio/music.ts#L194">music.ts:194</a>) turns this once per
+    song into per-step arrays: the chord at each step (a bar with two chord names is split evenly), where chord segments
+    start, and the notes that begin on each step with their lengths. Patterns shorter than the song (bass, drums, arp)
+    are cycled per bar. Instruments are small recipes over <code>tone</code> and <code>bell</code>: the flute is a sine
+    with delayed vibrato plus a quiet octave triangle, the brass two detuned sawtooths through an opening lowpass, the
+    pad three chord tones each doubled at ±6 cents with a slow linear-release envelope.</p>
+
+  <h4 id="audio-sequencer">The lookahead sequencer</h4>
+  <p><code>SongPlayer</code> (<a data-src="src/systems/audio/music.ts#L327">music.ts:327</a>) does not play notes when a
+    timer fires; it uses the timer to <em>schedule</em> notes slightly in the future on the audio clock, the standard
+    WebAudio pattern for steady timing:</p>
+  <pre><code class="lang-ts">  private tick() {
+    if (this.stopped &amp;&amp; !this.timer) return;
+    const ctx = this.ctx;
+    if (ctx.state !== 'running') return;
+    const now = ctx.currentTime;
+    // After a stall (background tab), skip ahead instead of bursting.
+    if (this.nextTime &lt; now - 0.25) this.nextTime = now + 0.05;
+    const stepDur = 60 / this.song.def.bpm / this.song.def.res;
+    let guard = 0;
+    while (this.nextTime &lt; now + 0.14 &amp;&amp; guard++ &lt; 32) {
+      if (!this.stopped) {
+        try { this.playStep(this.step, this.nextTime, stepDur); } catch (e) { console.warn('[music] step failed', e); }
+      }
+      this.nextTime += stepDur;
+      this.step++;
+      if (this.step &gt;= this.song.totalSteps) { this.step = 0; this.pass++; }
+    }
+  }</code></pre>
+  <p>(<a data-src="src/systems/audio/music.ts#L380">music.ts:380</a>). A <code>setInterval</code> fires every 25 ms;
+    each tick schedules every step whose start time falls within the next 0.14 s. Looping is just the step counter
+    wrapping; <code>pass</code> counts loops and drives variation: counter-melodies and arpeggios marked
+    <code>everyOther</code> play only on odd passes, <code>leadOctaveUpOnRepeat</code> doubles the lead's frequency on
+    odd passes, and <code>crashOnLoop</code> hits a cymbal on step 0 from the second pass. Melody notes are humanised by up
+    to ±3 ms and shortened to 92% of their written length so repeated notes re-articulate.</p>
+
+  <p><strong>Switching songs.</strong> <code>playMusic(key)</code> ignores a request for the song already playing (so
+    walking between two <code>boss</code> maps does not restart it). Otherwise <code>startSong</code> tells the old
+    player to fade out over 1.2 s (<code>CROSSFADE</code>) and starts the new one fading in over the same time, or over
+    0.8 s if nothing was playing. Each <code>SongPlayer</code> has its own bus, so the two overlap cleanly; the old one
+    disconnects its nodes 0.6 s after its fade ends.</p>
+
+  <details class="advanced"><summary>Advanced: scheduling ahead with currentTime</summary>
+    <ul>
+      <li><strong>Two clocks.</strong> JavaScript timers (<code>setInterval</code>) are imprecise and pause in background
+        tabs; <code>AudioContext.currentTime</code> runs on the audio thread and is sample-accurate. The sequencer reads the
+        audio clock and only uses the JS timer to wake up. The 0.14 s window is larger than several timer periods (25 ms),
+        so a late timer still finds the next steps unscheduled and schedules them in time.</li>
+      <li><strong>Latency vs. robustness.</strong> A larger window survives longer main-thread stalls (a heavy art
+        generation frame) but delays tempo changes and stops. Here nothing changes mid-song except stopping, and stop is a
+        gain fade, so 0.14 s is safe.</li>
+      <li><strong>Stalls.</strong> If the tab was hidden and <code>nextTime</code> fell more than 0.25 s behind, the
+        sequencer jumps ahead instead of scheduling the missed steps all at once. The <code>guard</code> caps a tick at 32
+        steps for the same reason. Hidden tabs also suspend the context entirely
+        (<code>visibilitychange</code>), and <code>tick()</code> does nothing unless the context is
+        <code>running</code>.</li>
+      <li><strong>SFX use the same idea in miniature:</strong> every voice of a recipe is scheduled relative to one
+        <code>t0</code> 5 ms ahead, so a chord's notes start on the same sample.</li>
+    </ul>
+  </details>
+
+  <details class="advanced"><summary>Advanced: avoiding clicks</summary>
+    <p>A click is a sudden jump in the waveform. The code avoids every common source:</p>
+    <ul>
+      <li>Every envelope starts at 0.0001 and ramps up over at least 2 ms; every release ramps down to 0.0001 before the
+        source stops. Oscillators stop at <code>dur + 0.05</code>, after the gain is already silent.</li>
+      <li>Song fades and volume changes are automation ramps (<code>exponentialRampToValueAtTime</code>,
+        <code>setTargetAtTime</code>), never direct <code>.value</code> writes on a running bus. <code>stop()</code> first
+        pins the current value with <code>setValueAtTime(g.value)</code> after <code>cancelScheduledValues</code>, so the
+        fade starts from where the gain actually is.</li>
+      <li>Noise voices get the same envelope as oscillators, so even an 8 ms crackle tick fades in and out rather than
+        switching on and off.</li>
+      <li>The master <code>DynamicsCompressor</code> (threshold −16 dB, ratio 5, 4 ms attack) catches peaks when many
+        voices sum, which would otherwise clip at the output.</li>
+    </ul>
+  </details>
+
+  <details class="advanced"><summary>Advanced: CPU cost and the autoplay policy</summary>
+    <ul>
+      <li><strong>Node churn.</strong> Every note creates fresh nodes: a <code>tone</code> is an oscillator and a gain,
+        plus a filter, an LFO pair and a panner when asked for. A pad hit is 6 oscillators with 6 filters, and a busy step
+        of the boss theme (lead and counter, bass, pad, arp, three drums) creates a few dozen nodes every 0.18 s. Nodes are
+        cheap but not free; the browser frees them after they stop. This is why SFX have hard caps (14 per 100 ms) and why
+        the noise buffer and shaper curves are cached rather than rebuilt.</li>
+      <li><strong>Main-thread work is tiny.</strong> JavaScript only creates nodes and automation events; the audio thread
+        does the synthesis. A dropped game frame does not glitch audio unless it outlasts the 0.14 s lookahead.</li>
+      <li><strong>Autoplay.</strong> Creating the context inside the first gesture handler is the reliable way to start
+        audio in every browser. Code that plays a sound before that (title music, UI clicks) silently does nothing, and
+        music is remembered and started on unlock. If you add a new entry point that should make sound, call
+        <code>getAudio()</code> rather than creating an <code>AudioContext</code>, or a second context would need its own
+        unlock.</li>
+      <li><strong>Adding a sound:</strong> add the key to <code>SfxKey</code> in <code>src/core/types.ts</code>, a recipe
+        to <code>SFX</code> (the <code>Record</code> type forces it), and if it can fire in bursts, a
+        <code>SFX_LIMIT</code> entry. Keep total length under the 4 s disconnect.</li>
+    </ul>
+  </details>
+</section>

@@ -1,0 +1,1016 @@
+<section id="skills" data-title="Skill engine, combat and statuses" data-summary="SkillDef data, the cast flow, the seven attack patterns, VFX conventions, buffs, summons, combat math and status effects.">
+  <h2>Skill engine, combat and statuses</h2>
+
+  <p>Every spell in The Academy is <strong>data</strong>: a <code>SkillDef</code> object in one of the six spell files
+    (<a data-src="src/skills/apprentice.ts">apprentice.ts</a>, <a data-src="src/skills/fire.ts">fire.ts</a>,
+    <a data-src="src/skills/ice.ts">ice.ts</a>, <a data-src="src/skills/lightning.ts">lightning.ts</a>,
+    <a data-src="src/skills/holy.ts">holy.ts</a>, <a data-src="src/skills/shadow.ts">shadow.ts</a>). There are 130 of
+    them: 10 Year-1 Apprentice spells and 24 per School. A small <dfn>skill engine</dfn> turns that data into gameplay.
+    It has three parts:</p>
+  <ul>
+    <li><a data-src="src/systems/SkillSystem.ts">SkillSystem.ts</a> decides <em>whether</em> a cast happens (learned,
+      MP, cooldown, busy) and owns everything that lasts: cooldowns, buffs, summons and movement.</li>
+    <li><a data-src="src/systems/skill/AttackRunner.ts">AttackRunner.ts</a> runs one <code>AttackSpec</code>: it finds the
+      targets for one of seven <dfn>attack patterns</dfn>, simulates projectiles and schedules the damage lines.</li>
+    <li><a data-src="src/systems/CombatSystem.ts">CombatSystem.ts</a> does the arithmetic: it rolls damage, applies it to
+      monsters, applies status effects, works out damage the player takes, and shows the floating numbers through
+      <a data-src="src/systems/skill/DamageNumbers.ts">DamageNumbers.ts</a>.</li>
+  </ul>
+  <p>The spell files never touch Phaser physics, monsters or HP directly. They describe <em>what</em> a spell does
+    (pattern, damage %, hit lines, area, status, VFX keys) and the engine decides <em>how</em>. Content agents built the
+    five Schools in parallel against this contract, which ARCHITECTURE.md calls "Skill engine semantics". This section
+    walks through the contract, follows one cast from key press to damage number, and then covers the combat math and
+    statuses that the patterns feed into.</p>
+
+  <pre class="mermaid">flowchart LR
+  DATA["src/skills/*.ts<br>SkillDef data"] --> REG["Registry.skill(id)"]
+  GS["GameScene<br>hotbar input"] -- "tryCast(id)" --> SS["SkillSystem"]
+  REG --> SS
+  SS -- "attack spec" --> AR["AttackRunner<br>7 patterns"]
+  SS -- "buff / summon / blink" --> SS
+  AR -- "roll + apply" --> CS["CombatSystem"]
+  CS -- "takeDamage / applyStatus" --> MO["Monster"]
+  CS --> DN["DamageNumbers"]
+  MO -- "burn / poison ticks" --> CS
+  AR -- "playVfx(key)" --> VFX["vfx registry<br>School *Vfx.ts"]
+  SS -- "invalidate()" --> PR["Progression.derived()"]</pre>
+
+  <!-- ===================================================================== -->
+  <h3 id="skills-contract">The SkillDef contract</h3>
+
+  <p>All skill types live in <a data-src="src/core/types.ts#L122">src/core/types.ts</a> (see
+    <a href="#architecture">Architecture</a> for why contracts live there). A skill has one of five
+    <dfn>kinds</dfn>: <code>attack</code>, <code>buff</code>, <code>passive</code>, <code>movement</code> and
+    <code>summon</code>. Each kind has its own optional field holding its spec.</p>
+
+  <pre><code class="lang-ts">export interface SkillDef {
+  id: string;               // prefix: app_ / fire_ / ice_ / ltn_
+  name: string;
+  description: string;      // one line; may mention {dmg} etc. — UI shows plain text
+  element: Element;
+  job: JobId;               // job that teaches it (tier implied by job)
+  kind: SkillKind;
+  maxLevel: number;
+  icon: IconSpec;
+  requires?: { skillId: string; level: number }[];
+  mpCost: (lv: number) =&gt; number;
+  cooldownMs?: (lv: number) =&gt; number;
+  castTimeMs?: number;      // player animation lock (default 450)
+  attack?: AttackSpec;      // kind 'attack'
+  buff?: BuffSpec;          // kind 'buff'
+  passive?: (lv: number) =&gt; StatModifier[]; // kind 'passive' (always on while learned)
+  movement?: MovementSpec;  // kind 'movement'
+  summon?: SummonSpec;      // kind 'summon'
+  sfx?: SfxKey;
+  /** Escape hatch: replaces the default behaviour entirely. Use sparingly. */
+  onCast?: (ctx: SkillContext, lv: number) =&gt; void;
+}</code></pre>
+  <p><small>Source: <a data-src="src/core/types.ts#L190-L211">types.ts:190</a>. Holy (<code>holy_</code>) and Shadow
+    (<code>shd_</code>) were added in Phase 3; the id comment predates them.</small></p>
+
+  <p>Anything that changes with skill level is a <dfn>level function</dfn>, <code>(lv) =&gt; number</code>, and not a
+    table. Each School file defines its own small helpers for these. Fire uses <code>L(a, b, max)</code>, a linear
+    ramp from <code>a</code> at level 1 to <code>b</code> at <code>max</code>, plus <code>Li</code> (the same, rounded)
+    and <code>K(n)</code> (a constant). Apprentice uses an inline <code>lerp</code>. This keeps a spell readable at a
+    glance, because <code>damagePct: L(170, 262, 20)</code> says "170% at level 1, 262% at level 20". The engine also
+    never needs to know how many levels a spell has. It clamps the learned level to <code>maxLevel</code> before it
+    calls anything.</p>
+
+  <h4 id="skills-attackspec">AttackSpec</h4>
+  <p>Attacks carry most of the data. One <code>AttackSpec</code> describes a whole cast: the <dfn>pattern</dfn> (the
+    shape that decides which monsters are hit), damage per <dfn>hit line</dfn> as a % of magic attack
+    (<code>matk</code>), how many lines each target takes, how many targets at most, and the optional status, bonus and
+    VFX keys.</p>
+  <pre><code class="lang-ts">export interface AttackSpec {
+  pattern: AttackPattern;
+  damagePct: (lv: number) =&gt; number;   // % of matk per hit (see balance.ts for reference ranges)
+  hits: (lv: number) =&gt; number;        // damage lines per target (Maple-style multi-hit)
+  maxTargets: (lv: number) =&gt; number;
+  range: number;                       // px forward reach (projectile max travel, aoe_target search, beam length)
+  area?: { w: number; h: number; offsetX?: number; offsetY?: number }; // for melee_arc/aoe_self/aoe_target/beam/rain/projectile-explosion
+  projectile?: {
+    speed: number;          // px/s
+    radius: number;         // collision radius
+    pierce?: boolean;       // keep going through targets (up to maxTargets)
+    gravity?: number;       // px/s^2 (arcing projectiles); default 0
+    explodeArea?: { w: number; h: number }; // on first impact deal damage to all in area (up to maxTargets)
+    count?: (lv: number) =&gt; number;  // number of projectiles fired (fanned / staggered)
+    spreadDeg?: number;     // fan spread between projectiles
+  };
+  chain?: { jumpRange: number; jumpDelayMs?: number };
+  rain?: { count: (lv: number) =&gt; number; spreadX: number; intervalMs: number; fallHeight?: number };
+  status?: StatusSpec;
+  /** Bonus damage vs. targets that have a status, e.g. shatter frozen. */
+  bonusVs?: { status: StatusKind; mult: number; consume?: boolean };
+  knockback?: number;       // px pushed away from caster
+  delayMs?: number;         // delay from cast start to first damage (sync with vfx)
+  hitIntervalMs?: number;   // delay between multi-hit lines (default 90)
+  vfx: {
+    cast?: string;          // played at caster on cast
+    projectile?: string;    // visual that travels with a projectile (engine owns lifetime)
+    hit?: string;           // played on each damaged target
+    area?: string;          // played at the area / impact point
+  };
+}</code></pre>
+  <p><small>Source: <a data-src="src/core/types.ts#L135-L165">types.ts:135</a></small></p>
+
+  <p>The other three specs are small. Summons reuse <code>AttackSpec</code> for their own attack, so a summon is
+    "an attack that repeats from somewhere else".</p>
+  <pre><code class="lang-ts">export interface BuffSpec {
+  durationMs: (lv: number) =&gt; number;
+  modifiers: (lv: number) =&gt; StatModifier[];
+  vfx?: string;             // one-shot on cast
+  auraVfx?: string;         // persistent visual following the player while active (engine owns lifetime)
+}
+
+export interface MovementSpec {
+  kind: 'blink';            // instant teleport in input direction (left/right/up/down), default facing
+  distance: (lv: number) =&gt; number;
+  vfxOut?: string;          // at origin
+  vfxIn?: string;           // at destination
+}
+
+export interface SummonSpec {
+  durationMs: (lv: number) =&gt; number;
+  attackIntervalMs: number;
+  attack: AttackSpec;       // executed from the summon's position, facing nearest monster
+  vfx: string;              // persistent body visual (engine owns lifetime); positioned at summon x/y
+  offset: { x: number; y: number }; // spawn offset relative to caster (x mirrored by facing)
+  follow?: boolean;         // hovers near the player if true, else stationary
+}</code></pre>
+  <p><small>Source: <a data-src="src/core/types.ts#L167-L188">types.ts:167</a></small></p>
+
+  <p><code>tryCast</code> returns a <code>CastResult</code>:
+    <code>'ok' | 'no_mp' | 'cooldown' | 'busy' | 'not_learned' | 'unknown' | 'passive' | 'dead'</code>
+    (<a data-src="src/core/types.ts#L213">types.ts:213</a>). GameScene turns the failures into a log line and an error
+    sound. It turns <code>'busy'</code> into a buffered cast instead (see <a href="#input">Input</a>).</p>
+
+  <h4 id="skills-examples">One spell of each kind</h4>
+  <p><strong>Attack.</strong> Arcane Bolt, the first spell every student has: one projectile, one line, one target.</p>
+  <pre><code class="lang-ts">  {
+    id: 'app_arcane_bolt',
+    name: 'Arcane Bolt',
+    // …
+    kind: 'attack',
+    maxLevel: 10,
+    // …
+    mpCost: lv =&gt; Math.round(lerp(5, 10, lv, 10)),
+    castTimeMs: 420,
+    sfx: 'cast_arcane',
+    attack: {
+      pattern: 'projectile',
+      damagePct: lv =&gt; Math.round(lerp(125, 170, lv, 10)),
+      hits: () =&gt; 1,
+      maxTargets: () =&gt; 1,
+      range: 520,
+      projectile: { speed: 780, radius: 10 },
+      vfx: { cast: 'app_bolt_cast', projectile: 'app_bolt', hit: 'app_bolt_hit' },
+    },
+  },</code></pre>
+  <p><small>Source: <a data-src="src/skills/apprentice.ts#L25-L46">apprentice.ts:25</a></small></p>
+
+  <p><strong>Buff.</strong> Mana Shield adds to the derived stat <code>mpShield</code> for 60–180 s and keeps an aura on
+    the player.</p>
+  <pre><code class="lang-ts">    kind: 'buff',
+    // …
+    buff: {
+      durationMs: lv =&gt; Math.round(lerp(60, 180, lv, 10)) * 1000,
+      modifiers: lv =&gt; [{ stat: 'mpShield', add: +lerp(0.2, 0.5, lv, 10).toFixed(3) }],
+      vfx: 'app_shield_cast',
+      auraVfx: 'app_shield_aura',
+    },</code></pre>
+  <p><small>Source: <a data-src="src/skills/apprentice.ts#L78-L89">apprentice.ts:78</a></small></p>
+
+  <p><strong>Passive.</strong> Mana Font has no cast at all. Its <code>passive</code> function returns modifiers that
+    Progression folds into derived stats for as long as the spell is learned.</p>
+  <pre><code class="lang-ts">    kind: 'passive',
+    // …
+    mpCost: () =&gt; 0,
+    passive: lv =&gt; [
+      { stat: 'maxMp', mul: +(0.02 * lv).toFixed(3) },
+      { stat: 'mpRegen', add: 1 + lv },
+    ],</code></pre>
+  <p><small>Source: <a data-src="src/skills/apprentice.ts#L97-L104">apprentice.ts:97</a></small></p>
+
+  <p><strong>Movement.</strong> Blink teleports 120–200 px in the held direction. It has a short cooldown and a 150 ms
+    lock.</p>
+  <pre><code class="lang-ts">    kind: 'movement',
+    maxLevel: 5,
+    // …
+    mpCost: lv =&gt; 8 + lv,
+    cooldownMs: lv =&gt; 1100 - 30 * lv,
+    castTimeMs: 150,
+    sfx: 'blink',
+    movement: {
+      kind: 'blink',
+      distance: lv =&gt; 120 + 20 * (lv - 1),
+      vfxOut: 'app_blink_out',
+      vfxIn: 'app_blink_in',
+    },</code></pre>
+  <p><small>Source: <a data-src="src/skills/apprentice.ts#L112-L125">apprentice.ts:112</a></small></p>
+
+  <p><strong>Summon.</strong> Wall of Fire is a stationary "summon" whose attack is an <code>aoe_self</code> pulse every
+    600 ms. Persistent fields are written as summons because a summon already gives you a body visual, a lifetime
+    and a repeating attack.</p>
+  <pre><code class="lang-ts">  {
+    id: 'fire_flame_wall', name: 'Wall of Fire', job: 'flamebinder', element: 'fire', kind: 'summon', maxLevel: 15,
+    // …
+    mpCost: Li(30, 42, 15), cooldownMs: L(16000, 12000, 15), castTimeMs: 520, sfx: 'cast_fire',
+    summon: {
+      durationMs: L(8000, 11000, 15), attackIntervalMs: 600, offset: { x: 90, y: 0 }, follow: false, vfx: 'fire_wall',
+      attack: {
+        pattern: 'aoe_self', damagePct: L(80, 120, 15), hits: K(1), maxTargets: K(8), range: 90,
+        area: { w: 140, h: 150, offsetY: -60 },
+        status: burn(15, [0.3, 0.5], [2000, 3000], [8, 12]),
+        vfx: { area: 'fire_wall_pulse', hit: 'fire_hit' },
+      },
+    },
+  },</code></pre>
+  <p><small>Source: <a data-src="src/skills/fire.ts#L233-L247">fire.ts:233</a></small></p>
+
+  <p><strong>The escape hatch.</strong> Holy's Heal is an <code>attack</code> with an <code>onCast</code>. When
+    <code>onCast</code> is present, the engine still checks the cast and pays for it (MP, cooldown, cast lock, sfx and
+    <code>skill:cast</code>), then hands control to the function and runs none of its default behaviour.</p>
+  <pre><code class="lang-ts">  {
+    id: 'holy_heal', name: 'Heal', job: 'cleric', element: 'holy', kind: 'attack', maxLevel: HEAL_MAX,
+    // …
+    attack: HEAL_ATTACK,
+    onCast: (ctx, lv) =&gt; castHeal(ctx, healPct(lv), healMatk(lv), HEAL_ATTACK),
+  },
+
+export function castHeal(ctx: SkillContext, pct: number, matkShare: number, attack: AttackSpec): void {
+  const p = ctx.services.player;
+  const d = ctx.services.progression.derived();
+  playVfx(ctx.scene, 'holy_heal_self', { x: p.x, y: p.y, facing: p.facing, lv: ctx.level });
+  restore(ctx, d.maxHp * pct + d.matk * matkShare, 0);
+  ctx.runAttack(attack, bodyOrigin(ctx));
+}</code></pre>
+  <p><small>Source: <a data-src="src/skills/holy.ts#L98-L105">holy.ts:98</a>,
+    <a data-src="src/skills/holy/casts.ts#L28-L34">holy/casts.ts:28</a></small></p>
+  <p>The <code>attack: HEAL_ATTACK</code> field is still set even though <code>onCast</code> replaces the default
+    behaviour. The spellbook tooltips (<a data-src="src/ui/info.ts#L118">info.ts:118</a>) and the charts read it, and <code>onCast</code> passes the same object to
+    <code>ctx.runAttack</code>, so what the book shows is what the spell does. Shadow's file states the rule in a
+    comment on Soul Drain: "never a second default attack".</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="skills-cast">The cast flow</h3>
+
+  <p>GameScene calls <code>skills.tryCast(id)</code> every frame a hotbar key is held, so holding a key repeats the
+    spell as fast as the cast lock allows. The cast buffer, the hold-to-repeat rule and the hotbar pages are covered
+    in <a href="#input">Input</a>. <code>tryCast</code> makes its checks in a fixed order and stops at the first one
+    that fails:</p>
+
+  <pre><code class="lang-ts">  tryCast(skillId: string): CastResult {
+    const def = Registry.skill(skillId);
+    if (!def) return 'unknown';
+    const s = this.services;
+    const learned = s.progression.state.skills[skillId] ?? 0;
+    if (!(learned &gt; 0)) return 'not_learned';
+    if (def.kind === 'passive') return 'passive';
+    if (s.progression.isDead() || s.player.state === 'dead') return 'dead';
+    if (s.player.isBusy()) return 'busy';
+    if ((this.cooldowns.get(skillId)?.remaining ?? 0) &gt; 0) return 'cooldown';
+    const lv = Math.max(1, Math.min(learned, def.maxLevel || learned));
+    const cost = Math.max(0, Math.round(num(def.mpCost(lv), 0)));
+    if (!s.progression.spendMp(cost)) return 'no_mp';
+
+    const d = s.progression.derived();
+    if (def.cooldownMs) {
+      const cd = num(def.cooldownMs(lv), 0) * (1 - clamp(num(d.cdr, 0), 0, 0.8));
+      if (cd &gt; 0) this.cooldowns.set(skillId, { remaining: cd, total: cd });
+    }
+    const baseCast = def.castTimeMs ?? (def.kind === 'movement' ? 150 : 450);
+    const lock = Math.max(0, Math.round(baseCast * (1 - clamp(num(d.castSpeed, 0), 0, 0.75))));
+    safe(() =&gt; s.player.playCast(lock));
+    if (def.sfx) safe(() =&gt; s.audio.play(def.sfx!));
+    bus.emit('skill:cast', { skillId });
+    safe(() =&gt; this.execute(def, lv));
+    return 'ok';
+  }</code></pre>
+  <p><small>Source: <a data-src="src/systems/SkillSystem.ts#L54-L80">SkillSystem.ts:54</a></small></p>
+
+  <ul>
+    <li><strong>Busy</strong> means the player is dead, on a rope or ladder, in a cast lock, or in hit-stun
+      (<a data-src="src/entities/Player.ts#L185">Player.ts:185</a>). You cannot cast while climbing.</li>
+    <li><strong>Cooldown</strong> is reduced by the derived stat <code>cdr</code>, capped at 80%. It starts the moment
+      the cast succeeds, not when the effect ends.</li>
+    <li><dfn>Cast lock</dfn> is how long the player is frozen in the cast pose: <code>castTimeMs</code> (default
+      450 ms, or 150 ms for movement skills) reduced by <code>castSpeed</code>, capped at 75%.
+      <code>player.playCast(lock)</code> extends the lock, never shortens it, and
+      <strong>stops horizontal movement only when grounded</strong>, so a mid-air cast keeps its momentum
+      (<a data-src="src/entities/Player.ts#L244">Player.ts:244</a>).</li>
+    <li><strong>MP</strong> is spent through <code>progression.spendMp</code>, which returns false (and spends nothing) if
+      the player has too little.</li>
+    <li><code>skill:cast</code> on the event bus is emitted before the spell runs. Today its only listener is the HUD,
+      which flashes the hotbar slot (UIRoot).</li>
+  </ul>
+
+  <p><code>execute</code> then dispatches. If there is an <code>onCast</code> it runs that and nothing else. Otherwise it
+    picks by kind: attacks go to <code>AttackRunner.run</code> from the <dfn>cast point</dfn>, buffs to
+    <code>startBuff</code>, movement to <code>doMovement</code>, summons to <code>spawnSummon</code>. The cast point is
+    the tip of the staff: <code>x = player.x + 18·facing</code>, <code>y = player.y − 34</code>, where
+    <code>player.y</code> is the feet (<code>CAST_OFFSET</code>,
+    <a data-src="src/systems/SkillSystem.ts#L13">SkillSystem.ts:13</a>). The origin also carries
+    <code>groundY</code> (the player's feet) and <code>centerX</code> (the body, not the staff), which
+    <code>rain</code> and <code>aoe_self</code> use.</p>
+
+  <pre class="mermaid">sequenceDiagram
+  participant G as GameScene
+  participant S as SkillSystem
+  participant P as Progression
+  participant PL as Player
+  participant R as AttackRunner
+  participant C as CombatSystem
+  participant M as Monster
+  G->>S: tryCast(id)
+  S->>P: learned? dead?
+  S->>PL: isBusy()?
+  S->>S: cooldown left?
+  S->>P: spendMp(cost)
+  S->>S: start cooldown (x 1-cdr)
+  S->>PL: playCast(lock)
+  S-->>G: skill:cast (bus), sfx
+  S->>R: run(spec, cast point, lv)
+  R->>R: vfx.cast, wait delayMs, find targets
+  loop each target, each hit line (hitIntervalMs apart)
+    R->>C: rollSkillDamage(element, pct, m)
+    C->>M: takeDamage(amount)
+    C->>C: damage number (stacked)
+  end
+  R->>C: tryApplyStatus (after line 1)
+  C->>M: applyStatus(instance)</pre>
+
+  <aside class="note">All timing inside the engine goes through a small <dfn>Scheduler</dfn>
+    (<a data-src="src/systems/skill/util.ts#L23">util.ts:23</a>). It is driven by <code>SkillSystem.update(dt)</code>
+    and does not use Phaser's scene timers. <code>after(ms, fn)</code> with <code>ms &lt;= 0</code> runs immediately.
+    <code>clear()</code> drops everything pending, which is how a map change or the player's death cancels hit lines,
+    chain jumps and rain impacts that have not landed yet.</aside>
+
+  <details class="advanced"><summary>Advanced: order-of-operations invariants in tryCast</summary>
+    <ul>
+      <li><strong>Pay before you act.</strong> MP is spent and the cooldown started <em>before</em>
+        <code>execute</code>. <code>execute</code> is wrapped in <code>safe()</code>, so a spell that throws still
+        returns <code>'ok'</code> and the MP is gone. The error is logged as <code>[skills]</code>. This trade-off is
+        deliberate: a broken spell must never crash the frame loop (ARCHITECTURE rule 8, "never throw in
+        <code>update</code>").</li>
+      <li><strong>The level is clamped once</strong>, to <code>1..maxLevel</code>. Every level function receives a value
+        in range, even for a save that holds a level above the current <code>maxLevel</code> after a rebalance.</li>
+      <li><strong>Checks are cheap first, then stateful.</strong> Nothing changes state until <code>spendMp</code>
+        succeeds, so a <code>'busy'</code> or <code>'cooldown'</code> result is free. GameScene relies on this, because it
+        calls <code>tryCast</code> every frame a key is held.</li>
+      <li><strong>Derived stats are read after paying MP.</strong> <code>cdr</code> and <code>castSpeed</code> come from
+        <code>progression.derived()</code>. A buff that raises cast speed applies to the very next cast after it starts,
+        because <code>startBuff</code> invalidates the derived-stats cache.</li>
+      <li><strong>Every <code>num()</code> is a guard.</strong> Level functions written by other agents could return
+        <code>NaN</code>. <code>num(v, fallback)</code> replaces any non-finite value, so a bad spell degrades to a
+        default and never poisons HP with <code>NaN</code>.</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="skills-patterns">The seven attack patterns</h3>
+
+  <p><code>AttackRunner.run</code> plays <code>vfx.cast</code> at the origin, then switches on the pattern
+    (<a data-src="src/systems/skill/AttackRunner.ts#L73">AttackRunner.ts:73</a>). An unknown pattern logs a warning and
+    does nothing. Every pattern ends in the same place: <code>strike(info, monster, fromX)</code>, which deals all the
+    hit lines to one target. They differ only in <em>where the area is</em> and <em>which monsters fall inside it</em>.</p>
+
+  <table>
+    <thead><tr><th>Pattern</th><th>Area / path</th><th>How targets are chosen</th><th>Defaults when omitted</th></tr></thead>
+    <tbody>
+      <tr><td><code>projectile</code></td><td>Simulated shot from the cast point, travelling up to <code>range</code></td>
+        <td>First monster(s) whose bounds the shot touches. Stops at the first unless <code>pierce</code> (then up to
+          <code>maxTargets</code>). With <code>explodeArea</code>, the first contact or a wall hits everything in that
+          rectangle.</td><td>speed 700, radius 10</td></tr>
+      <tr><td><code>melee_arc</code></td><td>Rectangle <code>area</code> in front, centred <code>offsetX</code> (default
+          <code>w/2</code>) ahead of the cast point</td><td>Everything overlapping, nearest to the caster first, up to
+          <code>maxTargets</code></td><td>area <code>max(80, range)</code> × 100</td></tr>
+      <tr><td><code>aoe_self</code></td><td>Rectangle centred on the caster's <strong>body</strong> (<code>centerX</code>),
+          not the staff tip</td><td>Everything overlapping, nearest to the centre first</td>
+        <td>area <code>max(160, range·2)</code> × 140</td></tr>
+      <tr><td><code>aoe_target</code></td><td>Rectangle centred on the nearest monster in front within <code>range</code>,
+          or at <code>range</code> ahead if none</td><td>Everything overlapping that rectangle</td><td>area 160 × 140</td></tr>
+      <tr><td><code>beam</code></td><td>Rectangle from the cast point, <code>range</code> long, <code>area.h</code>
+          tall</td><td>Everything overlapping, nearest to the origin first</td><td>height 60</td></tr>
+      <tr><td><code>chain</code></td><td>Hops from monster to monster</td><td>Nearest in front first, then the nearest
+          unvisited monster within <code>jumpRange</code> of the last one, until <code>maxTargets</code></td>
+        <td>jumpRange 220, jumpDelayMs 60</td></tr>
+      <tr><td><code>rain</code></td><td><code>count</code> bodies fall onto points spread over <code>spreadX</code></td>
+        <td>Each landing hits a rectangle standing on the ground (<code>w</code> × <code>h</code> above
+          <code>groundY</code>)</td><td>5 bodies, spreadX 300, interval 110 ms, fall 420 px, speed 900, impact
+          100 × 120</td></tr>
+    </tbody>
+  </table>
+
+  <p>"In front" always means the same helper, <code>frontNearest</code>
+    (<a data-src="src/systems/skill/AttackRunner.ts#L145">AttackRunner.ts:145</a>). It looks for a living monster on the
+    facing side (a monster overlapping the caster counts), within <code>range</code> measured to its near edge, and
+    within 140 px vertically (<code>FRONT_MAX_DY</code>). It ranks them by <code>|dx| + 0.6·|dy|</code>, so a foe at
+    the same height wins over a slightly closer one on another platform. The area patterns gather targets with
+    <code>inRect</code>, which sorts by distance from a reference point and keeps the first <code>maxTargets</code>.</p>
+
+  <figure data-chart="attack-patterns"><figcaption>Attack specs by pattern, stacked by School (summon attacks
+    included). Projectile is by far the most common shape. Lightning owns <code>chain</code>, and neither Fire nor Holy
+    has a chain spell. <code>rain</code> appears exactly once per School, as one of its Year-4 ultimates (Meteor Storm,
+    Blizzard, Thunderstorm, Genesis, Night Tide), and never in Year 1.</figcaption></figure>
+
+  <h4 id="skills-projectiles">Projectiles in detail</h4>
+  <ul>
+    <li><strong>Count and fan.</strong> <code>projectile.count(lv)</code> shots are fired. With
+      <code>spreadDeg</code> they leave together in a fan, <code>(i − (count−1)/2) × spreadDeg</code> degrees apart.
+      Without it they are staggered 70 ms apart with a small ±6 px vertical jitter, like a burst.</li>
+    <li><strong>Fans share one hit set</strong>, so each shot in a volley strikes a <em>different</em> foe (Ember
+      Volley: "each strike a different foe"). Without this a five-dart fan would put all five darts into the nearest
+      monster.</li>
+    <li><strong>Gravity and auto-lob.</strong> With <code>gravity &gt; 0</code> the engine adds an upward velocity of
+      <code>gravity·T/2</code>, where <code>T = range / |vx|</code>, so the arc comes back down to launch height at
+      <code>range</code>. The kill distance becomes <code>range × 1.6</code>, measured horizontally. Arcing shots also
+      land on one-way platform tops (Firebomb bursts on "the first enemy or surface it touches").</li>
+    <li><strong>Sub-stepping.</strong> Each frame is split into
+      <code>ceil(speed·dt / max(8, radius))</code> steps so fast needles (Galvanic Needle flies at 1,050 px/s) cannot
+      tunnel through a small monster. The vertical hit test is lenient (<code>max(radius, 18)</code>) so straight shots
+      still hit short slimes.</li>
+    <li><strong>Walls</strong> (map solids) kill the shot, or detonate it if it has <code>explodeArea</code>. Leaving the
+      map or passing <code>range</code> also kills it.</li>
+    <li><strong>Aimed shots.</strong> Summons pass <code>aimAt</code>. Their shots head for the target's centre, with the
+      angle clamped to ±60°.</li>
+  </ul>
+
+  <h4 id="skills-chain-rain">Chain and rain</h4>
+  <p>A <code>chain</code> waits <code>delayMs</code>, picks <code>frontNearest</code>, plays <code>vfx.area</code> as a
+    segment from the origin to the target, strikes, then after <code>jumpDelayMs</code> hops to the nearest unvisited
+    monster within <code>jumpRange</code> of the last target's centre. If nothing is in front it <dfn>fizzles</dfn>:
+    it draws a short segment 45% of <code>range</code> long so the button press still reads on screen.</p>
+  <p>A <code>rain</code> snaps its zone onto the nearest monster in front, unless the author pinned it with
+    <code>area.offsetX</code>. Then it spaces <code>count</code> x positions evenly over <code>spreadX</code>, jitters
+    each one slightly, <strong>shuffles</strong> them (so impacts don't sweep left to right) and drops one every
+    <code>intervalMs</code> from <code>fallHeight</code> above the ground. Falling bodies are projectiles with a
+    <code>faller</code> flag. They ignore monsters mid-air and only resolve on landing, at the walkable surface
+    <code>groundY</code>.</p>
+
+  <h4 id="skills-lines">Hit lines, delays and stacked numbers</h4>
+  <p>MapleStory-style <dfn>multi-hit</dfn> is the heart of the engine. <code>hits(lv)</code> is the number of separate
+    damage lines each target takes from one strike. Each line is rolled on its own and shown as its own number, stacked
+    upward.</p>
+  <pre><code class="lang-ts">  strike(info: CastInfo, m: IMonster, fromX: number, playHit = true): void {
+    const spec = info.spec;
+    const s = this.svc();
+    const lines = Math.max(1, Math.round(num(spec.hits(info.lv), 1)));
+    const interval = Math.max(0, num(spec.hitIntervalMs, 90));
+    const base = info.stacks.get(m.uid) ?? 0;
+    info.stacks.set(m.uid, base + lines);
+
+    let pct = num(spec.damagePct(info.lv), 100);
+    let consume = false;
+    if (spec.bonusVs &amp;&amp; m.hasStatus(spec.bonusVs.status)) {
+      pct *= num(spec.bonusVs.mult, 1);
+      consume = !!spec.bonusVs.consume;
+    }
+    if (playHit &amp;&amp; this.allowHitVfx(spec.vfx.hit)) {
+      // … play vfx.hit once at the target centre
+    }
+    for (let i = 0; i &lt; lines; i++) {
+      this.sched.after(i * interval, () =&gt; {
+        if (!m.alive) return;
+        const r = s.combat.rollSkillDamage(info.element, pct, m);
+        s.combat.damageMonster(m, r.amount, {
+          crit: r.crit, element: info.element, fromX,
+          knockback: i === 0 ? spec.knockback : undefined,
+          stackIndex: base + i,
+        });
+        if (i === 0) {
+          if (consume &amp;&amp; spec.bonusVs) safe(() =&gt; m.removeStatus(spec.bonusVs!.status));
+          if (spec.status &amp;&amp; m.alive) s.combat.tryApplyStatus(m, spec.status, info.lv, info.element, r.amount);
+        }
+      });
+    }
+  }</code></pre>
+  <p><small>Source: <a data-src="src/systems/skill/AttackRunner.ts#L193-L228">AttackRunner.ts:193</a></small></p>
+  <ul>
+    <li><code>delayMs</code> delays the <em>first</em> damage from the cast so it lines up with the VFX (Meteor Storm
+      waits 600 ms, Supernova 650 ms). The area VFX plays at once and the damage lands later.</li>
+    <li><code>hitIntervalMs</code> (default <strong>90 ms</strong>) spaces the lines. Plague Cloud uses 500 ms, so its
+      three lines read as a lingering cloud.</li>
+    <li>Knockback is applied by line 0 only, so a 3-line spell does not shove three times.</li>
+    <li><code>CastInfo.stacks</code> is one map per cast. When a target is struck again by the same cast (a second rain
+      impact, an explosion after a pierce), its new lines carry on stacking above the earlier ones instead of drawing
+      on top of them.</li>
+  </ul>
+
+  <p><a data-src="src/systems/skill/DamageNumbers.ts">DamageNumbers.ts</a> draws the numbers from per-kind glyph atlases
+    built from the CC0 "Kenney Pixel" font (<code>monster</code>, <code>crit</code>, <code>player</code>,
+    <code>heal</code>, <code>mp</code>, <code>miss</code>, <code>dot</code>; <a
+    data-src="src/systems/skill/DamageNumbers.ts#L28">DamageNumbers.ts:28</a>). <code>show</code> lifts each number
+    by <code>(stackIndex % 12) × 26 px</code> times the size setting
+    (<a data-src="src/systems/skill/DamageNumbers.ts#L243">DamageNumbers.ts:243</a>). The objects are pooled, and when
+    more than 90 are alive the oldest is recycled (<code>MAX_ACTIVE</code>,
+    <a data-src="src/systems/skill/DamageNumbers.ts#L41">DamageNumbers.ts:41</a>).</p>
+
+  <details class="advanced"><summary>Advanced: why roll every line separately, and the review fixes</summary>
+    <ul>
+      <li><strong>Per-line rolls</strong> are a feel decision from MapleStory. Every line gets its own
+        <code>rand(mastery..1)</code> roll and its own crit chance, so a 3-line spell shows three different numbers and
+        sometimes one pink crit. The <em>expected</em> total equals one big roll, but the spread is narrower, so
+        multi-hit spells feel more reliable. The roll happens when the line lands, not when the spell is cast, so a
+        shock applied by line 1 (or by another spell in between) raises lines 2 and 3.</li>
+      <li><strong><code>bonusVs</code> is decided once per strike</strong>, before any line lands, so <em>all</em> lines
+        of Combust (burn ×2.4, consumed) get the bonus even though line 0 removes the burn. A second strike from the same
+        cast (another rain impact) no longer sees the status.</li>
+      <li><strong>The status uses line 0's actual damage as its base.</strong> Burn and poison potency is "% of the hit".
+        The hit passed in is <code>r.amount</code>, already through crit, weakness, shock and the monster's flat
+        <code>def</code>. A crit on the first line therefore means a stronger burn.</li>
+      <li><strong>Fan volleys spread across distinct foes</strong> (the "Codex review fixes" commit). A fan advertises
+        "N targets × damage", not "N × damage on one target", so <code>runProjectile</code> gives every shot of a fanned
+        volley one shared <code>hitSet</code>
+        (<a data-src="src/systems/skill/AttackRunner.ts#L375">AttackRunner.ts:375</a>). Staggered bursts (a
+        <code>count</code> with no <code>spreadDeg</code>) keep one hit set per shot, so every shot may hit the same
+        target. No current spell uses that mode: Ember Volley, Glacial Lance and Prism all fan.</li>
+      <li><strong>Fields wake on their rectangle.</strong> The same commit fixed stationary <code>aoe_self</code>
+        summons such as Wall of Fire. They only attacked when a monster was within <code>w/2</code> of their centre, a
+        circle smaller than their rectangle. Now the wake-up reach is the rectangle's half-diagonal,
+        <code>hypot(w/2, h/2)</code>, and the vertical tolerance is <code>max(160, h/2 + 20)</code>
+        (<a data-src="src/systems/SkillSystem.ts#L220-L223">SkillSystem.ts:220</a>).</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="skills-vfx">VFX conventions</h3>
+
+  <p>Spells name their visuals by string key. The keys resolve through a global registry in
+    <a data-src="src/core/vfx.ts">src/core/vfx.ts</a>. A <dfn>VFX function</dfn> receives the scene and a
+    <code>VfxOptions</code> (position, facing, optional target point, area size, level, projectile angle and
+    <code>groundY</code>, the walkable surface under the effect). It draws something.</p>
+  <pre><code class="lang-ts">export function registerVfx(key: string, fn: VfxFn): void {
+  if (registry.has(key)) console.warn(`[vfx] duplicate key ${key} (overwriting)`);
+  registry.set(key, fn);
+}
+
+export function hasVfx(key: string): boolean { return registry.has(key); }
+
+/** Play a VFX. Missing keys fall back to a generic puff so nothing crashes. */
+export function playVfx(scene: Phaser.Scene, key: string | undefined, o: VfxOptions): Phaser.GameObjects.GameObject | void {
+  if (!key) return;
+  const fn = registry.get(key);
+  if (fn) return fn(scene, o);
+  if (!warned.has(key)) { warned.add(key); console.warn(`[vfx] missing key "${key}"`); }
+  const c = scene.add.circle(o.x, o.y, 10, 0xffffff, 0.8).setDepth(DEPTH.VFX);
+  scene.tweens.add({ targets: c, scale: 2.5, alpha: 0, duration: 250, onComplete: () =&gt; c.destroy() });
+}</code></pre>
+  <p><small>Source: <a data-src="src/core/vfx.ts#L9-L24">vfx.ts:9</a></small></p>
+
+  <p>There are two kinds of effect. A <dfn>one-shot</dfn> (cast flash, hit spark, area burst) cleans itself up with
+    tweens or timers and returns nothing. A <dfn>persistent visual</dfn> (projectile body, buff aura, summon body)
+    <strong>returns its GameObject</strong>, and from then on the engine owns it. The engine moves it every frame and
+    destroys it when the projectile lands, the buff ends or the summon expires. The VFX author never manages that
+    lifetime. Each slot is called with fixed arguments:</p>
+
+  <table>
+    <thead><tr><th>Slot</th><th>Played</th><th>Position and options</th></tr></thead>
+    <tbody>
+      <tr><td><code>vfx.cast</code></td><td>Once, when the spec runs</td><td>Cast point, <code>facing</code></td></tr>
+      <tr><td><code>vfx.projectile</code></td><td>Per shot, persistent</td><td>Drawn pointing <strong>right (+x)</strong> at
+          rotation 0. The engine sets <code>x/y</code> and <code>rotation</code> each frame. When heading left it
+          mirrors <code>scaleY</code> so asymmetric art is not drawn upside down (<code>poseProj</code>,
+          <a data-src="src/systems/skill/AttackRunner.ts#L45">AttackRunner.ts:45</a>). Rain bodies get
+          <code>angle = π/2</code> (pointing down).</td></tr>
+      <tr><td><code>vfx.hit</code></td><td>Once per target per strike, not per line</td><td>Target centre, <code>h</code> =
+          target height, <code>groundY</code> = target feet</td></tr>
+      <tr><td><code>vfx.area</code></td><td>Depends on the pattern</td><td>melee_arc / aoe_self / aoe_target / explosion:
+          area centre with <code>w</code>, <code>h</code>, <code>groundY</code>. Beam: <code>x,y</code> = start,
+          <code>targetX,targetY</code> = end, <code>h</code>. Chain: once per hop, from → to. Rain: once per impact at
+          the ground point.</td></tr>
+      <tr><td><code>buff.vfx</code> / <code>auraVfx</code></td><td>Cast / persistent</td><td>Player feet. The aura follows
+          the feet and facing every frame.</td></tr>
+      <tr><td><code>summon.vfx</code></td><td>Persistent body</td><td>Summon position. Flipped with
+          <code>scaleX = |scaleX|·facing</code>.</td></tr>
+      <tr><td><code>vfxOut</code> / <code>vfxIn</code></td><td>Movement</td><td>Old feet / new feet, each with the other
+          end as <code>targetX,targetY</code></td></tr>
+    </tbody>
+  </table>
+
+  <p>When a projectile has no <code>vfx.projectile</code> key, the engine draws a soft violet glow. If its
+    <code>playVfx</code> returns nothing, the engine uses an invisible <code>zone</code>, so the shot still flies and hits
+    without any art. Auras and summon bodies have no fallback: the buff or summon still works, it just isn't drawn.</p>
+
+  <h4 id="skills-school-vfx">Per-School VFX modules</h4>
+  <p>Each School registers its keys in its own module. Every key carries the School's prefix, which is also the skill
+    id prefix:</p>
+  <table>
+    <thead><tr><th>Prefix</th><th>Registration</th><th>Drawing code</th></tr></thead>
+    <tbody>
+      <tr><td><code>app_</code></td><td><code>registerApprenticeVfx</code> in <a data-src="src/skills/apprentice.ts#L925">apprentice.ts</a> (eager)</td><td>same file</td></tr>
+      <tr><td><code>fire_</code></td><td><a data-src="src/skills/fireVfx.ts#L1033">fireVfx.ts</a></td><td><code>src/skills/fire/</code></td></tr>
+      <tr><td><code>ice_</code></td><td><a data-src="src/skills/iceVfx.ts">iceVfx.ts</a></td><td><code>src/skills/ice/</code></td></tr>
+      <tr><td><code>ltn_</code></td><td><a data-src="src/skills/lightningVfx.ts">lightningVfx.ts</a></td><td><code>src/skills/lightning/</code></td></tr>
+      <tr><td><code>holy_</code></td><td><a data-src="src/skills/holyVfx.ts">holyVfx.ts</a></td><td><code>src/skills/holy/</code></td></tr>
+      <tr><td><code>shd_</code></td><td><a data-src="src/skills/shadowVfx.ts#L18">shadowVfx.ts</a></td><td><code>src/skills/shadow/</code></td></tr>
+    </tbody>
+  </table>
+  <p>The five School modules do not call <code>registerVfx</code> directly. They wrap it with
+    <code>lazyRegister(school, generate)</code> (<a data-src="src/art/lazy.ts#L74">lazy.ts:74</a>), so the first play of
+    any key in a School builds that School's textures first. The textures are usually already built in the background
+    while the Title screen is up (<a href="#art">Art</a> covers lazy generation). Shadow's registration shows the
+    one-shot and persistent split in practice. Braces around a call throw away its return value. A bare function
+    reference returns the object to the engine:</p>
+  <pre><code class="lang-ts">/** One-shots deliberately discard their sprites; only engine-owned visuals return an object. */
+export function registerShadowVfx(): void {
+  registerVfx('shd_cast', (scene, o) =&gt; { cast(scene, o); });
+  registerVfx('shd_hit', (scene, o) =&gt; { hit(scene, o); });
+  registerVfx('shd_curse_hit', (scene, o) =&gt; { hit(scene, o, true); });
+  registerVfx('shd_bolt_proj', (scene, o) =&gt; bolt(scene, o));
+  registerVfx('shd_hex_area', (scene, o) =&gt; { hex(scene, o); });
+  registerVfx('shd_pact_cast', (scene, o) =&gt; { buffCast(scene, o); });
+  registerVfx('shd_pact_aura', (scene, o) =&gt; aura(scene, o));
+  // …</code></pre>
+  <p><small>Source: <a data-src="src/skills/shadowVfx.ts#L17-L25">shadowVfx.ts:17</a></small></p>
+
+  <aside class="warn">A persistent visual is destroyed by the engine without warning, sometimes with a short alpha fade
+    (auras 200 ms, summons 250 ms). If it spawned anything that is not its child, such as a particle trail that follows
+    it, clean that up when it is destroyed. Arcane Bolt's trail stops itself with an <code>onDispose</code> hook on the
+    container and is destroyed 450 ms later. A persistent visual must also never tween its own <code>x</code>,
+    <code>y</code>, <code>rotation</code> or <code>scaleX</code>, because the engine overwrites them every frame.
+    Animate child objects instead, as Shadow's auras do ("only children bob").</aside>
+
+  <details class="advanced"><summary>Advanced: the hit-VFX throttle</summary>
+    <p>A Year-4 ultimate can strike 12–15 monsters with 3–4 lines each, and a rain hits on every impact. Before the perf
+      pass every strike spawned a hit effect, enough particle emitters to drop frames on a crowded map. Since the perf
+      commit, <code>allowHitVfx</code> allows at most <strong>14 hit effects per 100 ms window</strong>. The first
+      effect of each <em>distinct</em> key in a window always plays, so a second spell landing at the same moment still
+      shows its own hit.</p>
+    <pre><code class="lang-ts">/** Hit-VFX throttle: at most this many hit effects per window (the first of each distinct key always plays). */
+const HIT_VFX_WINDOW_MS = 100;
+const HIT_VFX_PER_WINDOW = 14;</code></pre>
+    <p><small>Source: <a data-src="src/systems/skill/AttackRunner.ts#L57-L59">AttackRunner.ts:57</a></small></p>
+    <p>Only visuals are throttled. Damage, numbers and statuses always happen. Hit and crit <em>sounds</em> have their own
+      throttle in <code>CombatSystem.damageMonster</code>: at most one <code>monster_hit</code> every 55 ms and one
+      <code>monster_crit</code> every 80 ms. DoT ticks make no sound.</p>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="skills-buffs">Buffs, passives, summons and movement</h3>
+
+  <h4 id="skills-buffs-detail">Buffs</h4>
+  <p>A buff is a timed set of <code>StatModifier</code>s (<code>{ stat, add?, mul? }</code>). Progression combines all
+    modifiers as <code>final = (base + Σadd) × (1 + Σmul)</code> (see <a href="#progression">Progression</a>).
+    <code>startBuff</code> stores the modifiers for the cast level, plays <code>buff.vfx</code> at the feet, creates the
+    aura, and calls <code>buffsChanged()</code>. That calls <code>progression.invalidate()</code> and emits
+    <code>player:changed</code>, which the UI uses to redraw the buff bar and stats.</p>
+  <ul>
+    <li><strong>Recasting refreshes</strong> an active buff: the duration resets to the new total and the modifiers are
+      recomputed. The aura is kept if it is still alive. Buffs do not stack with themselves.</li>
+    <li><strong>Expiry</strong> runs <code>endBuff</code>, which fades the aura over 200 ms, deletes the buff and
+      invalidates again. <code>cancelBuff(id)</code> calls the same function, for UI or scripted removal.</li>
+    <li><strong>Map changes</strong> keep buffs. <code>clearWorld()</code> destroys the auras (they belong to the old
+      scene objects) and marks them <code>needsAura</code>, and the next <code>update</code> rebuilds them on the new
+      map.</li>
+    <li><strong>Death</strong> clears all buffs and summons (<code>onPlayerDied</code>).</li>
+  </ul>
+  <p>Derived stats are cached, so the cache must be cleared whenever a modifier source changes. The engine pushes
+    buff modifiers through <code>getBuffModifiers()</code>, which Progression reads while recomputing
+    (<a data-src="src/systems/Progression.ts#L68">Progression.ts:68</a>). That is why every buff start and end has to
+    call <code>invalidate()</code>.</p>
+
+  <h4 id="skills-passives">Passives</h4>
+  <p>The engine does almost nothing for passives: <code>tryCast</code> answers <code>'passive'</code> and that is all.
+    Progression's <code>persistentModifiers</code> walks every learned skill with a <code>passive</code> function and
+    adds its modifiers next to the equipment modifiers
+    (<a data-src="src/systems/progression/stats.ts#L49">stats.ts:49</a>). Passives have no cast event, so a few
+    Schools make them visible by checking for them inside another spell's <code>onCast</code>. Lightning's
+    <code>studiedAttack</code> plays a Live Wire or Perfect Conductor sigil on the cast if those passives are learned
+    (<a data-src="src/skills/lightning.ts#L23">lightning.ts:23</a>).</p>
+
+  <h4 id="skills-summons">Summons</h4>
+  <p>Only one copy of each summon exists at a time. Recasting destroys the old one first. Different summons do
+    coexist, so a Necromancer can have a skeleton and a wraith out together. <code>spawnSummon</code> places the body at
+    <code>player + offset</code> (with <code>x</code> mirrored by facing) and arms the first attack after
+    <code>min(400, attackIntervalMs)</code>, so a fresh summon acts almost at once. Each frame
+    <code>updateSummon</code>:</p>
+  <ol>
+    <li>counts down the lifetime and destroys the summon with a 250 ms fade at zero;</li>
+    <li>if <code>follow</code> is set, moves it toward <code>player + offset</code> with frame-rate-independent easing
+      (<code>k = 1 − e^(−6·dt)</code>, so about 6 per second) and copies the player's facing unless it has just attacked.
+      Stationary summons (<code>follow: false</code>, such as Wall of Fire and Raise Skeleton) stay where they were
+      cast;</li>
+    <li>when the attack timer fires (no faster than every 100 ms), finds the nearest monster <em>in any direction</em>
+      (<code>nearestAny</code>), turns to face it (and holds that facing for 600 ms), and runs its
+      <code>AttackSpec</code> from its own position with <code>aimAt</code> set to the target's centre.</li>
+  </ol>
+  <pre><code class="lang-ts">      const atk = spec.attack;
+      // aoe_self fields (e.g. Wall of Fire) wake for anything inside their rectangle, not just a w/2 circle.
+      const halfW = num(atk.area?.w, 0) / 2, halfH = num(atk.area?.h, 0) / 2;
+      const reach = Math.max(num(atk.range, 300), atk.pattern === 'aoe_self' ? Math.hypot(halfW, halfH) : 0);
+      const target = this.runner.nearestAny(sm.x, sm.y, reach, Math.max(160, halfH + 20));
+      if (target) {
+        const c = monsterCenter(target);
+        sm.facing = c.x &gt;= sm.x ? 1 : -1;
+        sm.faceLockMs = 600;
+        this.runner.run(atk, { x: sm.x, y: sm.y, facing: sm.facing, groundY: target.y, aimAt: c }, sm.lv, sm.def.element, sm.def.id);
+      }</code></pre>
+  <p><small>Source: <a data-src="src/systems/SkillSystem.ts#L219-L229">SkillSystem.ts:219</a></small></p>
+  <p>If no monster is in reach the summon skips that tick and tries again one interval later. Summon damage goes through
+    the same <code>strike</code> and the same combat math as the player's own spells, using the player's current
+    <code>matk</code>.</p>
+
+  <h4 id="skills-movement">Movement</h4>
+  <p><code>doMovement</code> reads the held direction from <code>player.getAimDir()</code>: horizontal wins, then
+    vertical, and with nothing held the player blinks forward. It plays <code>vfxOut</code> at the old feet, calls
+    <code>player.blink(dx, dy)</code> and plays <code>vfxIn</code> at wherever the player actually ended up. The player
+    keeps the blink inside the map and stops it at the last spot that does not overlap a solid, as covered in
+    <a href="#physics">Physics</a>. Fancier movement
+    spells (Flame Dash, Holy Step, Flash Relay) use <code>onCast</code> to copy this logic and then add damage or
+    healing along the path.</p>
+
+  <h4 id="skills-oncast">onCast: heals, drains and fields</h4>
+  <p><code>onCast(ctx, lv)</code> receives a <code>SkillContext</code>: the scene, all services, the def, the level, and
+    <code>runAttack(spec, origin)</code> (<a data-src="src/systems/SkillSystem.ts#L87">SkillSystem.ts:87</a>).
+    <code>runAttack</code> is the same <code>AttackRunner.run</code> the engine uses, with <code>groundY</code> set to
+    the player's feet and <code>centerX</code> set to <code>origin.x</code>. Custom spells therefore get every pattern,
+    stacked numbers, statuses and VFX conventions for free, and only write the part that is really custom:</p>
+  <ul>
+    <li><strong>Heals</strong> call <code>progression.heal(hp, mp)</code>, measure what actually landed (HP is capped at
+      max) and show it with <code>combat.showNumber(x, y, amount, 'heal')</code>. Holy's <code>restore()</code> helper
+      does both.</li>
+    <li><strong>Drains</strong> (Soul Drain) run an attack and heal a % of max HP on cast.</li>
+    <li><strong>Costs in HP</strong> (Immolation) take up to 6% of max HP but never the last point, then attack.</li>
+    <li><strong>Fields</strong> (Consecration) run an <code>aoe_self</code> every 800 ms from a fixed point
+      (<a data-src="src/skills/holy/casts.ts#L78">holy/casts.ts:78</a>).</li>
+  </ul>
+  <p>For an <code>aoe_self</code> centred on the mage, pass the <em>body</em> as the origin
+    (<code>{ x: p.x, y: p.y − 34 }</code>, Holy's <code>bodyOrigin</code>). Pass the staff tip
+    (<code>p.x + 18·facing</code>) for anything that should start in front.</p>
+
+  <details class="advanced"><summary>Advanced: who owns the lifetime of a custom effect</summary>
+    <p>Anything an <code>onCast</code> starts with <code>runAttack</code> lives on the engine's Scheduler, so it is
+      cancelled by <code>clearWorld</code> (map change) and on death. Anything it starts <em>itself</em> does not. Consecration
+      uses a Phaser <code>time.addEvent</code> for its ticks, so it has to end itself. It checks
+      <code>currentMap() !== map</code> and <code>isDead()</code> on every tick, subscribes to <code>map:changed</code>
+      and <code>player:died</code>, ends on scene <code>SHUTDOWN</code> (added by the "Codex review fixes" commit), and
+      keeps a module-level <code>endActiveField</code> so a second cast replaces the first field instead of stacking
+      two. If you write a new persistent effect in <code>onCast</code>, either express it as a summon (the engine
+      cleans up) or copy all four of those exits.</p>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="skills-combat">Combat math</h3>
+
+  <p>ARCHITECTURE.md gives the damage formula for one hit line:</p>
+  <pre><code class="lang-ts">hit = matk × pct/100 × rand(mastery..1) × (1 + dmgAll + dmgElem) × elemMult × critMult × target.incomingDamageMult() − target.def.def   // min 1</code></pre>
+  <p>The code in <code>rollSkillDamage</code> follows it term by term:</p>
+  <pre><code class="lang-ts">  rollSkillDamage(element: Element, damagePct: number, target: IMonster): { amount: number; crit: boolean } {
+    const d = this.derived();
+    const matk = num(d?.matk, 10);
+    const mastery = clamp(num(d?.mastery, 0.5), 0, 1);
+    const roll = mastery + Math.random() * (1 - mastery);
+    const elemBonus = element === 'fire' ? num(d?.dmgFire, 0) : element === 'ice' ? num(d?.dmgIce, 0)
+      : element === 'lightning' ? num(d?.dmgLightning, 0) : element === 'holy' ? num(d?.dmgHoly, 0)
+      : element === 'shadow' ? num(d?.dmgShadow, 0) : 0;
+    const def = target.def;
+    let elemMult = 1;
+    if (element !== 'neutral') {
+      if (def.weak?.includes(element)) elemMult = 1.5;
+      else if (def.resist?.includes(element)) elemMult = 0.5;
+    }
+    const crit = Math.random() &lt; clamp(num(d?.critRate, 0), 0, 1);
+    const critMult = crit ? 1 + Math.max(0, num(d?.critDmg, 0.5)) : 1;
+    let incoming = 1;
+    try { incoming = num(target.incomingDamageMult(), 1); } catch { /* ignore */ }
+    const raw = matk * (num(damagePct, 100) / 100) * roll * Math.max(0, 1 + num(d?.dmgAll, 0) + elemBonus)
+      * elemMult * critMult * incoming - num(def.def, 0);
+    return { amount: Math.max(1, Math.round(raw)), crit };
+  }</code></pre>
+  <p><small>Source: <a data-src="src/systems/CombatSystem.ts#L26-L47">CombatSystem.ts:26</a></small></p>
+
+  <table>
+    <thead><tr><th>Term</th><th>Where it comes from</th><th>Notes from the code</th></tr></thead>
+    <tbody>
+      <tr><td><code>matk</code></td><td>Derived stats (INT, gear, buffs)</td><td>Falls back to 10 if Progression cannot be
+          read</td></tr>
+      <tr><td><dfn>mastery</dfn> roll</td><td>Derived <code>mastery</code>, 0..1</td><td>Uniform in
+          <code>[mastery, 1]</code>. Raising mastery raises the floor, not the ceiling.</td></tr>
+      <tr><td><code>1 + dmgAll + dmgElem</code></td><td>Passives and buffs</td><td>Additive with each other. The element
+          bonus matches the spell's element. Neutral spells get <code>dmgAll</code> only. Never below 0.</td></tr>
+      <tr><td><code>elemMult</code></td><td><code>MonsterDef.weak</code> / <code>resist</code></td><td>×1.5 weak, ×0.5
+          resist. Weak is checked first. Neutral is never weak or resisted.</td></tr>
+      <tr><td><code>critMult</code></td><td><code>critRate</code>, <code>critDmg</code></td><td><code>1 + critDmg</code> on
+          a crit (default critDmg 0.5, so ×1.5)</td></tr>
+      <tr><td><code>incomingDamageMult()</code></td><td>The monster's statuses</td><td>Shock and curse, multiplied
+          together</td></tr>
+      <tr><td><code>− def.def</code></td><td><code>MonsterDef.def</code></td><td>Flat, subtracted <em>after</em> every
+          multiplier, then <code>max(1, round(...))</code></td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>Worked example.</strong> At level 30 the reference magic attack is <code>refMatk(30) = 12 + 5·30 = 162</code>
+    (<a data-src="src/core/balance.ts#L22">balance.ts:22</a>). A 300% fire line with a roll of 0.8, +20% fire damage,
+    against a fire-weak monster with <code>def</code> 4, no crit: <code>162 × 3 × 0.8 × 1.2 × 1.5 − 4 = 695.84</code>,
+    which rounds to <strong>696</strong>.</p>
+
+  <p><code>damageMonster</code> then rounds the amount and shows <code>MISS</code> for 0 (this only happens for
+    callers that pass 0, since <code>rollSkillDamage</code> never returns less than 1). It turns knockback into a signed
+    push away from <code>fromX</code>, calls <code>target.takeDamage</code>, shows the number at the top of the target's
+    bounds, and emits <code>monster:damaged</code> on the bus. The monster handles everything after that: flash, hit
+    animation, aggro, and death followed by <code>monster:killed</code> (see <a href="#monsters">Monsters</a>).</p>
+
+  <figure data-chart="school-budgets"><figcaption>Every attack and summon at max level: damage % × hit lines per target
+    per cast, by School and Year (log scale). The ceiling roughly doubles each Year. Year 1 sits between 85% and 184%,
+    and Year-4 ultimates go past 1,000% (Supernova: 520% × 3 lines = 1,560%; Judgment: 330% × 4 = 1,320%). Two kinds of
+    point need care. Rain values are <em>per impact</em> and read low: one target can be hit by several of Blizzard's
+    36 or Thunderstorm's 24 impacts. Summons (hollow rings) read high: their value is one attack times the number of
+    attacks over the summon's whole duration (<code>durationMs / attackIntervalMs</code>), spread over many seconds.
+    Hover a point for its pattern, targets, cooldown and MP.</figcaption></figure>
+
+  <h4 id="skills-player-hits">When monsters hit the player</h4>
+  <p>Every source of player damage goes through <code>combat.hitPlayer(raw, fromX)</code>: contact damage from
+    MonsterManager, and the Lich Archon's and field bosses' attacks. The caller applies the monster's curse first by
+    multiplying with <code>outgoingDamageMult()</code>, i.e. <code>× (1 − curse)</code> (<a
+    data-src="src/systems/MonsterManager.ts#L276-L277">MonsterManager.ts:276</a>). Then:</p>
+  <pre><code class="lang-ts">    if (s.progression.isDead() || p.state === 'dead' || p.isInvulnerable()) return;
+    const d = this.derived();
+    const def = Math.max(0, num(d?.def, 0));
+    const variance = 0.9 + Math.random() * 0.2;
+    const total = Math.max(1, Math.round(Math.max(1, num(raw, 1) * (1 - def / (def + DEF_K))) * variance));
+    const shield = clamp(num(d?.mpShield, 0), 0, 0.95);
+    let mpPaid = 0;
+    if (shield &gt; 0) mpPaid = Math.min(Math.round(total * shield), Math.max(0, Math.floor(s.progression.state.mp)));
+    const hpLoss = Math.max(0, total - mpPaid);</code></pre>
+  <p><small>Source: <a data-src="src/systems/CombatSystem.ts#L104-L112">CombatSystem.ts:104</a></small></p>
+  <ul>
+    <li><strong>Player defence uses diminishing returns</strong>, not flat subtraction: damage × <code>(1 − def/(def + 120))</code>
+      (<code>DEF_K</code>, <a data-src="src/systems/CombatSystem.ts#L8">CombatSystem.ts:8</a>). 120 def halves damage, and
+      240 def removes two thirds. A ±10% variance follows.</li>
+    <li><strong>MP shield</strong> (Mana Shield, Ember Ward…) moves up to 95% of the hit onto MP, as long as there is MP to
+      pay with. Both numbers are shown, stacked: purple HP, blue MP.</li>
+    <li><strong>I-frames.</strong> <code>player.onHit(fromX)</code> plays the hit reaction and starts 1,500 ms of
+      invulnerability (<code>iFramesMs</code>, <a data-src="src/entities/player/tuning.ts#L39">tuning.ts:39</a>).
+      MonsterManager deals at most one contact hit per frame and skips the check entirely while the player is
+      invulnerable.</li>
+    <li>HP is lost last, through <code>progression.loseHp</code>, which handles death (see
+      <a href="#progression">Progression</a>).</li>
+  </ul>
+
+  <!-- ===================================================================== -->
+  <h3 id="skills-statuses">Statuses</h3>
+
+  <p>A <dfn>status</dfn> is a timed condition on a monster. Spells carry a <code>StatusSpec</code> with three level
+    functions: <code>chance</code>, <code>durationMs</code> and <code>potency</code>. When line 0 of a strike lands,
+    <code>combat.tryApplyStatus</code> rolls the chance, checks immunity, converts the spec into a concrete
+    <code>StatusInstance</code>, and hands it to <code>monster.applyStatus</code>. The monster then ticks it, slows or
+    locks its AI, and tints itself.</p>
+
+  <pre><code class="lang-ts">  tryApplyStatus(target: IMonster, spec: StatusSpec, lv: number, element: Element, baseHit: number): void {
+    if (!target || !target.alive || !spec) return;
+    const chance = clamp(num(spec.chance(lv), 0), 0, 1);
+    if (Math.random() &gt;= chance) return;
+    if (target.def.immune?.includes(spec.kind)) return;
+    let duration = Math.max(0, num(spec.durationMs(lv), 0));
+    if (duration &lt;= 0) return;
+    const isBoss = !!target.def.boss || target.def.behavior === 'boss';
+    if (isBoss &amp;&amp; (spec.kind === 'freeze' || spec.kind === 'stun')) duration *= 0.5;
+    const rawPot = num(spec.potency(lv), 0);
+    let potency: number;
+    switch (spec.kind) {
+      case 'burn':
+      case 'poison': potency = Math.max(1, Math.round((num(baseHit, 1) * rawPot) / 100)); break;
+      case 'curse': potency = clamp(rawPot, 0, 0.6); break;
+      case 'chill': potency = clamp(rawPot, 0, 0.9); break;
+      case 'shock': potency = Math.max(0, rawPot); break;
+      default: potency = rawPot;
+    }
+    // … build the StatusInstance and call target.applyStatus(inst)
+  }</code></pre>
+  <p><small>Source: <a data-src="src/systems/CombatSystem.ts#L77-L98">CombatSystem.ts:77</a></small></p>
+
+  <table>
+    <thead><tr><th>Status</th><th>Spec potency means</th><th>Becomes</th><th>Effect on the monster
+      (<a data-src="src/entities/Monster.ts">Monster.ts</a>)</th><th>School</th></tr></thead>
+    <tbody>
+      <tr><td><code>burn</code></td><td>% of the hit per tick (e.g. 20 = 20%)</td><td>Damage per tick, at least 1</td>
+        <td>Every 500 ms, <code>damageMonster(…, { kind: 'dot' })</code>: small orange numbers, no sound. Flickering
+          orange tint, ember motes.</td><td>Fire</td></tr>
+      <tr><td><code>poison</code></td><td>% of the hit per tick</td><td>Damage per tick, at least 1</td><td>Same as burn on its
+          own 500 ms clock. Green tint, puffs.</td><td>Shadow</td></tr>
+      <tr><td><code>chill</code></td><td>Fraction of speed removed</td><td>Clamped 0..0.9</td><td>AI speed ×
+          <code>clamp(1 − p, 0.1, 1)</code> (<a data-src="src/entities/Monster.ts#L310">Monster.ts:310</a>). Blue
+          tint, snow motes.</td><td>Ice (also Frost Primer, Dread Pulse)</td></tr>
+      <tr><td><code>freeze</code></td><td>Unused</td><td>0</td><td><dfn>Locked</dfn>: velocity zeroed, animation paused, no
+          contact damage, no hit-stun or knockback. Ice-crystal shell that shatters on expiry.</td><td>Ice</td></tr>
+      <tr><td><code>stun</code></td><td>Unused</td><td>0</td><td>Locked like freeze, but the idle animation keeps playing,
+          with circling stars</td><td>Holy (one Lightning, one Shadow)</td></tr>
+      <tr><td><code>shock</code></td><td>Fraction of extra damage taken</td><td>At least 0, no upper cap</td><td>Skill
+          hits × <code>(1 + p)</code> via <code>incomingDamageMult()</code>. Yellow flicker, sparks.</td><td>Lightning</td></tr>
+      <tr><td><code>curse</code></td><td>Fraction, 0..0.6</td><td>Clamped 0..0.6</td><td>Takes × <code>(1 + p)</code> skill
+          damage and deals × <code>(1 − p)</code> damage (contact and boss attacks). Violet tint.</td><td>Shadow</td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>Re-applying</strong> a status that is already active does not stack. The monster keeps the longer remaining
+    duration and the higher potency, and takes the new element (<a
+    data-src="src/entities/Monster.ts#L177">Monster.applyStatus, Monster.ts:177</a>). Shock and curse on the same target
+    do multiply: a 0.3 shock and a 0.3 curse give ×1.69. A status ends after its duration runs out, when the monster
+    dies, or when a <code>bonusVs</code> with <code>consume: true</code> removes it.</p>
+
+  <h4 id="skills-bonusvs">bonusVs and consume: combos</h4>
+  <p><code>bonusVs: { status, mult, consume? }</code> multiplies a strike's damage % against a target that has the
+    status. With <code>consume</code> the status is removed after line 0. This is how each School builds a
+    two-step combo:</p>
+  <table>
+    <thead><tr><th>Spell</th><th>Needs</th><th>Mult</th><th>Consumes</th></tr></thead>
+    <tbody>
+      <tr><td>Combust (Fire)</td><td>burn</td><td>×2.4</td><td>yes</td></tr>
+      <tr><td>Supernova (Fire)</td><td>burn</td><td>×1.5</td><td>yes</td></tr>
+      <tr><td>Shatter (Ice)</td><td>freeze</td><td>×2.8</td><td>yes</td></tr>
+      <tr><td>Absolute Zero (Ice)</td><td>freeze</td><td>×1.4</td><td>yes</td></tr>
+      <tr><td>Overload (Lightning)</td><td>shock</td><td>×2</td><td>no</td></tr>
+      <tr><td>Death Scythe (Shadow)</td><td>curse</td><td>×1.6</td><td>no</td></tr>
+      <tr><td>Oblivion Lance (Shadow)</td><td>poison</td><td>×1.25</td><td>no</td></tr>
+    </tbody>
+  </table>
+  <p>Consuming bonuses are the big detonations, and you have to set them up again. Non-consuming ones reward keeping a
+    debuff on the target. Removing a freeze plays the shell's shatter effect, so Shatter looks right without its own
+    code.</p>
+
+  <figure data-chart="status-mix"><figcaption>Spells that can apply each status, stacked by School. Each School owns its
+    status: burn is Fire only, freeze Ice only, shock Lightning only, and poison and curse Shadow only. Stun is almost
+    all Holy, its control tool. Shadow spreads across the most statuses (poison, curse, chill and stun), which fits its
+    attrition identity.</figcaption></figure>
+
+  <details class="advanced"><summary>Advanced: status edge cases and the two boss rules</summary>
+    <ul>
+      <li><strong>Bosses are protected from freeze and stun in layers.</strong> <code>tryApplyStatus</code> halves the
+        duration for <code>def.boss</code> or <code>behavior === 'boss'</code>. Then <code>Monster.applyStatus</code>
+        caps it at 2,500 ms for <code>def.boss</code>, so a 3,500 ms Judgment stun becomes 1,750 ms on the Lich Archon.
+        Field bosses override <code>applyStatus</code> again: they cap the lock at 1,500 ms, refuse a new one while
+        locked, and then ignore freeze and stun for 4 s (<a
+        data-src="src/entities/monsters/FieldBoss.ts#L392">FieldBoss.ts:392</a>), so they cannot be chain-locked.
+        Bosses also skip hit-stun and knockback in <code>takeDamage</code>.</li>
+      <li><strong>Immunity is checked twice</strong>, in CombatSystem and again in <code>Monster.applyStatus</code>. The
+        second check keeps the monster safe even if a caller skips CombatSystem.</li>
+      <li><strong>DoT ticks skip the damage formula.</strong> Burn and poison ticks call <code>damageMonster</code> with
+        the stored potency, so shock, curse, weakness, crits and the monster's flat <code>def</code> do <em>not</em>
+        change a tick. Those multipliers only matter once, through line 0's damage when the DoT is applied.</li>
+      <li><strong>Ticks are accumulator-based</strong> (<code>burnAcc</code>, <code>poisonAcc</code>,
+        <a data-src="src/entities/Monster.ts#L472">Monster.ts:472</a>). The monster's <code>update</code> clamps
+        <code>delta</code> to 50 ms, and a <code>while</code> loop catches up any missed 500 ms ticks, so a slow frame
+        never loses DoT damage. Each accumulator resets only when the status is newly applied, not when it is refreshed.</li>
+      <li><strong>Locked monsters still tick.</strong> <code>tickStatuses</code> runs before the lock check, so a frozen
+        monster keeps burning, and its other statuses keep counting down.</li>
+      <li><strong>Status chance uses <code>Math.random()</code></strong>, as does the whole engine. Nothing here is
+        seeded or replayable. That is acceptable for an action game, but a balance simulator would need to inject
+        an RNG.</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="skills-perf">Performance and extending the engine</h3>
+
+  <details class="advanced"><summary>Advanced: hot-loop performance</summary>
+    <p>An ultimate fired into a full map can schedule hundreds of callbacks and simulate dozens of projectiles in
+      sub-steps. The perf commit (<code>0fdd88a</code>) made the hot paths allocation-free:</p>
+    <ul>
+      <li><strong>Per-frame monster cache.</strong> <code>live()</code> builds the list of living monsters with their
+        bounds at most once per game frame, keyed on <code>game.getFrame()</code>
+        (<a data-src="src/systems/skill/AttackRunner.ts#L118">AttackRunner.ts:118</a>). Before that, every sub-step of
+        every projectile called <code>monsters.all()</code> (two arrays) and <code>getBounds()</code> (one Rectangle
+        per monster). Entries can die mid-frame because strikes resolve synchronously, so every loop still checks
+        <code>m.alive</code>.</li>
+      <li><strong>In-place compaction.</strong> The projectile list and the Scheduler's queue are compacted with a
+        write index (<code>projs[keep++] = p</code>) instead of <code>filter()</code>. The Scheduler reuses its
+        <code>due</code> buffer, and swaps it out while callbacks run because callbacks can schedule more work.</li>
+      <li><strong>Pooled damage numbers</strong> from cached glyph atlases, capped at 90 alive.</li>
+      <li><strong>The hit-VFX throttle</strong> described above.</li>
+    </ul>
+    <p>What is still allocated: <code>inRect</code> builds and sorts a small array per area query, and
+      <code>rectC</code> creates a Rectangle. These run once per strike, not per frame, so they were left alone.</p>
+  </details>
+
+  <details class="advanced"><summary>Advanced: adding a new attack pattern safely</summary>
+    <ol>
+      <li><strong>Extend the contract.</strong> Add the name to <code>AttackPattern</code> in
+        <a data-src="src/core/types.ts#L126">types.ts:126</a> (a lead-owned file), and any new options as an
+        <em>optional</em> sub-object on <code>AttackSpec</code>, in the style of <code>chain</code> and
+        <code>rain</code>, so all 130 existing specs still type-check.</li>
+      <li><strong>Add a <code>run…</code> method</strong> and a <code>case</code> in <code>run()</code>. Find monsters only
+        through <code>live()</code>, <code>frontNearest</code>, <code>nearestAny</code> or <code>inRect</code> (never
+        <code>monsters.all()</code>), and deal damage only through <code>strike()</code>. Then multi-hit,
+        <code>bonusVs</code>, statuses, stacking and the VFX throttle all work.</li>
+      <li><strong>Schedule through <code>this.sched</code></strong>, never <code>scene.time</code>, so map changes and
+        death cancel the pattern. Anything persistent goes in <code>projs</code> (or a new list that <code>clear()</code>
+        also empties).</li>
+      <li><strong>Define the VFX call</strong> for <code>vfx.area</code> (what <code>x/y/targetX/w/h</code> mean) and
+        add it to ARCHITECTURE.md's "Skill engine semantics", because School authors write against that text.</li>
+      <li><strong>Check summon targeting.</strong> <code>updateSummon</code> picks the wake-up reach by pattern. A
+        pattern whose reach is not <code>range</code> needs a branch there, as <code>aoe_self</code> has.</li>
+      <li><strong>Degrade gracefully.</strong> Every numeric field goes through <code>num()</code> with a sensible
+        default, and a pattern with no target should still show something (the chain fizzle is the model).</li>
+      <li>The <code>attack-patterns</code> chart groups by pattern name, so a new pattern appears there automatically.</li>
+    </ol>
+    <p>Before adding a pattern, check whether <code>onCast</code> plus <code>runAttack</code> can build it from the
+      existing seven. Flame Dash is a blink plus an <code>aoe_self</code> stretched over the path travelled, and
+      Consecration is an <code>aoe_self</code> repeated on a timer. Neither needed engine changes.</p>
+  </details>
+
+  <aside class="tip">To try a spell quickly in the dev build, use the debug console: <code>arcana.levelTo(45)</code>,
+    <code>arcana.job('inferno_sage')</code>, then learn the spell in the Spellbook (<kbd>K</kbd>). The step-by-step
+    recipe for a new spell, including its VFX and its place in the Year's <code>requires</code> tree, is in
+    <a href="#recipes">Recipes</a>.</aside>
+</section>

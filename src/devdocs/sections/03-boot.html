@@ -1,0 +1,475 @@
+<section id="boot" data-title="Scenes and boot" data-summary="main.ts and the Phaser config, BootScene preload and generation, TitleScene, the GameScene lifecycle and map changes, lazy art generation and the asset manifests.">
+  <h2>Scenes and boot</h2>
+  <p>
+    This section follows a page load from the first line of <a data-src="src/main.ts">src/main.ts</a> to a character
+    standing on a map, and back to the title screen. In Phaser, a <dfn>scene</dfn> is a self-contained state of the
+    game with its own display list, cameras, input, timers and lifecycle methods (<code>init</code>,
+    <code>preload</code>, <code>create</code>, <code>update</code>). The Academy has exactly three:
+    <code>Boot</code> (load and prepare art), <code>Title</code> (backdrop and the DOM title menu) and
+    <code>Game</code> (everything else). Only one runs at a time. Along the way it explains
+    <dfn>lazy art generation</dfn>, the system that keeps boot short by building most textures on first use or in the
+    background.
+  </p>
+  <pre class="mermaid">stateDiagram-v2
+  [*] --> Boot: new Phaser.Game
+  Boot --> Title: assets loaded,<br>boot generation done
+  Title --> Game: Continue / Play / New Game<br>scene.start(GAME, { state })
+  Game --> Game: changeMap (same scene,<br>fade out / in)
+  Game --> Title: Esc menu, Quit to Title<br>scene.start(TITLE)
+  Title --> Title: Character Select,<br>New Game name entry (DOM only)</pre>
+
+  <h3 id="boot-main">main.ts and the Phaser config</h3>
+  <p>The entry point does three things: patches canvas creation, creates the game, and starts the gamepad bridge
+    (<a data-src="src/main.ts#L9">main.ts:9</a>).</p>
+  <pre><code class="lang-ts">// All 2D canvases in this game are offscreen art-generation surfaces that we read back with getImageData
+// (palette swaps, outlines, pixelization). Default them to CPU-backed storage: faster reads and no
+// "willReadFrequently" console warnings. Explicit options passed by callers still win.
+{
+  const orig = HTMLCanvasElement.prototype.getContext as (this: HTMLCanvasElement, id: string, opts?: unknown) =&gt; RenderingContext | null;
+  HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, id: string, opts?: unknown) {
+    if (id === '2d') return orig.call(this, id, { willReadFrequently: true, ...(opts as object | undefined) });
+    return orig.call(this, id, opts);
+  } as typeof HTMLCanvasElement.prototype.getContext;
+}
+
+const debug = new URLSearchParams(location.search).has('debug');
+
+const game = new Phaser.Game({
+  type: Phaser.AUTO,
+  parent: 'game',
+  width: GAME_WIDTH,
+  height: GAME_HEIGHT,
+  backgroundColor: '#0b0d16',
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  physics: { default: 'arcade', arcade: { gravity: { x: 0, y: GRAVITY }, debug, fixedStep: false } },
+  pixelArt: true,
+  render: { antialias: false, roundPixels: true },
+  disableContextMenu: true,
+  scene: [BootScene, TitleScene, GameScene],
+});
+(window as unknown as { game: Phaser.Game }).game = game;
+
+// Controllers drive the game through synthetic key events (see GamepadBridge for the mapping).
+startGamepadBridge();</code></pre>
+  <table>
+    <thead><tr><th>Option</th><th>Value</th><th>Effect</th></tr></thead>
+    <tbody>
+      <tr><td><code>type</code></td><td><code>Phaser.AUTO</code></td><td>WebGL if available, otherwise Canvas 2D. Some effects (the Title's Pixelate post-FX) only exist on WebGL and are guarded.</td></tr>
+      <tr><td><code>width</code> × <code>height</code></td><td>1280 × 720 (<code>GAME_WIDTH</code>, <code>GAME_HEIGHT</code>)</td><td>The logical resolution every system and the DOM overlay use.</td></tr>
+      <tr><td><code>scale</code></td><td><code>FIT</code>, <code>CENTER_BOTH</code></td><td>Scales the canvas to the largest size that fits the window while keeping 16:9, centered (letterboxed).</td></tr>
+      <tr><td><code>physics</code></td><td>Arcade, gravity y = 1500, <code>fixedStep: false</code></td><td>One physics step per rendered frame with the real frame delta, which avoids jitter on high-refresh displays. <code>?debug</code> draws bodies.</td></tr>
+      <tr><td><code>pixelArt</code></td><td><code>true</code></td><td>Nearest-neighbour texture filtering everywhere, so scaled pixel art stays crisp.</td></tr>
+      <tr><td><code>render</code></td><td><code>antialias: false</code>, <code>roundPixels: true</code></td><td>Sprites snap to whole pixels, which stops "shimmering" seams when the camera moves.</td></tr>
+      <tr><td><code>disableContextMenu</code></td><td><code>true</code></td><td>Right-click does not open the browser menu over the game.</td></tr>
+      <tr><td><code>scene</code></td><td><code>[BootScene, TitleScene, GameScene]</code></td><td>Phaser instantiates each class once; the first in the list starts automatically.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    The <code>getContext</code> patch matters because the art pipeline creates hundreds of offscreen canvases and reads
+    their pixels back (palette swaps, outlines, pixelization). Without <code>willReadFrequently</code>, browsers keep
+    those canvases on the GPU and warn on every readback; the commit that added it notes it silenced about 500 boot
+    warnings. Callers that pass their own options still win, because the spread comes after the default.
+  </p>
+  <p>
+    <code>startGamepadBridge()</code> (<a data-src="src/systems/GamepadBridge.ts#L71">GamepadBridge.ts:71</a>) polls the
+    Gamepad API every animation frame (with a 16 ms <code>setInterval</code> watchdog for when
+    <code>requestAnimationFrame</code> is throttled) and turns buttons into synthetic <code>keydown</code> /
+    <code>keyup</code> events for whatever keys the actions are bound to. It starts before any scene and runs for the
+    life of the page, so every scene, the DOM menus included, gets controller support for free (see
+    <a href="#input">Input</a>).
+  </p>
+
+  <h3 id="boot-preload">BootScene: preloading the art</h3>
+  <p>
+    <a data-src="src/scenes/BootScene.ts#L14">BootScene.preload()</a> draws a progress bar, logs failed files instead of
+    stopping, and queues every external image:
+  </p>
+  <pre><code class="lang-ts">  preload() {
+    const { width, height } = this.scale;
+    const bar = this.add.rectangle(width / 2 - 200, height / 2 + 40, 0, 10, 0xcfd8ff).setOrigin(0, 0.5);
+    this.add.rectangle(width / 2, height / 2 + 40, 404, 14).setStrokeStyle(2, 0xcfd8ff);
+    this.load.on('progress', (p: number) =&gt; bar.setSize(400 * p, 10));
+    this.load.on('loaderror', (f: Phaser.Loader.File) =&gt; console.warn(`[boot] failed to load ${f.key} (${f.url})`));
+    queueArtAssets(this.load);
+  }</code></pre>
+  <p>
+    <a data-src="src/art/assets.ts#L19">src/art/assets.ts</a> is the whole pipeline. Each art domain lists its files in
+    a <dfn>manifest</dfn>, an array of <code>AssetEntry</code> under <code>src/art/manifests/</code>;
+    <code>ALL_ASSETS</code> concatenates them and <code>queueArtAssets</code> hands each to Phaser's loader:
+  </p>
+  <pre><code class="lang-ts">export interface AssetEntry {
+  /** Phaser texture key; prefix with the domain, e.g. 'src_char_wizard_idle'. Use the `src_` prefix for raw source sheets. */
+  key: string;
+  /** Path relative to public/assets, e.g. 'characters/wizard/idle.png'. */
+  path: string;
+  type: 'image' | 'spritesheet';
+  frameWidth?: number;
+  frameHeight?: number;
+}
+
+export function assetUrl(path: string): string {
+  return `${import.meta.env.BASE_URL}assets/${path}`;
+}
+// …
+export function queueArtAssets(load: Phaser.Loader.LoaderPlugin): void {
+  for (const a of ALL_ASSETS) {
+    const url = assetUrl(a.path);
+    if (a.type === 'spritesheet') load.spritesheet(a.key, url, { frameWidth: a.frameWidth!, frameHeight: a.frameHeight! });
+    else load.image(a.key, url);
+  }
+}</code></pre>
+  <table>
+    <thead><tr><th>Manifest</th><th>Entries</th><th>What it loads</th></tr></thead>
+    <tbody>
+      <tr><td><a data-src="src/art/manifests/characters.ts">characters.ts</a></td><td>8</td><td>Foozle "Pointy Hat Mage" animation strips (player and most NPCs, palette-swapped per job) and the "Purple Mage" idle for elder NPCs.</td></tr>
+      <tr><td><a data-src="src/art/manifests/monsters.ts">monsters.ts</a></td><td>21</td><td>Raw monster sheets, sliced and palette-swapped into <code>monster_&lt;id&gt;</code> and the coin drops.</td></tr>
+      <tr><td><a data-src="src/art/manifests/world.ts">world.ts</a></td><td>124</td><td>ansimuz CC0 environment pieces per theme: backdrops, terrain, decor, town buildings, title-screen layers.</td></tr>
+      <tr><td><a data-src="src/art/manifests/vfx.ts">vfx.ts</a></td><td>29</td><td>Pixel effect strips (CodeManu and others) used by the spell VFX kit.</td></tr>
+      <tr><td><a data-src="src/art/manifests/holy.ts">holy.ts</a></td><td>3</td><td>Wings and angel sprites for Holy summons and effects.</td></tr>
+      <tr><td><a data-src="src/art/manifests/shadow.ts">shadow.ts</a></td><td>0</td><td>Empty: Shadow VFX reuse the shared sheets.</td></tr>
+      <tr><td><a data-src="src/art/manifests/ui.ts">ui.ts</a></td><td>1</td><td>The 7Soul1 RPG icon sheet (also read directly by <code>art/icons.ts</code>). Frames and fonts are loaded by CSS, not here.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    That is 186 files, all loaded as plain images (no manifest uses <code>spritesheet</code> today; slicing happens in
+    code). Loaded images are <dfn>source textures</dfn> under <code>src_*</code> keys and are never drawn directly.
+    Generators read them with <code>sourceImage(scene, key)</code>, which returns <code>null</code> if the file failed,
+    and produce the game's real texture keys (<code>player_&lt;job&gt;</code>, <code>monster_&lt;id&gt;</code>,
+    <code>w_/d_/t_</code> world keys). A missing file therefore falls back to the procedural painter for that key
+    instead of breaking boot (see <a href="#art">Art</a>).
+  </p>
+
+  <h3 id="boot-create">BootScene: boot-time generation</h3>
+  <p>Once loading finishes, <a data-src="src/scenes/BootScene.ts#L23">BootScene.create()</a> shows a line of text, waits
+    briefly for web fonts and runs six generation steps, each isolated in its own <code>try/catch</code>:</p>
+  <pre><code class="lang-ts">  create() {
+    const { width, height } = this.scale;
+    this.add.text(width / 2, height / 2, 'Opening the Academy gates…', { fontFamily: 'Trebuchet MS', fontSize: '28px', color: '#cfd8ff' }).setOrigin(0.5);
+    // Wait for web fonts (pixel UI/damage fonts), then let the text render one frame before heavy generation.
+    const fontsReady: Promise&lt;unknown&gt; = (document as Document &amp; { fonts?: FontFaceSet }).fonts?.ready ?? Promise.resolve();
+    Promise.race([fontsReady, new Promise(r =&gt; setTimeout(r, 800))]).then(() =&gt; this.time.delayedCall(0, () =&gt; {
+      const steps: [string, () =&gt; void][] = [
+        ['particles', () =&gt; generateParticleTextures(this)],
+        ['characters', () =&gt; generateCharacterTextures(this)],
+        ['monsters', () =&gt; generateMonsterTextures(this)],
+        ['tiles', () =&gt; generateTileTextures(this)],
+        ['skills', () =&gt; generateSkillTextures(this)],
+        ['vfx', () =&gt; registerAllVfx()],
+      ];
+      for (const [name, fn] of steps) {
+        try { fn(); } catch (e) { console.error(`[boot] ${name} failed`, e); }
+      }
+      this.scene.start(SCENES.TITLE);
+    }));
+  }</code></pre>
+  <ul>
+    <li><strong>The font race.</strong> <code>document.fonts.ready</code> resolves when the pixel fonts used by the UI and
+      the damage-number atlases have loaded; the 800 ms timeout stops a slow or failed font from holding boot hostage.
+      Commit <code>4a6606c</code> shortened it from 1,500 ms and dropped a 30 ms delay to 0.</li>
+    <li><strong><code>delayedCall(0)</code></strong> defers the heavy synchronous work to the next scene tick, so the
+      "Opening the Academy gates…" text is actually drawn before the main thread is busy.</li>
+    <li><strong>Each step is isolated.</strong> If monster art throws, the world, skills and VFX still build and the game
+      still reaches the title; the failure is one <code>console.error</code>.</li>
+  </ul>
+  <p>Despite their names, most of these steps no longer build everything:</p>
+  <table>
+    <thead><tr><th>Step</th><th>Builds now</th><th>Deferred</th></tr></thead>
+    <tbody>
+      <tr><td><code>particles</code></td><td>The shared white particle textures (<code>px_dot</code>, <code>px_soft</code>, <code>px_spark</code>…)</td><td>Every pixel VFX sheet and palette variant, built by <code>ensureSheet</code> on first use (<a data-src="src/art/particles.ts#L291">particles.ts:291</a>)</td></tr>
+      <tr><td><code>characters</code></td><td>Pixel sources and the Apprentice sheet + anims</td><td>The other 15 job sheets, queued in the background as <code>job:&lt;id&gt;</code> (<a data-src="src/art/characters.ts#L189">characters.ts:189</a>)</td></tr>
+      <tr><td><code>monsters</code></td><td>Shared monster FX and drop textures</td><td>Each <code>monster_&lt;id&gt;</code> sheet, built by <code>ensureMonsterTexture</code> when a map binds or a monster spawns (<a data-src="src/art/monsterArt.ts#L2450">monsterArt.ts:2450</a>)</td></tr>
+      <tr><td><code>tiles</code></td><td>All world textures (pixel first, procedural fills gaps), then the <code>w__ready</code> marker</td><td>Nothing; <code>MapLoader</code> re-runs it if the marker is missing (<a data-src="src/world/MapLoader.ts#L79">MapLoader.ts:79</a>)</td></tr>
+      <tr><td><code>skills</code></td><td>Apprentice spell textures</td><td>Each School's textures and sheets, queued in the background</td></tr>
+      <tr><td><code>vfx</code></td><td>Registers every VFX function (cheap: map inserts)</td><td>Per-School keys are wrapped by <code>lazyRegister</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="boot-lazy">Lazy art generation</h3>
+  <p>
+    Generating a texture here means drawing into an offscreen canvas (slicing a source sheet, palette-swapping it,
+    integer-scaling it, adding outlines) and registering the result with Phaser's texture manager. It is synchronous
+    main-thread work. Before the Phase 8 performance pass, boot built every per-School VFX texture and every job's player
+    sheet up front, "~250ms of synchronous canvas work before the Title scene" according to
+    <a data-src="src/art/lazy.ts#L1">src/art/lazy.ts</a>. The pass that introduced lazy generation records boot going
+    from about 675 ms to about 350 ms (commit <code>0fdd88a</code>), and <code>ARCHITECTURE.md</code> puts the remaining
+    boot generation at about 40 ms. The rule it introduced is short: <strong>never assume a texture exists; ensure
+    it.</strong>
+  </p>
+  <p>Every unit of art can be built two ways, whichever comes first:</p>
+  <pre class="mermaid">flowchart TB
+  subgraph demand["On demand (synchronous)"]
+    v["first playVfx of a School key"] --> e1["ensureOnce(scene, 'fire', gen)"]
+    j["playerTextureKey(job) / setJob"] --> e2["ensurePlayerTexture(job)"]
+    m["MonsterManager.bindMap / new Monster"] --> e3["ensureMonsterTexture(id)"]
+    p["pxFx / pxHas"] --> e4["ensureSheet(id, variant)"]
+  end
+  subgraph idle["In the background"]
+    q["scheduleIdle queue<br>first unit after 250 ms,<br>then one per 30 ms"] --> e1
+    q --> e2
+    w["warmSchoolSoon(branch)"] -- "move to front" --> q
+  end
+  e2 -- "School of that job" --> w</pre>
+  <p>The core is <code>ensureOnce</code> (<a data-src="src/art/lazy.ts#L20">lazy.ts:20</a>): run a generator once per
+    texture manager, timed, and never throw.</p>
+  <pre><code class="lang-ts">export function ensureOnce(scene: Phaser.Scene, name: string, gen: Gen): void {
+  const key = scene.textures;
+  let done = doneByManager.get(key);
+  if (!done) { done = new Set(); doneByManager.set(key, done); }
+  if (done.has(name)) return;
+  done.add(name);
+  try { timed(name, () =&gt; gen(scene)); } catch (e) { console.warn(`[lazy] ${name} failed`, e); }
+}</code></pre>
+  <p>Around it, four helpers:</p>
+  <table>
+    <thead><tr><th>Helper</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td><a data-src="src/art/lazy.ts#L49"><code>scheduleIdle(scene, name, gen, front?)</code></a></td><td>Queues a unit for the background. A <code>setTimeout</code> pump runs one unit per tick: the first after <code>IDLE_START_MS</code> = 250 ms (30 ms if queued to the front), then every <code>IDLE_GAP_MS</code> = 30 ms until the queue is empty. Already-built units are skipped.</td></tr>
+      <tr><td><a data-src="src/art/lazy.ts#L33"><code>defineSchool(name, gen)</code></a></td><td>Remembers a School's generator so it can be warmed by name later.</td></tr>
+      <tr><td><a data-src="src/art/lazy.ts#L36"><code>warmSchoolSoon(scene, name)</code></a></td><td>Moves that School to the front of the background queue. Never builds synchronously. Called by <code>ensurePlayerTexture</code> with the job's School, so selecting or advancing to a job warms its spells.</td></tr>
+      <tr><td><a data-src="src/art/lazy.ts#L74"><code>lazyRegister(name, gen)</code></a></td><td>Returns a drop-in replacement for <code>registerVfx</code> whose wrapped functions call <code>ensureOnce</code> on their first play. After that the cost is one boolean check.</td></tr>
+    </tbody>
+  </table>
+  <p>A School wires all of this in three lines; Fire, from <a data-src="src/skills/fireVfx.ts#L15">fireVfx.ts:15</a>:</p>
+  <pre><code class="lang-ts">function buildFire(scene: Phaser.Scene): void {
+  genTextures(scene);
+  generateFireSheets(scene);
+}
+
+/** Boot hook: textures/sheets are built on first fire VFX (or in the background while on the Title screen). */
+export function generateFireTextures(scene: Phaser.Scene): void { scheduleIdle(scene, 'fire', buildFire); }
+
+defineSchool('fire', buildFire);
+const registerVfx = lazyRegister('fire', buildFire);</code></pre>
+  <p>
+    The boot step <code>generateSkillTextures</code> therefore only <em>queues</em> the five Schools; the module-level
+    <code>registerVfx</code> shadows the core one, so every <code>fire_*</code> effect registered in that file builds
+    Fire's textures before its first frame. In practice the background queue drains while the player is still on the
+    Title screen, so the first cast in a School normally finds everything built.
+  </p>
+  <p>
+    Every generator is wrapped in <code>timed</code> (<a data-src="src/art/perf.ts#L3">perf.ts:3</a>), which records a
+    <code>performance.measure</code> named <code>gen:&lt;unit&gt;</code>. To see what was built and how long it took:
+  </p>
+  <pre><code class="lang-js">performance.getEntriesByType('measure')
+  .filter(m =&gt; m.name.startsWith('gen:'))
+  .map(m =&gt; [m.name, Math.round(m.duration)])</code></pre>
+  <aside class="tip">
+    Expect <code>gen:characters</code>, <code>gen:particles</code>, <code>gen:monsters</code> and the
+    <code>gen:world:*</code> steps from boot, then <code>gen:job:&lt;id&gt;</code> and <code>gen:fire</code>-style
+    entries trickling in while the Title screen is up. A School entry that appears only when you first cast is a sign the
+    background queue had not reached it yet.
+  </aside>
+  <details class="advanced">
+    <summary>Advanced: lazy generation invariants, edge cases and how to extend it</summary>
+    <ul>
+      <li><strong>Idempotent and non-throwing.</strong> Every generator may run at any time, in any order, possibly while a
+        map is live. It must skip keys that already exist and must not assume another unit ran first. A failure is a
+        warning, and the fallback (procedural texture or the generic VFX puff) covers it.</li>
+      <li><strong>Demand wins the race.</strong> If a cast arrives before the idle pump reaches its School, the cast
+        builds it synchronously (a one-time hitch of that unit's <code>gen:</code> duration) and the queued entry later
+        finds it done and does nothing.</li>
+      <li><strong>The pump is a plain <code>setTimeout</code>.</strong> It is not tied to a scene, so it keeps running
+        after the Title hands over to the Game scene; units still queued then build during play, one per 30 ms.</li>
+      <li><strong>Keying is per texture manager, mostly.</strong> <code>ensureOnce</code> tracks completed units in a
+        <code>WeakMap</code> keyed by <code>scene.textures</code>, and the file header says a second
+        <code>Phaser.Game</code> "would start clean". Two pieces of state are global, though: the
+        <code>ready</code> flag inside each <code>lazyRegister</code> closure (set after the first play in any game) and
+        the <code>queued</code> set of unit names in <code>scheduleIdle</code>. With a second game on the page, its first
+        School VFX would skip <code>ensureOnce</code>. Harmless today (one game per page), but worth fixing before
+        anything creates a second game.</li>
+      <li><strong>Adding a lazily built unit</strong> (a new School, a new monster family): put all its canvas work in
+        one <code>gen(scene)</code> function that skips existing keys; register its effects through
+        <code>lazyRegister(name, gen)</code>; call <code>defineSchool(name, gen)</code> if a job should warm it; and from
+        a boot hook, <code>scheduleIdle(scene, name, gen)</code> so it is pre-built on the Title screen. Anything that
+        reads a texture outside a VFX function (a UI icon, a sprite) should call the matching <code>ensure*</code>
+        first.</li>
+      <li><strong>Other deferred work</strong> follows the same idea: the damage-number glyph atlases (about 9 ms) are
+        built 300 ms after the Game scene starts rather than on the first hit
+        (<a data-src="src/systems/skill/DamageNumbers.ts#L209">DamageNumbers.ts:209</a>).</li>
+    </ul>
+  </details>
+
+  <h3 id="boot-title">TitleScene</h3>
+  <p>
+    <a data-src="src/scenes/TitleScene.ts#L37">TitleScene.create()</a> builds a moonlit pixel backdrop and puts the DOM
+    title menu over it:
+  </p>
+  <pre><code class="lang-ts">  create() {
+    this.leaving = false;
+    this.t = 0;
+    this.drifts = [];
+    this.pixelBackdrop = false;
+    const havePixel = [K_SKY, K_FAR, K_MID, K_TOWER].every(k =&gt; this.textures.exists(k));
+    if (havePixel) {
+      try { this.buildPixelBackdrop(); this.pixelBackdrop = true; } catch (e) { console.warn('[title] pixel backdrop failed', e); }
+    }
+    if (!this.pixelBackdrop) {
+      this.children.removeAll(true);
+      // … clear tweens, timers and drifts, then:
+      try { this.buildBackground(); } catch (e) { console.warn('[title] background failed', e); }
+      // … plus a Pixelate post-FX on WebGL
+    }
+
+    this.menu = new TitleMenu(this, (state) =&gt; this.startGame(state));
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =&gt; this.teardown());
+    this.events.once(Phaser.Scenes.Events.DESTROY, () =&gt; this.teardown());
+
+    const audio = getAudio();
+    applySavedVolumes(audio);
+    try { audio.playMusic('title'); } catch { /* ignore */ }
+    this.cameras.main.fadeIn(600, 0, 0, 0);
+  }</code></pre>
+  <ul>
+    <li><strong>Two backdrops.</strong> The pixel version stacks the world pack's sanctum sky, mountains and ruins as
+      <code>TileSprite</code> layers at integer scales (×3 sky, ×2 mountains and tower), adds additive tinted twins to
+      lift the colors, a moon, twinkling stars, shooting stars and drifting motes. If any of the four key source
+      textures is missing, it tears that down and draws the older procedural night scene instead.</li>
+    <li><strong>No sub-pixel drift.</strong> <code>update()</code> sets each layer's
+      <code>tilePositionX = Math.floor((t / 1000) * speed)</code>, snapping to whole source pixels so slow layers never
+      shimmer.</li>
+    <li><strong>The menu is DOM.</strong> <code>TitleMenu</code> (<code>src/ui/titleMenu.ts</code>) owns Continue,
+      Character Select over the six save slots (with per-slot Delete) and New Game with name entry. When the player picks a character it calls
+      back with a <code>PlayerState</code>; the scene fades out for 420 ms and starts the Game scene with it
+      (<a data-src="src/scenes/TitleScene.ts#L67">TitleScene.ts:67</a>). The <code>leaving</code> flag ignores a
+      second pick during the fade. See <a href="#ui">UI</a> and <a href="#saves">Saves</a>.</li>
+    <li><strong>Music and volume.</strong> The audio object is the same <code>getAudio()</code> singleton the game uses;
+      saved volumes are applied before <code>title</code> music is requested (it starts on the first user gesture).</li>
+  </ul>
+  <pre><code class="lang-ts">  private startGame(state: PlayerState) {
+    if (this.leaving) return;
+    this.leaving = true;
+    const cam = this.cameras.main;
+    cam.fadeOut(420, 0, 0, 0);
+    cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () =&gt; this.scene.start(SCENES.GAME, { state }));
+  }</code></pre>
+
+  <h3 id="boot-game">GameScene lifecycle</h3>
+  <p>
+    Phaser creates each scene object once and reuses it. <code>scene.start(GAME, data)</code> calls
+    <code>init(data)</code>, then <code>create()</code>, then <code>update</code> every frame until another scene is
+    started, which <dfn>shuts down</dfn> this one: Phaser destroys its display list, timers and tweens and emits
+    <code>SHUTDOWN</code>. The constructor never runs again, so <code>init</code> must reset every per-run field
+    (<a data-src="src/scenes/GameScene.ts#L52">GameScene.ts:52</a>):
+  </p>
+  <pre><code class="lang-ts">  init(data: { state: PlayerState }) {
+    this.initialState = data.state;
+    this.map = null;
+    this.inputBlocked = false;
+    this.transitioning = false;
+    this.pendingDest = null;
+    this.latched.clear();
+    this.page = 0;
+    this.castBuffer = null;
+  }</code></pre>
+  <p>
+    <code>create()</code> builds the services, wires events, keys and settings, loads the saved map, exposes
+    <code>window.arcana</code> and registers <code>teardown</code> for <code>SHUTDOWN</code>; it is reproduced in
+    <a href="#architecture-frame">Architecture: the frame flow</a>. The only way back to the title is Esc → Quit to
+    Title, which saves and calls <code>scene.start(SCENES.TITLE)</code>
+    (<a data-src="src/ui/miscWindows.ts#L112">miscWindows.ts:112</a>). That shuts the Game scene down and runs
+    <a data-src="src/scenes/GameScene.ts#L343">teardown()</a>:
+  </p>
+  <pre><code class="lang-ts">  private teardown() {
+    const s = this.s;
+    try { s.progression.save(); } catch { /* ignore */ }
+    for (const fn of [() =&gt; s.ui.destroy(), () =&gt; s.skills.clearWorld(), () =&gt; s.monsters.clear(), () =&gt; s.drops.clear(),
+      () =&gt; s.npcs.clear(), () =&gt; this.pet?.destroy(), () =&gt; this.arena?.destroy(), () =&gt; s.player.destroy(), () =&gt; this.map?.destroy()]) {
+      try { fn(); } catch (e) { console.warn('[game] teardown step failed', e); }
+    }
+    this.map = null;
+    this.pendingDest = null;
+    bus.removeAll();
+    setServices(null);
+    this.input.keyboard?.removeAllKeys(true);
+    this.input.keyboard?.enableGlobalCapture();
+  }</code></pre>
+  <p>
+    It saves first, so a crash in any later step cannot lose progress; then destroys each system in its own
+    <code>try/catch</code>; then clears every bus subscription, the service locator and all Phaser keys, and restores
+    keyboard capture in case a dialog had disabled it. Back on the title, the menu opens straight on Character Select
+    with the slot just played (<code>markReturnToSelect</code> / <code>consumeReturnToSelect</code> in
+    <code>ui/session.ts</code>).
+  </p>
+  <pre class="mermaid">sequenceDiagram
+  participant T as TitleMenu (DOM)
+  participant TS as TitleScene
+  participant GS as GameScene
+  participant S as services
+  T->>TS: onStart(state)
+  TS->>TS: fadeOut 420 ms
+  TS->>GS: scene.start(GAME, { state })
+  Note over TS: SHUTDOWN: menu.destroy()
+  GS->>GS: init(data): reset fields
+  GS->>S: create(): build services, setServices
+  GS->>GS: loadMapNow(saved map), fadeIn 400 ms
+  loop every frame
+    GS->>S: update(time, delta)
+  end
+  S->>GS: Quit to Title: save, scene.start(TITLE)
+  Note over GS: SHUTDOWN: teardown()
+  GS->>S: save, destroy each, bus.removeAll, setServices(null)</pre>
+
+  <h3 id="boot-maps">Map changes: loadMapNow and changeMap</h3>
+  <p>
+    <code>loadMapNow(mapId, portalId?)</code> (<a data-src="src/scenes/GameScene.ts#L139">GameScene.ts:139</a>) swaps the
+    map immediately: it clears every system's per-map objects, destroys the old map, builds the new one with
+    <code>loadMap</code>, records <code>state.mapId</code>, sets the physics and camera bounds, places the player at the
+    named portal (or the map's default spawn), re-binds every system, starts the map's music, emits
+    <code>map:changed</code> and the area banner, and saves. The sequence diagram is in
+    <a href="#architecture-flow-map">Architecture</a>.
+  </p>
+  <p>
+    Everything else calls <code>changeMap</code>, which wraps that in a fade
+    (<a data-src="src/scenes/GameScene.ts#L96">GameScene.ts:96</a>):
+  </p>
+  <pre><code class="lang-ts">  changeMap(mapId: string, portalId?: string) {
+    if (!Registry.map(mapId)) { console.warn(`[game] unknown map ${mapId}`); return; }
+    // A request during an in-flight fade replaces its destination (e.g. respawn mid-portal).
+    this.pendingDest = { mapId, portalId };
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.s.player.setControlEnabled(false);
+    this.s.audio.play('portal');
+    const cam = this.cameras.main;
+    cam.fadeOut(220, 0, 0, 0);
+    cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () =&gt; {
+      const dest = this.pendingDest ?? { mapId, portalId };
+      this.pendingDest = null;
+      this.loadMapNow(dest.mapId, dest.portalId);
+      cam.fadeIn(320, 0, 0, 0);
+      this.transitioning = false;
+      this.s.player.setControlEnabled(!this.inputBlocked);
+    });
+  }</code></pre>
+  <pre class="mermaid">stateDiagram-v2
+  [*] --> Playing
+  Playing --> FadingOut: changeMap()<br>pendingDest = dest,<br>controls off, portal sfx
+  FadingOut --> FadingOut: changeMap() again<br>replaces pendingDest
+  FadingOut --> Playing: FADE_OUT_COMPLETE<br>loadMapNow(pendingDest),<br>fadeIn 320 ms, controls on</pre>
+  <details class="advanced">
+    <summary>Advanced: scene lifecycle and map-change edge cases</summary>
+    <ul>
+      <li><strong>Per-run state belongs in <code>init</code> or <code>create</code>.</strong> A field initialised only at
+        its declaration (<code>private nextPickupAt = 0</code>) keeps its old value on the second run, because the
+        object is reused. That is harmless for <code>nextPickupAt</code> (a time stamp) but would not be for a counter or
+        a flag; new fields need a reset in <code>init</code>.</li>
+      <li><strong>Teardown runs on <code>SHUTDOWN</code> only.</strong> Closing the tab does not shut scenes down, so the
+        last save is whatever the autosave, the last map load or the last job advance wrote.</li>
+      <li><strong>Several <code>SHUTDOWN</code> listeners.</strong> Besides <code>teardown</code>, <code>wireKeys</code>
+        and <code>wireSettings</code> each register a <code>once(SHUTDOWN)</code> to unsubscribe from bindings and
+        settings changes. Anything a run subscribes to outside the bus must do the same, or it leaks into the next run
+        and calls into a torn-down scene.</li>
+      <li><strong>During a fade</strong> <code>handleInput</code> returns early (<code>transitioning</code>), so no casts,
+        portals or pickups; monsters and projectiles keep updating until the swap. <code>setControlEnabled</code> at the
+        end respects <code>inputBlocked</code>, so a dialog opened mid-fade still has movement locked afterwards.</li>
+      <li><strong>Destination replacement</strong> is what makes "respawn while a portal fade is running" land on campus,
+        and it also means the <em>last</em> of several rapid <code>arcana.warp</code> calls wins. The fade callback
+        reads <code>pendingDest</code> at completion time, not the arguments of the first call.</li>
+      <li><strong>Unknown maps</strong> are rejected before any state changes; a save naming a removed map loads
+        <code>START_MAP</code> instead (<code>create()</code>).</li>
+      <li><strong>The camera follows with lerp 0.12</strong> and a 40 px vertical offset
+        (<code>startFollow(s.player.sprite, true, 0.12, 0.12, 0, 40)</code>), re-applied on every map load because
+        <code>placeAt</code> teleports the sprite.</li>
+    </ul>
+  </details>
+</section>

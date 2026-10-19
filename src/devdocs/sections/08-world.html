@@ -1,0 +1,521 @@
+<section id="world" data-title="World and maps" data-summary="MapDef and the eight maps, MapLoader (solids, one-way platforms, ropes, portals, queries), themes, parallax, ambient weather, world art and the minimap.">
+  <h2>World and maps</h2>
+
+  <p>
+    A <dfn>map</dfn> is one side-scrolling level: a wide rectangle of ground, floating ledges, ropes and portals, with
+    monsters and NPCs placed on it. Every map is plain data, a <code>MapDef</code> object in
+    <a data-src="src/data/maps.ts">src/data/maps.ts</a>. At run time <code>loadMap()</code> in
+    <a data-src="src/world/MapLoader.ts">src/world/MapLoader.ts</a> turns that data into a <dfn>map instance</dfn>:
+    invisible physics bodies the player and monsters stand on, plus the layered pixel art you see (sky, parallax
+    hills, decor, terrain, ropes, portals, weather). This section covers the data format and the eight maps, how the
+    loader builds and tears down a map, the per-theme presentation config, the world art pipeline, and the minimap.
+  </p>
+  <p>
+    Two rules shape everything here. First, <strong>physics and visuals are separate</strong>: the bodies come only
+    from the numbers in the <code>MapDef</code>, and a texture that fails to load or paint never changes where you can
+    walk. Second, <strong>map ids are save data</strong>: the save stores <code>state.mapId</code>, and portals refer to
+    other maps by id, so an id can never be renamed (the campus is still called <code>mistvale</code> from before the
+    game became The Academy).
+  </p>
+
+  <h3 id="world-mapdef">MapDef: a map as data</h3>
+  <p>The contract lives in <a data-src="src/core/types.ts#L346">types.ts:346</a>. Coordinates are world pixels, x to
+    the right and <strong>y downward</strong>, and every <code>y</code> you see in map data is a walking surface or a
+    pair of feet, never the top of a sprite.</p>
+  <pre><code class="lang-ts">export type MapTheme = 'town' | 'forest' | 'mushroom' | 'snow' | 'volcano' | 'storm' | 'sanctum';
+
+export interface PlatformDef { x1: number; x2: number; y: number; oneWay: boolean; } // y = top surface
+export interface WallDef { x: number; y: number; w: number; h: number; }
+export interface RopeDef { x: number; top: number; bottom: number; kind: 'rope' | 'ladder'; }
+export interface PortalDef { id: string; x: number; y: number; targetMap: string; targetPortal: string; hidden?: boolean; }
+export interface SpawnDef { monsterId: string; x1: number; x2: number; y: number; count: number; respawnMs?: number; }
+export interface NpcPlacement { npcId: string; x: number; y: number; facing?: 1 | -1; }
+
+export interface MapDef {
+  id: string;
+  name: string;
+  region: string;
+  theme: MapTheme;
+  music: MusicKey;
+  width: number;            // px
+  height: number;           // px
+  platforms: PlatformDef[]; // ground floor is a platform with oneWay=false spanning width
+  walls?: WallDef[];        // solid blocks
+  ropes: RopeDef[];
+  portals: PortalDef[];
+  spawns: SpawnDef[];
+  npcs: NpcPlacement[];
+  levelRange: [number, number];
+  safe?: boolean;           // town: no monsters, faster regen
+}</code></pre>
+  <table>
+    <thead><tr><th>Piece</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>PlatformDef</code></td><td>A horizontal span at height <code>y</code> (its walking surface). <code>oneWay: true</code> is a <dfn>one-way platform</dfn>: you can jump up through it from below and land on top, and <kbd>Down</kbd>+jump drops you through (see <a href="#physics">Physics</a>). <code>oneWay: false</code> is solid ground: a column from <code>y</code> to the bottom of the map.</td></tr>
+      <tr><td><code>WallDef</code></td><td>A solid block (<code>x, y</code> is its top-left). Its top is walkable, so walls double as raised steps and plateaus.</td></tr>
+      <tr><td><code>RopeDef</code></td><td>A climbable vertical line at <code>x</code> from <code>top</code> to <code>bottom</code>; <code>kind</code> only changes the art (rope or ladder).</td></tr>
+      <tr><td><code>PortalDef</code></td><td>A door at feet position <code>(x, y)</code>. Pressing <kbd>Up</kbd> near it loads <code>targetMap</code> and places you on that map's portal <code>targetPortal</code>. <code>hidden</code> skips the visual and the minimap marker.</td></tr>
+      <tr><td><code>SpawnDef</code></td><td>Keep <code>count</code> monsters of <code>monsterId</code> alive somewhere in <code>x1..x2</code> standing on <code>y</code>; respawn each one <code>respawnMs</code> after it dies (see <a href="#monsters">Monsters</a>).</td></tr>
+      <tr><td><code>levelRange</code>, <code>safe</code></td><td>Shown in the minimap header and the arrival banner; <code>safe</code> maps spawn nothing.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="world-maps">The eight maps</h3>
+  <p>The top of <a data-src="src/data/maps.ts#L1">maps.ts</a> states the conventions every map follows, then a handful
+    of one-line helpers keep the map literals short:</p>
+  <pre><code class="lang-ts">// Conventions (see ARCHITECTURE.md "Coordinates &amp; conventions"):
+//  - platform `y` is the walking surface; the ground floor is a oneWay=false platform spanning the map
+//    (non-oneWay platforms are solid columns from y to the map bottom).
+//  - walls are solid blocks; their top is walkable (used as raised ground / cliff steps).
+//  - jumpable tiers are ≤ 90px apart vertically; taller gaps get a rope or ladder.
+//  - rope `top` = surface of the platform it leads onto; `bottom` = just above the lower surface.
+//  - spawns sit on platform tops (`y` = platform y, x-range inset from the edges).
+//  - this module has no runtime imports so it can be sanity-checked by plain node.
+import type { MapDef, PlatformDef, PortalDef, RopeDef, SpawnDef, WallDef } from '../core/types';
+
+const RESPAWN = 7000;
+/** Field boss respawn after death (A6 jitters it ±20% → ~8–12 min). */
+const FIELD_BOSS_RESPAWN = 600000;
+
+const ground = (x1: number, x2: number, y: number): PlatformDef =&gt; ({ x1, x2, y, oneWay: false });
+const plat = (x1: number, x2: number, y: number): PlatformDef =&gt; ({ x1, x2, y, oneWay: true });
+const wall = (x: number, y: number, w: number, h: number): WallDef =&gt; ({ x, y, w, h });
+/** Rope hanging from the platform at `top` down to just above the surface at `lowerY`. */
+const rope = (x: number, top: number, lowerY: number): RopeDef =&gt; ({ x, top, bottom: lowerY - 8, kind: 'rope' });
+const ladder = (x: number, top: number, lowerY: number): RopeDef =&gt; ({ x, top, bottom: lowerY - 2, kind: 'ladder' });
+const portal = (id: string, x: number, y: number, targetMap: string, targetPortal: string): PortalDef =&gt; ({ id, x, y, targetMap, targetPortal });
+/** Spawn across a platform's span (inset 40px from both edges). */
+const on = (monsterId: string, p: PlatformDef, count: number, respawnMs = RESPAWN): SpawnDef =&gt;
+  ({ monsterId, x1: p.x1 + 40, x2: p.x2 - 40, y: p.y, count, respawnMs });
+const span = (monsterId: string, x1: number, x2: number, y: number, count: number, respawnMs = RESPAWN): SpawnDef =&gt;
+  ({ monsterId, x1, x2, y, count, respawnMs });</code></pre>
+  <p>Each map is an immediately-invoked function so it can name its platforms and refer to them in ropes and spawns.
+    Whisperwood, shortened (<a data-src="src/data/maps.ts#L71">maps.ts:71</a>):</p>
+  <pre><code class="lang-ts">const whisperwood: MapDef = (() =&gt; {
+  const W = 3200, H = 1300, G = 1180;
+  const A = plat(300, 760, 1095), B = plat(1000, 1400, 1095), C = plat(1900, 2400, 1095), D = plat(2650, 2980, 1095);
+  const E = plat(520, 980, 1010), F = plat(1250, 1750, 1010), Gp = plat(2200, 2720, 1010);
+  // …
+  const Hh = plat(380, 900, 840), I = plat(1450, 2050, 840), J = plat(2350, 2900, 840);
+  // …
+  const hill = wall(1480, 1135, 220, 45);
+  return {
+    id: 'whisperwood', name: 'Whisperwood', region: 'Practicum Grounds', theme: 'forest', music: 'forest',
+    width: W, height: H, levelRange: [1, 8],
+    platforms: [ground(0, W, G), A, B, C, D, E, F, Gp, O, Hh, I, J, K, L, M, N, R, Q],
+    walls: [hill],
+    ropes: [rope(720, Hh.y, E.y), rope(1620, I.y, F.y), rope(2520, J.y, Gp.y), rope(1060, M.y, K.y), rope(2160, N.y, L.y)],
+    portals: [portal('west', 70, G, 'mistvale', 'east'), portal('east', 3130, G, 'shroom_hollow', 'west')],
+    spawns: [
+      span('moss_snail', 420, 1440, G, 3), span('moss_snail', 1760, 3000, G, 2), on('moss_snail', A, 1), on('moss_snail', D, 1),
+      // …
+      // Field boss (A6): widest wall-free ground span, clear of both portals. Timed spawn, see MonsterManager.
+      span('mossback_matriarch', 1740, 2950, G, 1, FIELD_BOSS_RESPAWN),
+    ],
+    npcs: [{ npcId: 'scout_finn', x: 240, y: G, facing: 1 }],
+  };
+})();</code></pre>
+  <p>Read the tiers: ground at 1180, ledges A–D at 1095 (85 px up), E–G at 1010 (another 85), so each is one jump.
+    The next tier, H–J at 840, is 170 px above E–G, too high to jump, so <code>rope(720, Hh.y, E.y)</code> hangs from H
+    down to just above E.</p>
+
+  <table>
+    <thead><tr><th>Id</th><th>Name</th><th>Region</th><th>Theme</th><th>Music</th><th>Size (px)</th><th>Levels</th><th>Field boss</th></tr></thead>
+    <tbody>
+      <tr><td><code>mistvale</code></td><td>Academy Grounds</td><td>The Academy</td><td>town</td><td>town</td><td>3800 × 1100</td><td>1–50, <code>safe</code></td><td>none</td></tr>
+      <tr><td><code>whisperwood</code></td><td>Whisperwood</td><td>Practicum Grounds</td><td>forest</td><td>forest</td><td>3200 × 1300</td><td>1–8</td><td>Mossback Matriarch</td></tr>
+      <tr><td><code>shroom_hollow</code></td><td>Shroom Hollow</td><td>Herbology Field Site</td><td>mushroom</td><td>cave</td><td>3600 × 1400</td><td>8–15</td><td>Shroom Monarch</td></tr>
+      <tr><td><code>frostfang_cliffs</code></td><td>Frostfang Cliffs</td><td>Frostfang Range · Field Study</td><td>snow</td><td>snow</td><td>3800 × 1500</td><td>15–25</td><td>Frostfang Alpha</td></tr>
+      <tr><td><code>cinder_caverns</code></td><td>Cinder Caverns</td><td>Emberdeep · Field Study</td><td>volcano</td><td>volcano</td><td>4000 × 1500</td><td>25–35</td><td>Magmaw</td></tr>
+      <tr><td><code>stormspire_peak</code></td><td>Stormspire Peak</td><td>Thunderreach Observatory</td><td>storm</td><td>storm</td><td>3600 × 1600</td><td>35–45</td><td>Tempest Wyrm</td></tr>
+      <tr><td><code>arcane_sanctum</code></td><td>Arcane Sanctum</td><td>The Forbidden Wing</td><td>sanctum</td><td>boss</td><td>2600 × 1100</td><td>45–50</td><td>(the Lich Archon)</td></tr>
+      <tr><td><code>trial_hall</code></td><td>Trial Hall</td><td>The Academy · Proving Grounds</td><td>sanctum</td><td>boss</td><td>1800 × 900</td><td>1–50</td><td>none (waves)</td></tr>
+    </tbody>
+  </table>
+  <p>The campus has eight NPCs standing on its ground (<code>y: G</code>) and no spawns. The six practicum maps form a
+    west-to-east chain: each has a <code>west</code> portal at x 70 and an <code>east</code> portal near its right edge.
+    Two portals break the pattern. The Arcane Sanctum's <code>town</code> portal sends you back to the campus's
+    <code>east</code> portal, a one-way shortcut (nothing on the campus leads to it). And the campus's <code>trial</code>
+    portal sits on the Headmistress tower balcony (<code>tower1.y</code>, 800), reached by the ladder at x 1392, and pairs
+    with the Trial Hall's <code>entry</code>. The Trial Hall has no natural spawns at all: <code>ArenaSystem</code> spawns
+    every wave (see <a href="#story">Story</a>).</p>
+  <figure data-chart="map-graph"><figcaption>Every map is a node and every portal pair an edge. Notice the straight
+    practicum chain from the campus to the Arcane Sanctum, the Trial Hall hanging off the campus as a dead end, and the
+    Sanctum's one-way <code>town</code> portal closing the loop back to the start.</figcaption></figure>
+  <aside class="warn">Map ids and portal ids are referenced from saves (<code>mapId</code>), from other maps'
+    <code>targetMap</code>/<code>targetPortal</code>, from quests and from <code>FIELD_BOSSES[id].mapId</code>. Renaming
+    one silently breaks a portal or strands a save. Add new ids; never rename old ones.</aside>
+
+  <h3 id="world-pipeline">Loading a map</h3>
+  <p>All map changes go through <code>GameScene.changeMap(mapId, portalId?)</code>
+    (<a data-src="src/scenes/GameScene.ts#L96">GameScene.ts:96</a>). It fades the camera out, then
+    <code>loadMapNow</code> (<a data-src="src/scenes/GameScene.ts#L139">GameScene.ts:139</a>) tears down the old map's
+    world, builds the new one and binds every service to it. A request that arrives during the fade (for example a
+    respawn while a portal fade is running) replaces the pending destination instead of starting a second fade.</p>
+  <pre class="mermaid">flowchart TD
+  U["Up near a portal<br>map.getPortalNear()"] --> CM["changeMap(mapId, portalId)"]
+  CM --> FO["camera fadeOut 220 ms"]
+  FO --> CL["clear: skills, arena, monsters,<br>drops, NPCs, pet"]
+  CL --> DS["old map.destroy()"]
+  DS --> LM["loadMap() → new MapInstance"]
+  LM --> PH["buildWalkables + buildPhysics"]
+  PH --> VS["visual steps: backdrop, falls, decor,<br>terrain, ropes, portals, ambient"]
+  VS --> BD["physics world + camera bounds"]
+  BD --> PL["player.bindMap, placeAt(portal or default spawn)"]
+  PL --> SV["bindMap: monsters, drops, NPCs, pet, arena"]
+  SV --> EV["playMusic, map:changed, ui:banner, save"]
+  EV --> FI["camera fadeIn 320 ms"]</pre>
+  <p><code>loadMap</code> itself is small. It looks the id up in the <code>Registry</code>, falls back to the first map
+    with a warning, and constructs a <code>MapInstance</code>
+    (<a data-src="src/world/MapLoader.ts#L24">MapLoader.ts:24</a>):</p>
+  <pre><code class="lang-ts">export function loadMap(scene: Phaser.Scene, mapId: string): IMapInstance {
+  const def = Registry.map(mapId) ?? MAPS.find(m =&gt; m.id === mapId) ?? MAPS[0];
+  if (!def) throw new Error(`[map] no maps defined`);
+  if (def.id !== mapId) console.warn(`[map] unknown map ${mapId}, loading ${def.id}`);
+  return new MapInstance(scene, def);
+}</code></pre>
+  <p>The constructor (<a data-src="src/world/MapLoader.ts#L68">MapLoader.ts:68</a>) builds physics first, outside any
+    <code>try</code>, then runs each visual step in its own <code>try</code>, so a broken decor texture costs you the decor,
+    not the map:</p>
+  <pre><code class="lang-ts">    this.solids = scene.physics.add.staticGroup();
+    this.platforms = scene.physics.add.staticGroup();
+    this.buildWalkables();
+    this.buildPhysics();
+    try {
+      if (!scene.textures.exists(WORLD_TEX_READY)) generateTileTextures(scene);
+    } catch (e) { console.warn('[map] texture generation failed', e); }
+    this.pixelTerrain = PIXEL_TERRAIN_THEMES.has(def.theme);
+    this.geom = this.pixelTerrain ? PIX_TERRAIN : TERRAIN;
+    const steps: [string, () =&gt; void][] = [
+      ['backdrop', () =&gt; this.buildBackdrop()],
+      ['falls', () =&gt; this.buildFalls()],
+      ['decor', () =&gt; this.buildDecor()],
+      ['terrain', () =&gt; this.buildTerrain()],
+      ['ropes', () =&gt; this.buildRopes()],
+      ['portals', () =&gt; this.buildPortals()],
+      ['ambient', () =&gt; { this.ambient = new Ambient(scene, this.theme.ambient); }],
+    ];
+    for (const [name, fn] of steps) {
+      try { fn(); } catch (e) { console.warn(`[map] ${def.id}: ${name} failed`, e); }
+    }</code></pre>
+
+  <h3 id="world-physics">Solids, one-way platforms and walkables</h3>
+  <p>Phaser's Arcade physics works with axis-aligned boxes. A <dfn>static body</dfn> never moves and is cheap to collide
+    against; a <dfn>static group</dfn> is a collection of them that one collider call can test at once. The loader makes
+    two groups, and the player and ground monsters add a collider against each (flyers and field bosses skip the one-way group):</p>
+  <ul>
+    <li><code>solids</code>: ground columns, walls and two invisible edge walls just outside the map.</li>
+    <li><code>platforms</code>: one-way platforms. Each is a 12 px tall box (<code>ONE_WAY_BODY_H</code>) whose
+      <code>checkCollision</code> is turned off on the bottom, left and right faces, so only landing on top collides.</li>
+  </ul>
+  <pre><code class="lang-ts">  private buildPhysics() {
+    const H = this.heightPx, W = this.widthPx;
+    for (const p of this.def.platforms) {
+      const w = Math.max(1, p.x2 - p.x1);
+      if (p.oneWay) {
+        const z = this.zone(this.platforms, p.x1, p.y, w, ONE_WAY_BODY_H);
+        const b = z.body as Phaser.Physics.Arcade.StaticBody | null;
+        if (b) { b.checkCollision.down = false; b.checkCollision.left = false; b.checkCollision.right = false; b.checkCollision.up = true; }
+        z.setData('platform', p);
+      } else {
+        // solid column from the surface to below the map bottom
+        const z = this.zone(this.solids, p.x1, p.y, w, Math.max(32, H - p.y + 200));
+        z.setData('platform', p);
+      }
+    }
+    for (const wl of this.def.walls ?? []) this.zone(this.solids, wl.x, wl.y, wl.w, wl.h).setData('wall', wl);
+    // map-edge walls (outside the map) so nothing walks off the sides even without world-bounds collision
+    this.zone(this.solids, -64, -600, 64, H + 1200);
+    this.zone(this.solids, W, -600, 64, H + 1200);
+  }</code></pre>
+  <p>(<a data-src="src/world/MapLoader.ts#L231">MapLoader.ts:231</a>.) The bodies are Phaser <dfn>zones</dfn>: invisible
+    game objects that exist only to carry a body. Nothing visual is attached, which is why art can never move a
+    collision edge.</p>
+  <p>Before the bodies, <code>buildWalkables()</code> (<a data-src="src/world/MapLoader.ts#L203">MapLoader.ts:203</a>)
+    computes <code>walkables</code>: the spans you can actually stand on. A platform that a wall stands on is split
+    around the wall, and each wall's top is added as its own solid span. Monster edge checks, decor scatter and
+    <code>groundYAt</code> all use this list rather than the raw <code>platforms</code>, so a monster walking along the
+    Whisperwood floor treats the <code>hill</code> wall as the end of its span instead of walking into it.</p>
+
+  <h3 id="world-queries">Ropes, portals and the query API</h3>
+  <p>Ropes and portals have no bodies. They are lines and points in the <code>MapDef</code>, and other systems ask the
+    map instance about them through <code>IMapInstance</code>
+    (<a data-src="src/core/types.ts#L373">types.ts:373</a>):</p>
+  <table>
+    <thead><tr><th>Method</th><th>Used by</th><th>Rule</th></tr></thead>
+    <tbody>
+      <tr><td><code>getRopeAt(x, y, tol = 16)</code></td><td>Player (grab a rope on <kbd>Up</kbd>/<kbd>Down</kbd>; it re-checks the result and falls back to scanning <code>def.ropes</code> itself)</td><td>Nearest rope within <code>tol</code> px horizontally whose span, widened to <code>top − 12 … bottom + 40</code>, contains <code>y</code>.</td></tr>
+      <tr><td><code>getPortalNear(x, y)</code></td><td>GameScene on <kbd>Up</kbd></td><td>Nearest portal (by dx) within <code>PORTAL_REACH</code> = 40 px horizontally and 60 px vertically of the player's feet.</td></tr>
+      <tr><td><code>getPortalById(id)</code></td><td>GameScene when arriving</td><td>Exact match on <code>PortalDef.id</code>.</td></tr>
+      <tr><td><code>getDefaultSpawn()</code></td><td>GameScene when no portal is given (new game, respawn, unknown portal)</td><td><code>MAP_EXTRAS[id].spawn</code> if set, else the <code>west</code> portal, else the first portal, else the ground at the map centre.</td></tr>
+      <tr><td><code>platformAt(x, y, tol = 12)</code></td><td>Monster AI edge checks, boss arenas, the player, ground-anchored spell effects</td><td>The walkable span containing <code>x</code> whose surface is within <code>tol</code> of <code>y</code>, preferring one at or below the point.</td></tr>
+    </tbody>
+  </table>
+  <pre><code class="lang-ts">  platformAt(x: number, y: number, tolerance = 12): PlatformDef | null {
+    let best: PlatformDef | null = null, bestD = Infinity;
+    for (const p of this.walkables) {
+      if (x &lt; p.x1 || x &gt; p.x2) continue;
+      const d = p.y - y;              // &gt;= 0: surface at/below the point
+      if (d &lt; -tolerance || d &gt; tolerance) continue;
+      const score = d &gt;= 0 ? d : -d + 0.5; // prefer at/below
+      if (score &lt; bestD) { best = p; bestD = score; }
+    }
+    return best;
+  }</code></pre>
+  <p>(<a data-src="src/world/MapLoader.ts#L133">MapLoader.ts:133</a>.) The <code>+ 0.5</code> breaks ties: when a monster's
+    feet are exactly between two surfaces, the one under it wins. GameScene checks for a portal before an NPC, and skips
+    both while the player is climbing (<a data-src="src/scenes/GameScene.ts#L310">GameScene.ts:310</a>), so <kbd>Up</kbd> on
+    a rope next to a portal climbs instead of warping.</p>
+  <p>The portal <em>visual</em> is a separate class, <code>PortalVisual</code>
+    (<a data-src="src/world/portals.ts#L8">portals.ts:8</a>). With the pixel art loaded it plays the 8-frame
+    <code>w_portal_spin</code> animation on a pad with square sparkles; otherwise it falls back to two counter-rotating
+    procedural swirls squashed into an oval by a container. Either way a ▲ hint arrow fades in when the player's feet
+    are within 48 px horizontally and 90 px vertically. That window is a little larger than <code>PORTAL_REACH</code>,
+    so the arrow appears just before <kbd>Up</kbd> starts to work.</p>
+
+  <details class="advanced">
+    <summary>Advanced: map design rules and why they hold</summary>
+    <ul>
+      <li><strong>90 px tiers come from the jump arc.</strong> <code>GRAVITY</code> is 1500 px/s²
+        (<a data-src="src/core/constants.ts#L4">constants.ts:4</a>) and the base jump velocity is 560 px/s
+        (<a data-src="src/entities/player/tuning.ts#L6">tuning.ts:6</a>). The apex is v²/2g = 560²/3000 ≈ 105 px. A ledge
+        90 px up leaves about 15 px of margin for the feet to clear the 12 px one-way body and land; anything taller gets a
+        rope or ladder. Air time is 2v/g ≈ 0.75 s, so at the base walk speed of 200 px/s a jump covers about 150 px,
+        hence the "horizontal gaps ≤ 120 px" rule in ARCHITECTURE.md. Movement buffs only add margin.</li>
+      <li><strong>Rope ends are offset on purpose.</strong> <code>rope()</code> stops 8 px above the lower surface and
+        <code>ladder()</code> 2 px above. On <kbd>Up</kbd> the player probes points 12, 30 and 50 px above its feet
+        (<a data-src="src/entities/Player.ts#L592">Player.ts:592</a>), so from the lower floor the first probe already
+        lies on the rope. <code>top</code> equals the upper surface so climbing off the top lands on it.</li>
+      <li><strong>Spawns live on real surfaces.</strong> <code>on()</code> insets the range 40 px from both platform
+        edges, and <code>MonsterManager</code> further clamps by half the monster's width, so nothing spawns hanging off
+        an edge. A spawn whose <code>y</code> is not a surface still works (the monster falls to the next one), but its
+        edge checks will be wrong until it lands.</li>
+      <li><strong>Keep portal mouths clear.</strong> Field boss spans and big spawn spans start well inside the map
+        (Whisperwood's boss span is 1740–2950 with portals at 70 and 3130). Monsters also refuse to wander within 110 px
+        of a portal (see <a href="#monsters-ai">monster AI</a>), and field-boss arenas are cut 150 px either side of one.</li>
+      <li><strong><code>maps.ts</code> has no runtime imports</strong> (only <code>import type</code>), so a plain Node
+        script can load it and lint the geometry, for example "every one-way tier is ≤ 90 px above the surface below
+        it or has a rope".</li>
+      <li><strong>Unknown ids degrade, they do not crash.</strong> <code>changeMap</code> refuses an id the Registry does
+        not know; <code>loadMap</code> falls back to the first map; an unknown <code>portalId</code> falls back to
+        <code>getDefaultSpawn()</code>.</li>
+    </ul>
+  </details>
+
+  <h3 id="world-themes">Themes: parallax, weather and decor per look</h3>
+  <p>A map's <code>theme</code> picks its whole presentation from <code>THEME_RUNTIME</code> in
+    <a data-src="src/world/themes.ts#L39">themes.ts:39</a>: the procedural parallax layers and clouds, stars and a sun
+    or moon, which <dfn>ambient</dfn> effects run (particles that drift across the view), which decor keys get scattered
+    on ground, platforms and undersides, and the ladder art. Seven themes cover eight maps; the Arcane Sanctum and the
+    Trial Hall share <code>sanctum</code>.</p>
+  <table>
+    <thead><tr><th>Theme</th><th>Maps</th><th>Ambient</th><th>Sky extras</th></tr></thead>
+    <tbody>
+      <tr><td><code>town</code></td><td>campus</td><td>petals, fireflies</td><td>sun, clouds</td></tr>
+      <tr><td><code>forest</code></td><td>Whisperwood</td><td>fireflies, leaves</td><td>sun, clouds; waterfall (extras)</td></tr>
+      <tr><td><code>mushroom</code></td><td>Shroom Hollow</td><td>spores, fireflies</td><td>stars 0.45, tinted moon</td></tr>
+      <tr><td><code>snow</code></td><td>Frostfang Cliffs</td><td>snow (two emitters, far and near)</td><td>pale sun; waterfall</td></tr>
+      <tr><td><code>volcano</code></td><td>Cinder Caverns</td><td>embers, ash</td><td>four lava falls</td></tr>
+      <tr><td><code>storm</code></td><td>Stormspire Peak</td><td>rain, lightning</td><td>fast front clouds</td></tr>
+      <tr><td><code>sanctum</code></td><td>Arcane Sanctum, Trial Hall</td><td>motes</td><td>full stars, moon; gold ladder</td></tr>
+    </tbody>
+  </table>
+  <p>On top of the seeded scatter, <code>MAP_EXTRAS</code> (<a data-src="src/world/mapExtras.ts#L35">mapExtras.ts:35</a>)
+    holds hand-placed set dressing per map: the campus buildings and School halls, signposts and lamps at portals,
+    waterfalls and lava falls (<code>falls</code>), x-ranges kept free of scatter (<code>clearZones</code>), a scatter
+    <code>density</code> multiplier, and the default <code>spawn</code> (campus (1200, 980), Sanctum (200, 980), Trial
+    Hall (160, 780)). An entry with <code>clear: true</code> reserves its own sprite width from the scatter, which is how
+    trees never grow through the Fire hall.</p>
+  <p>The scatter in <code>buildDecor</code> (<a data-src="src/world/MapLoader.ts#L409">MapLoader.ts:409</a>) is
+    <em>seeded</em> with <code>rng(hashStr(def.id + ':decor'))</code>, a small deterministic random generator, so a map
+    looks the same on every visit. It walks each solid span placing big back pieces, medium fillers and small front bits
+    at theme-specific spacings, then dresses one-way platforms at least 150 px wide (and hangs vines or icicles under
+    those at least 120 px wide), skipping 90 px around portals, 60 px around NPCs and anything near a rope.</p>
+
+  <h4 id="world-ambient">Ambient weather</h4>
+  <p><code>Ambient</code> (<a data-src="src/world/ambient.ts#L35">ambient.ts:35</a>) turns the theme's
+    <code>AmbientKind[]</code> into particle emitters. The emitters sit at world (0, 0) and never move; only their
+    <dfn>emit zone</dfn> (the rectangle new particles appear in) follows the camera each frame. Particles already in the
+    air therefore stay put in world space while you walk past them, which is what makes leaves feel like they are in
+    the world rather than glued to the screen.</p>
+  <pre><code class="lang-ts">    for (const l of this.live) {
+      if (l.mode === 'view') l.rect.setTo(vx - 80, vy - 60, vw + 160, vh + 120);
+      else if (l.mode === 'top') l.rect.setTo(vx - 260, vy - 40, vw + 420, 24);
+      else l.rect.setTo(vx - 100, vy + vh + 10, vw + 200, 30);</code></pre>
+  <p>(<a data-src="src/world/ambient.ts#L239">ambient.ts:239</a>.) <code>view</code> mode fills the screen (fireflies,
+    spores, motes), <code>top</code> emits from a strip above it (leaves, petals, snow, ash, rain) and
+    <code>bottom</code> from below (embers). Three frames after a map loads, each emitter is
+    <code>fastForward</code>ed by its pre-warm time so the screen is already full of snow when the fade lifts.
+    Every emitter has a <code>maxAliveParticles</code> cap; the largest is rain at 220. When the pixel art is
+    loaded, <code>pixelize()</code> rounds particle scales to whole numbers and removes rotation so the squares stay
+    crisp.</p>
+  <p>Storm lightning is not a particle. A full-screen sky flash, an additive overlay flash and a bolt drawn with
+    <code>Graphics</code> (stepped 4 px blocks in pixel mode) fire every 6–15 s (the first after 4–9 s). The flash is a
+    double pulse (0–90 ms, 160–260 ms, then fading out by 600 ms), and the <code>thunder</code> sound follows 250–750 ms
+    later at volume 0.18.</p>
+
+  <h3 id="world-parallax">Backgrounds and parallax</h3>
+  <p><dfn>Parallax</dfn> is the illusion of depth from background layers that scroll slower than the foreground. Every
+    backdrop layer here is a <code>TileSprite</code> (a texture that repeats inside a fixed rectangle) pinned to the
+    screen with <code>setScrollFactor(0)</code>. Instead of moving the sprite, <code>MapInstance.update</code> shifts the
+    texture inside it:</p>
+  <pre><code class="lang-ts">      const maxScrollY = Math.max(0, this.heightPx - cam.height);
+      const climb = Math.max(0, maxScrollY - cam.scrollY);
+      for (const l of this.layers) {
+        const tx = cam.scrollX * l.fx + (l.drift ? this.elapsed * l.drift : 0);
+        if (l.k) {
+          l.obj.tilePositionX = Math.round(tx / l.k);
+          l.obj.y = Math.round((l.screenTop + climb * l.fy) / l.k) * l.k;
+        } else {
+          l.obj.tilePositionX = tx;
+          l.obj.y = l.screenTop + climb * l.fy;
+        }
+        if (l.fills) for (const f of l.fills) f.obj.y = l.obj.y + f.dy;
+      }</code></pre>
+  <p>(<a data-src="src/world/MapLoader.ts#L162">MapLoader.ts:162</a>.) <code>fx</code> is the horizontal factor: a far
+    mountain range at 0.05 moves 5 px for every 100 px the camera moves. <code>climb</code> is how far the camera is
+    above the bottom of the map, and <code>fy</code> lets a layer sink as you climb ropes, so the hills drop out of view
+    as you reach the top tiers. <code>drift</code> auto-scrolls clouds.</p>
+  <p>There are two backdrop builders. <code>buildPixelBackdrop()</code> uses the 16-bit strips listed per theme in
+    <code>PIXEL_BG</code> (<a data-src="src/art/manifests/world.ts#L50">manifests/world.ts:50</a>): 2 to 5 layers, each
+    with a source size, an integer display scale <code>k</code> (2, 3 or 4), its screen y, <code>fx</code>/<code>fy</code>,
+    and solid fill colours above and below so a tall camera never sees a gap. If the theme's sky strip did not load, it
+    returns <code>false</code> and <code>buildBackdrop()</code> uses the procedural 1024×512 painted layers and the
+    <code>THEME_RUNTIME</code> factors instead.</p>
+
+  <details class="advanced">
+    <summary>Advanced: pixel snapping and depth</summary>
+    <ul>
+      <li><strong>Why divide by <code>k</code>.</strong> A pixel layer is drawn at <code>setScale(l.k)</code>, so
+        <code>tilePositionX</code> is measured in <em>source</em> pixels. Rounding <code>tx / k</code> moves the strip in
+        whole source pixels, so one art pixel always covers exactly k×k screen pixels. Rounding <code>tx</code> instead would
+        let the strip sit at a fraction of an art pixel and shimmer as it scrolls. The y position is rounded to a multiple
+        of <code>k</code> for the same reason.</li>
+      <li><strong>Integer scales only.</strong> <code>PIXEL_SCALE</code> is 2 for foreground art
+        (<a data-src="src/core/constants.ts#L37">constants.ts:37</a>); parallax strips may use 3 or 4 to fill the screen.
+        <code>placeDecor</code> ignores a decor entry's <code>scale</code> for pixel textures (they are pre-baked ×2), short
+        one-way platforms crop their end caps rather than stretch them, and pixel waterfalls snap their width to the 48 px
+        tile so the texture never seams mid-fall.</li>
+      <li><strong>The procedural fallback insets 2 rows</strong> (<code>TERRAIN.layerH - 4</code> tall,
+        <code>tilePositionY = 2</code>) so linear filtering never wraps the opaque bottom row onto the top edge.</li>
+      <li><strong>Depth bands</strong> come from <code>DEPTH</code> (<a data-src="src/core/constants.ts#L8">constants.ts:8</a>):
+        sky −1000, parallax −900/−800/−700, terrain 0, decor 5, ropes 6, portals 7, then NPCs, drops, monsters and the
+        player. Pixel strips stack at <code>PARALLAX_FAR + i × 40</code>, so a five-layer stack (storm) reaches −740 and
+        still sits behind the falls at <code>PARALLAX_NEAR + 20</code>. Decor <code>layer</code> maps to
+        far/back/mid/front depths around <code>TERRAIN</code>.</li>
+      <li><strong>The camera follows with lerp 0.12</strong> and a 40 px vertical offset
+        (<code>cam.startFollow(…, 0.12, 0.12, 0, 40)</code>), so <code>scrollX</code> is fractional most frames; all the
+        rounding above happens after the parallax multiply, never before.</li>
+    </ul>
+  </details>
+
+  <h3 id="world-art">World art: tiles, terrain, decor and the town</h3>
+  <p>Every world texture is made once at boot by <code>generateTileTextures()</code>
+    (<a data-src="src/art/tileArt.ts#L14">tileArt.ts:14</a>), called from <code>BootScene</code>. It runs six painters in
+    order, each in its own <code>try</code>, and finally creates a 1×1 marker texture <code>w__ready</code>. The loader
+    checks that marker and calls the generator itself if boot skipped it, so a map can always be built.</p>
+  <pre><code class="lang-ts">  const steps: [string, (s: Phaser.Scene) =&gt; void][] = [
+    // 16-bit pixel art from the loaded source packs first; the procedural painters below skip existing keys
+    // and so only fill in whatever failed to load.
+    ['pixel', generatePixelWorldTextures],
+    ['terrain', generateTerrainTextures],
+    ['parallax', generateParallaxTextures],
+    ['decor', generateDecorTextures],
+    ['town', generateTownTextures],
+    ['fx', generateFxTextures],
+  ];</code></pre>
+  <p>The order is the fallback mechanism. <code>generatePixelWorldTextures</code>
+    (<a data-src="src/art/world/pixel.ts#L92">pixel.ts:92</a>) takes the source PNGs that <code>BootScene.preload</code>
+    queued from the world manifest and bakes them, integer-upscaled with smoothing off, into the final texture keys. The
+    procedural painters run next, and <code>makeTex</code> (<a data-src="src/art/world/util.ts#L10">util.ts:10</a>) skips
+    any key that already exists. Whatever PNG failed to load is therefore painted procedurally under the same key, and
+    the loader never knows the difference. <code>PIXEL_KEYS</code> records which keys came from pixel sources so the
+    loader can keep those at integer scale.</p>
+  <pre><code class="lang-ts">function bake(scene: Phaser.Scene, key: string, img: CanvasImageSource, sx: number, sy: number, sw: number, sh: number, k = S): boolean {
+  try {
+    if (scene.textures.exists(key)) return true;
+    const tex = scene.textures.createCanvas(key, sw * k, sh * k);
+    if (!tex) return false;
+    const ctx = tex.getContext();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw * k, sh * k);
+    tex.refresh();
+    PIXEL_KEYS.add(key);
+    return true;
+  } catch (e) {
+    // …
+  }
+}</code></pre>
+  <table>
+    <thead><tr><th>Module</th><th>Keys</th><th>What it makes</th></tr></thead>
+    <tbody>
+      <tr><td><a data-src="src/art/world/palettes.ts">palettes.ts</a></td><td><code>TK.*</code></td><td>Per-theme colour palettes, the texture key scheme (<code>w_&lt;theme&gt;_soil</code>, <code>_lip</code>, <code>_plat</code>, <code>_platL</code>, <code>_platR</code>, <code>_wall</code>, <code>_sky</code>, <code>_far</code>…) and the procedural terrain geometry <code>TERRAIN</code>.</td></tr>
+      <tr><td><a data-src="src/art/world/pixel.ts">pixel.ts</a></td><td>all of the below</td><td>Bakes the pixel sources: slices each theme's terrain kit atlas (lip, soil, platform mid and caps, wall, ladder, rope, knot) and the 8-frame portal animation. <code>PIX_TERRAIN</code> is the kit's geometry in screen px.</td></tr>
+      <tr><td><a data-src="src/art/world/terrain.ts">terrain.ts</a></td><td><code>w_&lt;theme&gt;_*</code>, <code>w_rope</code>, <code>w_ladder</code></td><td>Procedural soil, grass/snow/stone lips, one-way platform slices and caps, walls, ropes and ladders.</td></tr>
+      <tr><td><a data-src="src/art/world/parallax.ts">parallax.ts</a></td><td><code>w_&lt;theme&gt;_sky/far/mid/near/clouds</code>, <code>w_stars</code>, <code>w_sun</code>, <code>w_moon</code></td><td>Tileable painted backdrops; skipped per theme when that theme's pixel sky strip loaded.</td></tr>
+      <tr><td><a data-src="src/art/world/decor.ts">decor.ts</a></td><td><code>d_*</code>, <code>w_lavafall</code>, <code>w_waterfall</code></td><td>Trees, bushes, rocks, giant mushrooms, pines, crystals, braziers, pillars, banners, the arcane circle; origin bottom-centre except hanging pieces (vines, icicles).</td></tr>
+      <tr><td><a data-src="src/art/world/town.ts">town.ts</a></td><td><code>t_*</code></td><td>The campus: armory and potion houses, cottages, the five School halls and their banners, the Headmistress tower, fountain, well, lantern posts, gate and signboards.</td></tr>
+      <tr><td><a data-src="src/art/world/fx.ts">fx.ts</a></td><td><code>w_glow</code>, <code>w_portal_*</code>, <code>w_mote</code>…</td><td>Portal swirl/core/ring, the hint arrow, and white particle textures (motes, leaves, petals, snowflakes, raindrops, embers) that tint per use.</td></tr>
+    </tbody>
+  </table>
+  <p>Terrain drawing in <code>buildTerrain</code> (<a data-src="src/world/MapLoader.ts#L474">MapLoader.ts:474</a>) follows
+    the physics, not the other way round: each solid platform becomes a soil <code>TileSprite</code> from just under its
+    surface to below the map bottom, topped by a lip strip whose grass row lines up with <code>y</code>; walls get a
+    wall tile, side shading and a cropped lip; one-way platforms get a tiled middle and two end caps that overhang the
+    body by <code>capOverhang</code>. Glows (lamps, braziers, crystals, hall windows) are additive <code>w_glow</code>
+    images placed by <code>DECOR_GLOWS</code>, with separate anchors for the pixel sprites in
+    <code>PIXEL_GLOW_DY</code>. All the pixel art is CC0 work by Luis Zuno (@ansimuz), recorded in
+    <code>public/assets/world/CREDITS.md</code>; see <a href="#art">Art</a> for the pivot and licensing.</p>
+
+  <h3 id="world-minimap">The minimap</h3>
+  <p>The minimap (<a data-src="src/ui/minimap.ts">src/ui/minimap.ts</a>) is a DOM canvas in the UI overlay, not a Phaser
+    object. When the map changes it draws a static layer once, from the <code>MapDef</code> alone: walls as blocks,
+    dashed ropes, platforms as lines (solid ground thicker and green, one-way thinner and blue), glowing portal dots
+    (hidden portals skipped) and NPC dots. The map is scaled to fit 216 × 112 CSS px and drawn at 2× for sharp lines.
+    Every 80 ms (about 12 times a second) it blits that layer and adds live dots for monsters (bosses larger and pink)
+    and a pulsing dot for the player. The header shows the map name and either "Safe zone" or the level range. <kbd>M</kbd>
+    (or its rebound key) collapses it, and the choice is remembered. See <a href="#ui">UI</a> for the overlay.</p>
+
+  <h3 id="world-teardown">Teardown on map change</h3>
+  <p>A map instance owns everything it created. Every visual goes through <code>keep()</code> into one array, portal
+    visuals and the ambient system keep their own lists, and <code>destroy()</code>
+    (<a data-src="src/world/MapLoader.ts#L189">MapLoader.ts:189</a>) releases all of it:</p>
+  <pre><code class="lang-ts">  destroy() {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    try { this.ambient?.destroy(); } catch { /* ignore */ }
+    for (const pv of this.portalVisuals) { try { pv.destroy(); } catch { /* ignore */ } }
+    for (const o of this.visuals) { try { o.destroy(); } catch { /* ignore */ } }
+    try { this.solids.destroy(true); } catch { /* ignore */ }
+    try { this.platforms.destroy(true); } catch { /* ignore */ }
+    this.visuals = []; this.layers = []; this.fixedSky = []; this.pulsers = []; this.bobbers = []; this.scrollers = [];
+    this.portalVisuals = []; this.ambient = null;
+  }</code></pre>
+
+  <details class="advanced">
+    <summary>Advanced: memory, ordering and failure isolation</summary>
+    <ul>
+      <li><strong>Textures are shared, objects are not.</strong> World textures are generated once per session and
+        reused by every map, so a map change destroys game objects (sprites, tile sprites, rectangles, graphics,
+        emitters, zones) but frees no textures. That keeps map changes fast and makes revisits free. The cost is that every
+        world texture stays in memory for the whole session.</li>
+      <li><strong>Order matters.</strong> <code>loadMapNow</code> clears skills, monsters, drops, NPCs and the familiar
+        <em>before</em> <code>map.destroy()</code>. Monsters hold colliders against <code>map.solids</code> and
+        <code>map.platforms</code>; destroying a monster removes its colliders first, so no collider is left pointing at
+        a destroyed static group. If you add a system that collides with the map, clear it in the same block.</li>
+      <li><strong><code>destroy(true)</code> on a static group</strong> destroys its zones as well as the group.
+        Without <code>true</code> the zones would linger in the scene's display list.</li>
+      <li><strong>Idempotent and guarded.</strong> <code>destroy()</code> returns early the second time (scene shutdown
+        also calls it), and <code>update()</code> does nothing once <code>destroyed</code> is set. <code>update()</code>
+        wraps its whole body in one <code>try</code> and warns only once per instance, so a bad decor bobber can't flood
+        the console 60 times a second.</li>
+      <li><strong>Timers are not the map's job.</strong> Respawn and field-boss timers belong to
+        <code>MonsterManager</code>, which bumps a generation counter on <code>clear()</code> so a timer created for the
+        previous map does nothing when it fires (see <a href="#monsters-manager">MonsterManager</a>).</li>
+      <li><strong>Extending safely.</strong> A new visual must be created through <code>keep()</code> (or tracked by a
+        helper with its own <code>destroy</code>), must check <code>this.has(key)</code> before using a texture, and
+        should run inside one of the constructor's <code>try</code> steps. A new map needs only a <code>MapDef</code> in
+        <code>MAPS</code>, a theme, and optionally a <code>MAP_EXTRAS</code> entry; see <a href="#recipes">Recipes</a>.</li>
+    </ul>
+  </details>
+</section>

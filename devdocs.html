@@ -4,10 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>The Academy: Developer Docs</title>
+    <meta name="description" content="How The Academy is built: the contracts, scenes, skill engine, progression, world, monsters, UI, art and audio pipelines, saves and deploy, with diagrams and live charts drawn from the game's own code." />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#1a1b45" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="The Academy" />
+    <meta property="og:title" content="The Academy: Developer Docs" />
+    <meta property="og:description" content="How The Academy is built, with diagrams and live charts drawn from the game's own code." />
+    <style>
+      /* Before the docs' stylesheet arrives: the night palette, so the page never flashes white. */
+      html, body { margin: 0; background: #0e0f24; color: #deeed6; }
+      @media (prefers-color-scheme: light) { html, body { background: #f3eedf; color: #1a1b45; } }
+      .boot { padding: 40px 16px; text-align: center; font-family: system-ui, sans-serif; }
+    </style>
   </head>
   <body>
     <div id="devdocs"><p class="boot">Opening the developer docs…</p></div>
-    <noscript><p>The Academy developer docs need JavaScript.</p></noscript>
+    <noscript><p>The Academy developer docs draw their diagrams and charts in your browser. Please enable JavaScript.</p></noscript>
     <script type="module" src="/src/devdocs/main.ts"></script>
   </body>
 </html>

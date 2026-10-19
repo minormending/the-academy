@@ -1,0 +1,448 @@
+<section id="art" data-title="Art pipeline" data-summary="From procedural Canvas2D art to 16-bit pixel packs: manifests, slicing, palette ramps, integer scaling, outlines, the character rig, monster sheets, icons, the pixel VFX kit, and the licensing rules behind CREDITS.md.">
+  <h2>Art pipeline</h2>
+
+  <p>Every texture the game draws is generated at runtime into a Phaser texture key such as
+    <code>player_cleric</code>, <code>monster_frost_bat</code> or <code>pxs_cm_ring_gold</code>. What changed over
+    the project's life is <em>where the pixels come from</em>. This section tells that story and then walks through
+    each producer: characters, monsters, icons, VFX and (briefly) the world. Terms:</p>
+  <ul>
+    <li><dfn>source sheet</dfn>: a PNG from a freely licensed pack, loaded under a <code>src_*</code> key and never
+      drawn directly.</li>
+    <li><dfn>palette swap</dfn>: recolouring a sprite by mapping each source colour (or brightness level) to a new
+      colour, so one sheet can serve many jobs or monsters.</li>
+    <li><dfn>ramp</dfn>: an ordered list of colours from dark to light (e.g. the ice ramp
+      <code>0x0c2456 → … → 0xffffff</code>) that a palette swap maps onto.</li>
+    <li><dfn>integer scaling</dfn>: drawing each source pixel as exactly k×k screen pixels with nearest-neighbour
+      sampling, never a fractional size.</li>
+    <li><dfn>procedural fallback</dfn>: the original Canvas2D painters, still in the code, used for any texture whose
+      source failed to load.</li>
+  </ul>
+
+  <!-- ===================================================================== -->
+  <h3 id="art-story">From procedural to pixel</h3>
+
+  <p><strong>Phase 1: everything procedural.</strong> The first build had no image files at all. The original contract
+    in <a data-src="ARCHITECTURE.md">ARCHITECTURE.md</a> says "all art is procedural (Canvas 2D / Phaser Graphics →
+    textures)". Characters were a chibi rig painted with paths and gradients
+    (<a data-src="src/art/char/rig.ts">char/rig.ts</a>, posed by <a data-src="src/art/char/poses.ts">char/poses.ts</a>),
+    monsters had a hand-written draw function each (<code>drawSnail</code>, <code>drawLich</code>… in
+    <a data-src="src/art/monsterArt.ts#L342">monsterArt.ts</a>), icons were vector glyphs with a dilated outline, and the
+    world was painted from per-theme palettes (<a data-src="src/art/world/palettes.ts#L17">world/palettes.ts</a>).</p>
+
+  <p><strong>Phase 2: the 16-bit pixel pivot.</strong> The smooth look was replaced by SNES-era pixel art from free
+    packs (ROADMAP phase 2, commits <code>c6de896</code> for the pipeline, then one commit each for characters, UI,
+    monsters, world and VFX). The pivot was written down as five rules
+    (<a data-src="ARCHITECTURE.md#L186">ARCHITECTURE.md:186</a>), summarised:</p>
+  <ol>
+    <li><strong>Gameplay code does not change.</strong> Pixel art is sliced, palette-swapped and scaled
+      <em>into the existing texture keys, frame layouts and animation keys</em>. <code>Player</code> still plays
+      <code>player_&lt;job&gt;_walk</code>; it never learned that the frames now come from a PNG.</li>
+    <li><strong>The procedural path stays as a fallback</strong> when a source image is missing.</li>
+    <li><strong>One pixel size:</strong> <code>PIXEL_SCALE = 2</code>
+      (<a data-src="src/core/constants.ts#L37">constants.ts:37</a>), nearest-neighbour everywhere
+      (<code>pixelArt: true</code> and <code>roundPixels: true</code> in <a data-src="src/main.ts#L30">main.ts:30</a>),
+      never a non-integer scale. Far parallax layers may use a larger integer.</li>
+    <li><strong>Strict licensing</strong> and <strong>downloads treated as untrusted data</strong> (see
+      <a href="#art-licensing">Licensing and credits</a>).</li>
+    <li><strong>Cohesion:</strong> readable silhouettes, 1 px dark outlines, element colours (fire reds/golds, ice
+      cyans/whites, lightning violets/yellows, apprentice indigo).</li>
+  </ol>
+
+  <p>The procedural code was not deleted. In every domain the pixel builder runs first and the procedural painter only
+    fills keys that do not exist yet, so a 404 on one PNG degrades one texture, not the game.</p>
+
+  <pre class="mermaid">flowchart LR
+  PNG["public/assets/(domain)/*.png"] --> LOAD["BootScene.preload()&lt;br&gt;queueArtAssets"]
+  LOAD --> SRC["src_* texture&lt;br&gt;(never drawn)"]
+  SRC --> SLICE["slice frames&lt;br&gt;+ re-anchor feet"]
+  SLICE --> SWAP["palette swap&lt;br&gt;(ramp per job / element)"]
+  SWAP --> OUT["1 px outline&lt;br&gt;+ overlays"]
+  OUT --> SCALE["integer scale&lt;br&gt;×PIXEL_SCALE (2)"]
+  SCALE --> KEY["existing key&lt;br&gt;player_* / monster_* / w_* / pxs_*"]
+  SRC -.->|"missing"| PROC["procedural painter"]
+  PROC --> KEY</pre>
+  <p>The order varies a little by domain: monsters recolour the whole source sheet before slicing, characters classify
+    pixels before swapping, characters are not upscaled (see below), and world PNGs were sliced and recoloured
+    offline so the game only scales them.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="art-manifests">Manifests and loading</h3>
+
+  <p>Each art domain lists its files in its own manifest under
+    <a data-src="src/art/manifests/characters.ts">src/art/manifests/</a>: <code>characters</code>,
+    <code>monsters</code>, <code>world</code>, <code>vfx</code>, <code>ui</code>, <code>holy</code> and
+    <code>shadow</code> (the shadow list is empty; Shadow VFX reuse the shared sheets). An entry is a texture key and a
+    path under <code>public/assets</code>:</p>
+  <pre><code class="lang-ts">export interface AssetEntry {
+  /** Phaser texture key; prefix with the domain, e.g. 'src_char_wizard_idle'. Use the `src_` prefix for raw source sheets. */
+  key: string;
+  /** Path relative to public/assets, e.g. 'characters/wizard/idle.png'. */
+  path: string;
+  type: 'image' | 'spritesheet';
+  frameWidth?: number;
+  frameHeight?: number;
+}
+
+export function assetUrl(path: string): string {
+  return `${import.meta.env.BASE_URL}assets/${path}`;
+}</code></pre>
+  <p>(<a data-src="src/art/assets.ts#L17">assets.ts:17</a>). <code>assetUrl</code> prefixes Vite's
+    <code>BASE_URL</code>, so the same code works at <code>/</code> in dev and under the GitHub Pages sub-path.
+    <code>ALL_ASSETS</code> concatenates the seven manifests (186 entries today, about 1.5 MB of PNGs across the five
+    asset folders) and <code>queueArtAssets</code> queues them all in <code>BootScene.preload()</code>; a failed file only
+    logs <code>[boot] failed to load</code>. Generators read the pixels back with
+    <code>sourceImage(scene, key)</code>, which returns <code>null</code> for a missing key: that <code>null</code> is
+    what switches a domain to its fallback. The world manifest is mostly generated from key lists
+    (<code>PIXEL_DECOR_KEYS</code>, <code>PIXEL_TOWN_KEYS</code>, <code>PIXEL_FX_KEYS</code>, per-theme
+    <code>PIXEL_BG</code> layer stacks), so adding a decor piece is one string plus one PNG.</p>
+
+  <aside class="note">The icon sheet is the exception to "BootScene loads it". <code>iconDataUrl</code> is synchronous
+    and is called by the title menu before Phaser has loaded anything, so <a data-src="src/art/icons.ts#L913">icons.ts</a>
+    loads <code>ui/icons/rpg_icons_7soul1.png</code> itself through an <code>HTMLImageElement</code> at import time. It is
+    also in the UI manifest, which only warms the browser cache.</aside>
+
+  <!-- ===================================================================== -->
+  <h3 id="art-palette">Palette swaps and ramps</h3>
+
+  <p>There are four palette-swap techniques, each tuned to its source material.</p>
+  <table>
+    <thead><tr><th>Where</th><th>Technique</th><th>Why this one</th></tr></thead>
+    <tbody>
+      <tr><td>Characters, <a data-src="src/art/char/pixel.ts#L309">char/pixel.ts:309</a> <code>rampMap</code></td>
+        <td>Every pixel is first <em>classified</em> (robe, hat brim, hat tip, hair, skin, trim, gem, keep). Each class's
+          source colours are mapped in HSL onto a target base colour, keeping each colour's lightness offset from the
+          ramp's base and half of its hue offset.</td>
+        <td>One witch sprite must become ten job looks with different robe, hat, trim and gem colours, so the swap
+          has to be per body part.</td></tr>
+      <tr><td>Monsters, <a data-src="src/art/monsterArt.ts#L1836">monsterArt.ts:1836</a> <code>gradientMap</code>,
+          <code>hueShift</code></td>
+        <td>Gradient map: normalise each filtered pixel's luminance over the sheet and map it onto a ramp. Hue shift:
+          rotate hue, scale saturation and lightness. Both take a <code>PixFilter</code> (hue range, min saturation,
+          luminance bounds) so only part of the sprite changes, and <code>chain()</code> combines them.</td>
+        <td>A monster usually needs a whole new element identity (a brown bat becomes an ice bat), sometimes only
+          on one part (the thunder drake's wings).</td></tr>
+      <tr><td>VFX, <a data-src="src/art/particles.ts#L157">particles.ts:157</a> <code>recolorCanvas</code></td>
+        <td>Luminance <em>rank</em>: build a histogram of brightness levels and give each level the ramp entry at its
+          percentile.</td>
+        <td>Effect sheets are often mostly white; a plain luminance map would collapse them onto the ramp's white end.</td></tr>
+      <tr><td>Icons, <a data-src="src/art/icons.ts#L1041">icons.ts:1041</a> <code>recolor</code></td>
+        <td>Seven-stop ramp built from the spec's colour (and <code>color2</code> for highlights); pixels darker than
+          12% luminance (the outline) are kept.</td>
+        <td>Icons must match an <code>IconSpec</code> colour exactly while keeping their dark outline.</td></tr>
+    </tbody>
+  </table>
+
+  <p>The ramps themselves are data. Monster ramps live in <code>RAMP</code>
+    (<a data-src="src/art/monsterArt.ts#L1868">monsterArt.ts:1868</a>: ice, snowFur, void, lava, magma, crag, storm,
+    thunder, arcaneFire); VFX ramps in <code>RAMPS</code>
+    (<a data-src="src/art/particles.ts#L142">particles.ts:142</a>):</p>
+  <pre><code class="lang-ts">export const RAMPS = {
+  fire: [0x4a0c06, 0x8f1a0a, 0xd93512, 0xff7a1a, 0xffb830, 0xffe27a, 0xfff6d8],
+  ice: [0x0c2456, 0x1c55a8, 0x3a9ae6, 0x7fd6ff, 0xc2f0ff, 0xffffff],
+  ltn: [0x220c58, 0x4f22c4, 0x9b5cff, 0xd6b4ff, 0xffe94d, 0xfffbe8],
+  arcane: [0x1e0f5c, 0x4a1fc4, 0x8f55ff, 0x5ee0ff, 0xb8f6ff, 0xffffff],
+  gold: [0x6a3a00, 0xb57a0c, 0xffc933, 0xffe066, 0xfff3b0, 0xffffff],
+  white: [0x5c5c5c, 0x9a9a9a, 0xcfcfcf, 0xf0f0f0, 0xffffff],
+} as const;</code></pre>
+  <p>Because the source packs use small palettes, every technique produces a small palette too: no technique invents a
+    new shade per pixel, which is what keeps recoloured sprites looking hand-pixelled rather than filtered. World art is
+    different: its theme recolours were done offline (the PNGs in <code>public/assets/world</code> are already sliced
+    and swapped), and <a data-src="src/art/world/palettes.ts#L17">world/palettes.ts</a> now serves the procedural
+    fallback painters plus the <code>TK</code> texture-key scheme (<code>w_&lt;theme&gt;_lip</code>,
+    <code>w_&lt;theme&gt;_soil</code>…).</p>
+
+  <h4 id="art-scale">Integer scaling and outlines</h4>
+  <p>Foreground art is drawn at <code>PIXEL_SCALE</code> = 2 with <code>imageSmoothingEnabled = false</code>. The
+    deliberate exceptions, all integers:</p>
+  <ul>
+    <li><strong>Characters are 1:1</strong> (<code>CHAR_SCALE = 1</code>,
+      <a data-src="src/art/char/pixel.ts#L21">char/pixel.ts:21</a>). The Foozle mages are about 60 px tall at native
+      size, already the on-screen target; ×2 would make the player roughly twice the height of its 26×58 hitbox.</li>
+    <li><strong>Bosses are ×3 or ×4</strong> through a per-monster <code>scale</code> (the Lich Archon and the
+      Mossback Matriarch ×4, the Frostfang Alpha ×3).</li>
+    <li><strong>Parallax layers</strong> use <code>k</code> of 2–4 per layer in <code>PIXEL_BG</code>.</li>
+    <li><strong>VFX</strong> pick a scale with <code>pxEven(targetPx, framePx)</code>: the nearest multiple of
+      <code>PIXEL_SCALE</code> between 2 and 6 that brings the frame near the requested size.</li>
+  </ul>
+  <p>Outlines are added only where the source has none. Characters get a 4-neighbour 1 px ring in a very dark version of
+    the robe colour, stopped at the feet row so feet stay on the ground line
+    (<a data-src="src/art/char/pixel.ts#L464">char/pixel.ts:464</a>). Monsters get one when their spec sets
+    <code>outline</code> (the ember imp and lava salamander), via a 1 px border added around each cut frame so the
+    ring has room (<a data-src="src/art/monsterArt.ts#L2118">monsterArt.ts:2118</a>). All of this happens at 1× before
+    scaling, so the outline is exactly one source pixel wide on screen.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="art-characters">Characters</h3>
+
+  <p>One CC0 sprite, Foozle's "Pointy Hat Mage" (seven sheets: idle, walk, jump, attack, climb, hurt, death), becomes
+    every job. A second, "Purple Mage", is used for the two old sage NPCs (Headmistress Maelis and Bram;
+    <code>npcBase</code> matches their ids). The pipeline in <a data-src="src/art/char/pixel.ts">char/pixel.ts</a>,
+    per frame:</p>
+  <ol>
+    <li><strong>Re-anchor</strong> each source frame into an 80×80 cell with the body centred (found from torso
+      colours) and the feet on a fixed row.</li>
+    <li><strong>Classify</strong> every pixel (<a data-src="src/art/char/pixel.ts#L223">pixel.ts:223</a>). The red
+      cloth is the robe, except red pixels surrounded by skin (the mouth) and red pixels flood-filled from the blue hat
+      tip above the collar (the hat brim). Hair-coloured pixels near the bottom are boots and are kept.</li>
+    <li><strong>Palette-swap</strong> each class with <code>rampMap</code> toward the job's
+      <code>CharacterLook</code> (robe, hat, trim, hair, skin, gem), cached per look.</li>
+    <li><strong>Decorate by tier</strong> (<code>decorateHat</code>): a metal hat band along the tip/brim seam, a
+      diamond gem in the band from deco 3, side and centre crown spikes at deco 4.</li>
+    <li><strong>Outline</strong>, and for tier 4 an <dfn>aura</dfn>: a second, 8-neighbour ring in the hat-trim colour
+      at alpha 150.</li>
+  </ol>
+  <p>Tier maps to decoration in <a data-src="src/art/characters.ts#L83">characters.ts:83</a>:</p>
+  <pre><code class="lang-ts">/** Player decorations by job tier: band (1–2), circlet gem (3), crown + aura (4). */
+function playerOpts(tier: number): PixelOpts {
+  return { deco: Math.max(2, Math.min(4, tier)), aura: tier &gt;= 4 };
+}</code></pre>
+  <p>So Years 1 and 2 share the plain band, a Year 3 job adds the gem, and a Year 4 graduate wears a crown and glows.</p>
+
+  <p><strong>Frame layout.</strong> The pixel sheet's animations are listed in <code>PIXEL_PLAYER_ANIMS</code>
+    (<a data-src="src/art/char/pixel.ts#L37">pixel.ts:37</a>): idle 8 frames, walk 10, jump 2, fall 2, climb 4, prone
+    1, cast 6 (380 ms total), hit 4, dead 4, picked out of the source sheets (prone is a death frame, cast skips two
+    attack frames). The procedural rig uses 64×80 frames and a different layout (<code>FRAME_LAYOUT</code> from
+    <code>poses.ts</code>); <code>ensurePlayerTexture</code> remembers which path built a sheet and creates the matching
+    animations. Either way the animation keys are <code>player_&lt;job&gt;_&lt;anim&gt;</code>, which is all
+    <code>Player</code> uses.</p>
+
+  <p><strong>On-demand sheets.</strong> At boot only the Apprentice sheet is built; every other job is queued with
+    <code>scheduleIdle</code> to build in the background on the Title screen. If a sheet is asked for before then,
+    <code>playerTextureKey</code> builds it on the spot:</p>
+  <pre><code class="lang-ts">export function playerTextureKey(job: JobId): string {
+  const key = texKey(job);
+  if (sheetScene &amp;&amp; !sheetScene.textures.exists(key)) ensurePlayerTexture(sheetScene, job);
+  return key;
+}</code></pre>
+  <p>(<a data-src="src/art/characters.ts#L117">characters.ts:117</a>). <code>ensurePlayerTexture</code> also calls
+    <code>warmSchoolSoon</code>, because whoever just selected or advanced to a job is about to cast that School's
+    spells. NPC sheets (<code>npcTextureKey</code>, an 8- or 6-frame idle) and dialog portraits
+    (<code>portraitDataUrl</code>: a 40×40 head-and-shoulders crop of idle frame 0, nearest-neighbour upscaled) use the
+    same frame renderer with decoration chosen from the look's <code>hatStyle</code>.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="art-monsters">Monsters</h3>
+
+  <p><a data-src="src/art/monsterArt.ts">monsterArt.ts</a> builds <code>monster_&lt;id&gt;</code> with frames named
+    <code>&lt;anim&gt;_&lt;i&gt;</code> and animations <code>monster_&lt;id&gt;_&lt;anim&gt;</code> for idle, move,
+    hit, die and (optionally) attack. Each monster has a <code>PixelSpec</code> in <code>buildPixelSpecs()</code>
+    (<a data-src="src/art/monsterArt.ts#L1912">monsterArt.ts:1912</a>) that names its source frames, its recolour and
+    options:</p>
+  <pre><code class="lang-ts">    frost_bat: { recolor: gradientMap(RAMP.ice), idle: { frames: batFly(0, 1, 2, 3), rate: 9 }, move: { frames: batFly(0, 1, 2, 3), rate: 12 },
+      hit: batHit(1)[0], die: { frames: [...batDie(...range(0, 7)), ...batDieLow(8, 9, 10)], rate: 15 } },
+    snow_yeti: { flip: true, recolor: gradientMap(RAMP.snowFur, { hue: [8, 48], minSat: 0.15 }),
+      idle: { frames: wartaur(0, 2), rate: 2 }, move: { frames: wartaur(0, 1, 2, 3), rate: 7 } },
+    // …
+    lich_archon: { scale: 4, flip: true, recolor: gradientMap(RAMP.arcaneFire, { hue: [10, 70], minSat: 0.45, minLum: 0.3 }),
+      idle: { frames: wizard(...range(0, 4)), rate: 7 }, move: { frames: wizard(...range(0, 4)), rate: 9 },
+      attack: { frames: wizard(...range(5, 14)), rate: 15 } },</code></pre>
+  <p>One source often serves several monsters: the Bestiary golem is both the magma golem (magma ramp) and the crag golem
+    (crag ramp); the Sunny mushroom is the cap shroom, the thorn shroom (hue-shifted cap) and the Shroom Monarch field
+    boss. <code>paintPixelMonsterSheet</code> (<a data-src="src/art/monsterArt.ts#L2154">monsterArt.ts:2154</a>) then:</p>
+  <ul>
+    <li>recolours the whole source sheet once (cached per monster), cuts each frame at 1×, flips left-facing art so every
+      texture faces right, adds the optional outline and stamps <dfn>overlays</dfn>: tiny hand-placed pixel maps (the
+      Matriarch's flower crown, the Monarch's gold crown, the Wyrm's horns) anchored to the top of the head
+      (<code>'peak'</code>) or the snout (<code>'front'</code>);</li>
+    <li>derives missing animations: <em>hit</em> is the hit (or idle) frame flashed white at 45%, then normal;
+      <em>die</em>, when the pack has no death frames, fades the hit pose through alpha 1 → 0.7 → 0.4 → 0.15 → 0
+      under the Sunny Land poof;</li>
+    <li>sizes one cell to fit every frame symmetrically around the anchor with the feet
+      <code>MONSTER_FOOT_PAD</code> = 2 px above the cell bottom, and draws each frame at ×<code>scale</code>;</li>
+    <li>records the idle frame's visible height and width (<code>monsterVisual</code>) so Monster can place its
+      overlays above the art (which can be taller than the hitbox) and size the freeze shell to it.</li>
+  </ul>
+
+  <p><strong>Status overlays</strong> are shared textures built at boot by <code>generatePixelFxTextures</code>:
+    <code>monster_fx_*</code> (ice shell, shard, stun star, spark, ember, snow, puff, orb, aura, glow), the field-boss
+    attack textures <code>boss_fx_*</code>, and the coin and meso-bag drops. They are original 1× pixel maps scaled ×2
+    (aura ×4); Monster draws and tints them for burn, freeze, stun and so on (see <a href="#monsters">Monsters</a>).</p>
+
+  <p><strong>On demand.</strong> Per-monster sheets are not built at boot. <code>ensureMonsterTexture(scene, id)</code>
+    (<a data-src="src/art/monsterArt.ts#L2466">monsterArt.ts:2466</a>) is idempotent and never throws: it tries the
+    pixel sheet, falls back to the procedural <code>paintMonsterSheet</code>, and registers the anims. The Monster
+    constructor and <code>MonsterManager.bindMap</code> call it, so a map pays only for the monsters it spawns.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="art-icons">Icons</h3>
+
+  <p>Skills and items describe their icon as data, an <code>IconSpec</code> (<code>glyph</code>, <code>color</code>,
+    optional <code>color2</code> and <code>bg</code>; <code>bg</code> set means "skill tile"). Two entry points turn it
+    into pixels (<a data-src="src/art/icons.ts#L778">icons.ts:778</a>):</p>
+  <ul>
+    <li><code>iconDataUrl(spec, size)</code>: a cached PNG data URL for the DOM UI.</li>
+    <li><code>iconTexture(scene, spec, size)</code>: the same canvas copied into a Phaser texture
+      (<code>icon_v&lt;version&gt;_…</code>), used for drops.</li>
+  </ul>
+  <p>Both go through <code>iconCanvas</code>, which tries the pixel path first. The pixel path maps each glyph to a list
+    of candidate cells in the 7Soul1 sheet (135 icons in a 12-column grid of 34 px cells). <code>ensureAssignments</code>
+    walks every skill and item in Registry order and gives specs that share a glyph <em>different</em> icons where
+    possible: an untinted candidate is used if its identity colour (a saturation-weighted average) is within a
+    perceptual distance of 200 of the spec colour, otherwise a tinted candidate recoloured to the spec
+    (<a data-src="src/art/icons.ts#L980">icons.ts:980</a>). Skill icons get a banded, dithered tile with a bevel; item icons
+    a hard 1-source-pixel drop shadow. The icon is drawn at the largest integer scale that fits
+    (<code>floor((S + 4) / 32)</code>).</p>
+  <p>Until the sheet arrives, or if it fails, the procedural painter draws the glyph in a 32×32 design space with a
+    dilated dark outline. When the sheet loads, <code>loadSheet</code> bumps <code>iconVersion</code>, clears every
+    cache, runs the <code>onPixelIconsReady</code> callbacks and emits <code>player:changed</code> so the UI re-renders
+    (<a data-src="src/art/icons.ts#L913">icons.ts:913</a>; the DOM side is in <a href="#ui-skin">The DOM UI</a>).</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="art-vfx">Particles and the pixel VFX kit</h3>
+
+  <p><a data-src="src/art/particles.ts">particles.ts</a> provides three things every spell module builds on (see
+    <a href="#skills">Skills</a> for how VFX are called).</p>
+
+  <p><strong>Shared white textures.</strong> <code>px_dot</code> (8 px), <code>px_soft</code> (32 px stepped disc),
+    <code>px_spark</code> (16×4 streak), <code>px_star</code>, <code>px_ring</code>, <code>px_smoke</code>,
+    <code>px_shard</code> (12×20 diamond), <code>px_flare</code> (64 px), plus <code>fx_pillar</code>,
+    <code>fx_circle</code> and six <code>fx_rune_*</code>. They are painted on a 2 px or 4 px grid with stepped alpha and
+    are white so callers tint them. These keys and sizes predate the pivot and did not change.</p>
+
+  <p><strong>Sheet kit.</strong> <code>PX_SHEETS</code> (<a data-src="src/art/particles.ts#L204">particles.ts:204</a>)
+    lists 43 animated sheets (pre-trimmed horizontal strips, or rectangles for the Emcee Flesher 16×16 sheet) with their
+    frame size, fps and the palette variants to offer. <code>pxFx</code> plays one:</p>
+  <pre><code class="lang-ts">export function pxFx(scene: Phaser.Scene, id: string, x: number, y: number, o: PxOpts = {}): Phaser.GameObjects.Sprite | null {
+  const v = o.v &amp;&amp; pxHas(scene, id, o.v) ? o.v : undefined;
+  const tk = texKey(id, v), ak = animKey(id, v);
+  ensureSheet(scene, id, v);
+  if (!scene.textures.exists(tk) || !scene.anims.exists(ak)) return null;
+  const n = pxFrames(id);
+  const s = scene.add.sprite(x, y, tk, 0);
+  s.setScale(o.scale ?? PIXEL_SCALE).setDepth(o.depth ?? DEPTH.VFX).setOrigin(o.ox ?? 0.5, o.oy ?? 0.5);
+  // …
+  if (o.loop) {
+    cfg.repeat = -1;
+    if (o.randomStart &amp;&amp; n &gt; 1) cfg.startFrame = Math.floor(Math.random() * n);
+  } else {
+    s.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () =&gt; { if (s.scene) s.destroy(); });
+    // …
+  }</code></pre>
+  <p>(<a data-src="src/art/particles.ts#L355">particles.ts:355</a>). One-shots destroy themselves; loops persist until
+    the caller destroys them (<code>pxLoop</code> parents the sprite to a container). Options cover scale, rotation, flip,
+    additive blend, tint, <code>fps</code> or a total <code>dur</code>, delay and fade. Textures are
+    <code>pxs_&lt;id&gt;[_&lt;variant&gt;]</code> and anims <code>pxa_&lt;id&gt;[_&lt;variant&gt;]</code>, built
+    lazily by <code>ensureSheet</code> on first use: 43 base sheets plus 25 variants would otherwise be about 70 canvases
+    at boot. <strong>A <code>null</code> return is part of the contract</strong>: every caller keeps a procedural
+    fallback.</p>
+
+  <p><strong>Pixelizer.</strong> Spell modules still draw some textures with smooth canvas paths (rings, beams, runes).
+    <code>pixelizeCanvas(canvas, cell, opts)</code> (<a data-src="src/art/particles.ts#L47">particles.ts:47</a>) re-paints
+    the canvas as <code>cell</code>×<code>cell</code> blocks with the block's mean colour and alpha quantised to
+    <code>steps</code> levels (default 4), drops blocks below <code>cutoff</code> (default 0.08), and can posterise
+    colour or force hard silhouettes. <code>autoCell</code> picks 2, 4 or 8 px by texture size, and
+    <code>pixelizeTexture</code> applies it to a Phaser <code>CanvasTexture</code> and re-uploads it.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="art-world">World art, lazy generation, canvas reads</h3>
+
+  <p><strong>World.</strong> <a data-src="src/art/tileArt.ts#L14">generateTileTextures</a> runs
+    <code>generatePixelWorldTextures</code> first, which integer-upscales the 1× source PNGs into the existing
+    <code>w_/d_/t_</code> keys (terrain kit regions per theme, 46 decor pieces, 28 town pieces, 19 ambient/portal FX), then
+    the procedural terrain, parallax, decor, town and FX painters, which skip keys that exist. Parallax layers are drawn
+    by the map loader from <code>PIXEL_BG</code>. Maps, themes and parallax are covered in <a href="#world">World</a>.</p>
+
+  <p><strong>Lazy generation.</strong> Boot builds only what the Title and a new Apprentice need; player sheets,
+    per-School VFX, monster sheets and particle sheets are built on first use or drained one unit per tick on the Title
+    screen through <a data-src="src/art/lazy.ts">src/art/lazy.ts</a> (<code>ensureOnce</code>,
+    <code>scheduleIdle</code>, <code>defineSchool</code>, <code>lazyRegister</code>). The rule for new code is "never
+    assume a texture exists, ensure it". Each unit is wrapped in <code>timed()</code>, so
+    <code>performance.getEntriesByType('measure')</code> shows <code>gen:*</code> entries. Details in
+    <a href="#boot">Scenes and boot</a>.</p>
+
+  <p><strong>The <code>willReadFrequently</code> default.</strong> Nearly every step above reads pixels back with
+    <code>getImageData</code>. Chrome warns when a canvas is read often without the
+    <code>willReadFrequently</code> hint and keeps such canvases GPU-backed, which makes reads slow. Rather than touch
+    every call site, <a data-src="src/main.ts#L12">main.ts</a> patches <code>getContext</code> once before Phaser
+    starts:</p>
+  <pre><code class="lang-ts">{
+  const orig = HTMLCanvasElement.prototype.getContext as (this: HTMLCanvasElement, id: string, opts?: unknown) =&gt; RenderingContext | null;
+  HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, id: string, opts?: unknown) {
+    if (id === '2d') return orig.call(this, id, { willReadFrequently: true, ...(opts as object | undefined) });
+    return orig.call(this, id, opts);
+  } as typeof HTMLCanvasElement.prototype.getContext;
+}</code></pre>
+  <p>Explicit options still win (they are spread last). Commit <code>8e0fb70</code> notes this silenced about 500 boot
+    warnings. The WebGL context Phaser draws with is untouched (<code>id !== '2d'</code>).</p>
+
+  <details class="advanced"><summary>Advanced: invariants every art generator keeps</summary>
+    <ul>
+      <li><strong>Keys and layouts are the contract.</strong> A generator may change how a texture looks, never its key,
+        frame names or anim keys. Player frames keep feet near the bottom of the frame (pixel 80×80 cells; procedural
+        64×80 with feet at y = 78), monster frames keep feet 2 px above the cell bottom and face right; entities flip with
+        <code>setFlipX</code>.</li>
+      <li><strong>Idempotent, never throwing.</strong> Every builder checks <code>textures.exists</code> first and wraps
+        its work in <code>try</code>; failures log and fall through to the procedural path or to a shared fallback
+        (<code>monster_fallback</code>, <code>drop_fallback</code>, <code>__DEFAULT</code> for icons).</li>
+      <li><strong>Work at 1×, scale last.</strong> Recolours, outlines and overlays operate on source pixels; only the
+        final draw scales. Doing it the other way round would produce 2 px outlines and break the shared pixel grid.</li>
+      <li><strong>Cache by content.</strong> Palettes are cached per <code>JSON.stringify(look)</code>, icon canvases per
+        glyph/colours/size, recoloured monster sources per monster. A second Phaser game gets fresh textures because lazy
+        units are keyed per texture manager (<code>WeakMap</code>).</li>
+      <li><strong>Pixel textures stay pixel.</strong> Do not set a texture's filter to linear or draw it at a fractional
+        scale; the title backdrop even floors its scroll offsets to whole source pixels for the same reason.</li>
+    </ul>
+  </details>
+
+  <details class="advanced"><summary>Advanced: cost, and how to add art safely</summary>
+    <ul>
+      <li><strong>CPU, not GPU.</strong> Generation is synchronous canvas work on the main thread. The expensive parts are
+        per-pixel loops (classify, ramp map, outline, pixelize) over the source sizes, so the big wins came from building
+        less (lazy units, on-demand monster sheets, lazy VFX variants) rather than from faster loops.</li>
+      <li><strong>Adding a monster sprite:</strong> add the PNG to <code>public/assets/monsters/&lt;pack&gt;/</code>, a
+        key to <code>MSRC</code> and an entry to <code>MONSTER_ASSETS</code>, then a <code>PixelSpec</code> with a
+        <code>grid(key, fw, fh, cols, ax, ay)</code> slicer (anchor = body centre x and feet y inside the cell), a
+        recolour and rates. Add a row to that folder's <code>CREDITS.md</code>. The procedural painter remains the
+        fallback.</li>
+      <li><strong>Adding an effect sheet:</strong> a manifest line in <code>manifests/vfx.ts</code> (or a School's own
+        manifest), a <code>PX_SHEETS</code> entry with frame size, fps and the ramps to offer, then call
+        <code>pxFx</code> and keep a fallback for <code>null</code>.</li>
+      <li><strong>Palette choices.</strong> Pick a ramp whose darkest entry is dark enough to act as an outline; the
+        character and icon swaps deliberately keep near-black pixels dark (<code>darkOutline</code>, the 12% threshold) so
+        silhouettes survive any recolour.</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="art-licensing">Licensing and credits</h3>
+
+  <p>The pivot's licensing rule is strict (<a data-src="ARCHITECTURE.md#L198">ARCHITECTURE.md:198</a>): only CC0 /
+    public domain, CC-BY 3.0/4.0, OGA-BY, or an explicit "free for personal and commercial use" statement from the
+    author. No NonCommercial licences, no sprites ripped from commercial games, no scraped sprite dumps of unclear origin.
+    <strong>Downloads are untrusted data</strong>: each pack was downloaded into its own scratch directory, unzipped
+    there, nothing in it was executed, and only the needed PNGs (and TTFs for the UI) plus the licence or readme text were
+    copied into <code>public/assets/&lt;domain&gt;/&lt;pack&gt;/</code>. Each domain wrote its own
+    <code>CREDITS.md</code> (asset, author, source URL, licence, use) and the lead merged them into
+    <a data-src="CREDITS.md">/CREDITS.md</a>. The per-domain files are still the runtime source for the graduation credits
+    roll (<a href="#ui-credits">The DOM UI</a>), so they must stay valid Markdown tables with Author and License
+    columns.</p>
+
+  <table>
+    <thead><tr><th>Domain</th><th>Packs (author)</th><th>Licences</th><th>Used for</th></tr></thead>
+    <tbody>
+      <tr><td>Characters</td><td>Pointy Hat Mage, Purple Mage (Foozle; commissioned art)</td><td>CC0</td>
+        <td>Player for all ten jobs, most NPCs, portraits</td></tr>
+      <tr><td>Monsters</td><td>Sideview Fantasy, Gothicvania Church, Sunny Land (Luis Zuno / ansimuz); Dark Fantasy
+          Platformer Bestiary (Emcee Flesher, with Redshrike, surt, William.Thompsonj); Slime Snail (Reemax); Slime
+          24×24 (Bonsaiheldin); stump walk cycle (AntiOtter); Animated Imp (Calciumtrice); Enemy Galore I (Admurin);
+          coins (zaphgames)</td><td>CC0, CC-BY 3.0, CC-BY 4.0</td>
+        <td>Every monster and field boss, death poof, coin drops</td></tr>
+      <tr><td>World</td><td>14 environment packs by Luis Zuno (ansimuz): Sunny Land and its Woods / Trees expansions,
+          Magical Road, Country-side, Tall Forest, Magic Cliffs, Mountain at Dusk, Gothicvania Town and Church, Fort of
+          Illusion, Warped Caves, Super Grotto Escape, Rocky Pass</td><td>CC0</td>
+        <td>Terrain, parallax, decor and town buildings for all seven themes</td></tr>
+      <tr><td>VFX</td><td>Free Pixel Effects Pack (CodeManu); Magic Pack 9 and Animated Explosions (ansimuz); Spell
+          Effects (StarsteelGaming); Phoenix (Chasersgaming); Komodo (teasloth); Walking Ice Golem (tautomer); Spark
+          (kurohina); 16×16 Simple Fantasy RPG FX (Emcee Flesher); Ice Elemental (Ouren)</td>
+        <td>CC0; Ice Elemental CC-BY 3.0</td><td>Spell sheets and summon bodies for every School</td></tr>
+      <tr><td>Holy VFX</td><td>Angels (Cabbit, AntumDeluge and others); Angel Wings Effect (Cethiel); white wing 32×32
+          (twiswist)</td><td>CC-BY 3.0+ / OGA-BY 3.0+; CC0</td><td>Seraph summon, wing auras and cast wings</td></tr>
+      <tr><td>UI</td><td>Kenney Pixel and Kenney Mini fonts (Kenney); Golden UI (Buch); 496 RPG icons (Henrique
+          Lazarini / 7Soul1)</td><td>CC0</td><td>All UI text, name tags and damage digits, 9-slice frames, every skill and
+          item icon</td></tr>
+    </tbody>
+  </table>
+  <p>Original pixel work with no third-party source (monster status overlays, boss crowns and horns, the meso bag,
+    several hand-pixelled world props, the UI slot and well 9-slices) is listed in <code>CREDITS.md</code> as made for
+    this project. Holy and Shadow buildings in town are palette swaps of existing CC0 pieces, with no new downloads.</p>
+</section>

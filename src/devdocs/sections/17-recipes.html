@@ -1,0 +1,567 @@
+<section id="recipes" data-title="Recipes" data-summary="Step-by-step checklists, verified against the code: add a spell, a monster, a map, or a whole new School.">
+  <h2>Recipes</h2>
+
+  <p>These are the common content changes, written as checklists. Each recipe names the files to touch, shows a
+    real entry to copy from, and ends with a <strong>verify</strong> step. Most content in The Academy is
+    <dfn>data</dfn>: plain objects in an exported array (<code>FIRE_SKILLS</code>, <code>MONSTERS</code>,
+    <code>MAPS</code>, <code>ITEMS</code>…). The <dfn>Registry</dfn> (<a data-src="src/core/registry.ts#L26">registry.ts</a>)
+    indexes those arrays by id, and every system looks things up through it. So adding an entry to the right array
+    is usually enough for the spellbook, the minimap, drops, the handbook and these docs' charts to pick it up.</p>
+
+  <pre class="mermaid">flowchart LR
+  T["src/core/types.ts (contracts)"] --> D["data arrays: skills, monsters, maps, items, quests"]
+  B["src/core/balance.ts (curves)"] --> D
+  D --> R["Registry (by id)"]
+  V["VFX keys (registerVfx)"] --> P["playVfx"]
+  A["art: manifests + generators"] --> X["textures (ensured on demand)"]
+  R --> G["game systems, UI, handbook, devdocs charts"]
+  P --> G
+  X --> G</pre>
+
+  <p>Two habits make every recipe easier:</p>
+  <ul>
+    <li><strong>Copy a neighbour.</strong> Find the closest existing spell, monster or map and copy its shape.
+      Every file uses small helpers (<code>L</code>, <code>mk</code>, <code>plat</code>…) that already encode the
+      conventions.</li>
+    <li><strong>Let the compiler list the work.</strong> Run <code>npx tsc --noEmit</code> early. Many lookups are
+      typed <code>Record&lt;Element, …&gt;</code> or <code>Record&lt;School, …&gt;</code>, so a widened union makes
+      every place that needs a new entry show up as an error.</li>
+  </ul>
+
+  <!-- ===================================================================== -->
+  <h3 id="recipes-debug">The debug console</h3>
+
+  <p>Run <code>npm run dev</code> and open <code>http://localhost:5199</code> (add <code>?debug=1</code> to draw
+    physics bodies). Start or load a character. <code>GameScene</code> puts a small API on
+    <code>window.arcana</code> when the game scene starts
+    (<a data-src="src/scenes/GameScene.ts#L358">GameScene.ts:358</a>):</p>
+
+  <pre><code class="lang-ts">  private exposeDebug() {
+    const s = this.s;
+    const api = {
+      s,
+      levelTo: (n: number) =&gt; { while (s.progression.state.level &lt; n) s.progression.gainExp(expToNext(s.progression.state.level) - s.progression.state.exp); },
+      give: (itemId: string, qty = 1) =&gt; s.progression.addItem(itemId, qty),
+      mesos: (n: number) =&gt; s.progression.addMesos(n),
+      warp: (mapId: string, portalId?: string) =&gt; this.changeMap(mapId, portalId),
+      job: (job: JobId) =&gt; s.progression.advanceJob(job),
+      heal: () =&gt; s.progression.heal(99999, 99999),
+      maps: () =&gt; Registry.maps().map(m =&gt; m.id),
+      pet: (on?: boolean) =&gt; { /* … */ },
+      depth: DEPTH,
+    };</code></pre>
+
+  <table>
+    <thead><tr><th>Command</th><th>What it does</th><th>Watch out for</th></tr></thead>
+    <tbody>
+      <tr><td><code>arcana.levelTo(25)</code></td><td>Grants exactly enough EXP for each level, so you get the normal SP and AP for every level-up.</td><td>Only goes up.</td></tr>
+      <tr><td><code>arcana.job('pyromancer')</code></td><td>Calls <code>advanceJob</code> (<a data-src="src/systems/Progression.ts#L342">Progression.ts:342</a>).</td><td>Returns <code>false</code> unless the job's <code>parent</code> is your current job and you meet its level (10/25/40). Advance one Year at a time. It skips the Exam quest.</td></tr>
+      <tr><td><code>arcana.s.progression.learnSkill('fire_orb')</code></td><td>Spends 1 SP on a skill (<a data-src="src/systems/Progression.ts#L290">Progression.ts:290</a>). A newly learned castable skill goes into the first free hotbar slot.</td><td>Fails silently (<code>false</code>) without SP, if the skill's job is not in your lineage, or if a <code>requires</code> entry isn't met.</td></tr>
+      <tr><td><code>arcana.warp('whisperwood', 'east')</code></td><td>Same fade-and-load as a portal.</td><td>Without a portal id you land at the map's default spawn: its <code>MAP_EXTRAS</code> spawn, else the <code>west</code> portal, else the first portal.</td></tr>
+      <tr><td><code>arcana.give('yeti_bone', 20)</code>, <code>arcana.mesos(5000)</code>, <code>arcana.heal()</code></td><td>Inventory, money, full HP/MP.</td><td><code>give</code> returns <code>false</code> and logs "Your inventory is full." if the bag has no room.</td></tr>
+      <tr><td><code>arcana.maps()</code>, <code>arcana.s</code></td><td>List map ids; reach every service (<code>arcana.s.monsters</code>, <code>arcana.s.skills</code>…).</td><td>The API is not limited to dev builds.</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ===================================================================== -->
+  <h3 id="recipes-spell">Add a spell</h3>
+
+  <p>A spell is a <code>SkillDef</code> (<a data-src="src/core/types.ts#L190">types.ts:190</a>) in its School's
+    file: <code>src/skills/fire.ts</code>, <code>ice.ts</code>, <code>lightning.ts</code>, <code>holy.ts</code>,
+    <code>shadow.ts</code>, or <code>apprentice.ts</code> for the Year 1 core. Its visuals are VFX functions
+    registered under string keys in the matching <code>*Vfx.ts</code> file. The spell names those keys, and the
+    engine plays them through <code>playVfx</code>. See <a href="#skills">Skills</a> for the cast flow and the
+    seven attack patterns.</p>
+
+  <h4 id="recipes-spell-steps">Checklist</h4>
+  <ol>
+    <li><strong>Pick the id and Year.</strong> The id uses the School prefix (<code>app_</code>, <code>fire_</code>,
+      <code>ice_</code>, <code>ltn_</code>, <code>holy_</code>, <code>shd_</code>) and is <code>snake_case</code>.
+      <code>job</code> decides the Year: e.g. <code>pyromancer</code> is Fire Year 2, <code>flamebinder</code> Year 3,
+      <code>inferno_sage</code> Year 4. Each School has 8 spells per Year now. The Phase 4 targets (3–4 attacks
+      with different roles, 1–2 buffs or utility, 1–2 passives, a summon or field from Year 3, two ultimates in
+      Year 4) are in <a data-src="ARCHITECTURE.md#L248">ARCHITECTURE.md</a>.</li>
+    <li><strong>Set <code>kind</code></strong> to one of <code>attack</code>, <code>buff</code>,
+      <code>passive</code>, <code>movement</code> or <code>summon</code>, and fill in the matching field
+      (<code>attack</code>, <code>buff</code>, <code>passive</code>, <code>movement</code>, <code>summon</code>).
+      For anything custom (heals, drains, dashes) use <code>onCast</code> and run the damage part with
+      <code>ctx.runAttack</code>.</li>
+    <li><strong>Level curves.</strong> <code>maxLevel</code> plus functions of level for <code>mpCost</code>,
+      <code>cooldownMs</code>, <code>damagePct</code>, <code>hits</code>, <code>maxTargets</code>. Every tree file
+      defines the same helpers: <code>L(a, b, max)</code> interpolates linearly from level 1 to
+      <code>max</code>, <code>Li</code> rounds it, and <code>K(n)</code> is a constant
+      (<a data-src="src/skills/fire.ts#L7">fire.ts:7</a>).</li>
+    <li><strong>Tune against <a data-src="src/core/balance.ts#L51">balance.ts</a></strong> (table below).</li>
+    <li><strong>Prerequisites.</strong> <code>requires: [{ skillId, level }]</code>. Keep chains shallow (see the
+      pitfalls).</li>
+    <li><strong>Icon.</strong> <code>icon: IconSpec</code>, with a <code>glyph</code> from the <code>IconGlyph</code>
+      union and colours. Each tree has an <code>icon()</code> helper that adds the School's tile background.</li>
+    <li><strong>VFX keys</strong> in <code>attack.vfx</code> (<code>cast</code>, <code>projectile</code>,
+      <code>hit</code>, <code>area</code>), <code>buff.vfx</code>/<code>auraVfx</code>, <code>summon.vfx</code> or
+      <code>movement.vfxIn/vfxOut</code>. Reuse the School's shared keys (<code>fire_cast</code>,
+      <code>fire_hit</code>) where you can. Register new ones in the School's <code>*Vfx.ts</code>.</li>
+    <li><strong>Sound.</strong> <code>sfx</code>, usually the School's cast sound (<code>'cast_fire'</code>).</li>
+  </ol>
+
+  <p>A real Year 2 attack and the spell that requires it, from <a data-src="src/skills/fire.ts#L96">fire.ts:96</a>:</p>
+
+  <pre><code class="lang-ts">  {
+    id: 'fire_arrow', name: 'Flame Arrow', job: 'pyromancer', element: 'fire', kind: 'attack', maxLevel: 20,
+    description: 'Hurl a blazing arrow that strikes one enemy hard and sets it ablaze.',
+    icon: icon('fireball'), mpCost: Li(12, 22, 20), castTimeMs: 380, sfx: 'cast_fire',
+    attack: {
+      pattern: 'projectile', damagePct: L(170, 262, 20), hits: K(1), maxTargets: K(1), range: 560,
+      projectile: { speed: 640, radius: 14 },
+      status: burn(20, [0.25, 0.6], [3000, 6000], [10, 20]),
+      vfx: { cast: 'fire_cast', projectile: 'fire_arrow_proj', hit: 'fire_hit' },
+    },
+  },
+  {
+    id: 'fire_flame_burst', name: 'Flame Burst', job: 'pyromancer', element: 'fire', kind: 'attack', maxLevel: 15,
+    description: 'Exhale a short cone of flame that scorches and shoves back everything in front of you.',
+    icon: icon('flame'), requires: [{ skillId: 'fire_arrow', level: 3 }],
+    mpCost: Li(16, 26, 15), cooldownMs: L(2400, 1500, 15), castTimeMs: 420, sfx: 'cast_fire',
+    attack: {
+      pattern: 'melee_arc', damagePct: L(105, 150, 15), hits: K(2), maxTargets: K(6), range: 200,
+      area: { w: 190, h: 110, offsetX: 105 }, knockback: 30, delayMs: 100, hitIntervalMs: 110,
+      status: burn(15, [0.3, 0.55], [3000, 4500], [10, 16]),
+      vfx: { cast: 'fire_cast', area: 'fire_burst_area', hit: 'fire_hit' },
+    },
+  },</code></pre>
+
+  <p>Flame Arrow is the Year 2 single-target primary. It goes from 170% to 262% of magic attack per hit over 20
+    levels, which is the tier-2 primary band (170–260). Flame Burst is the Year 2 area attack: 105%→150% per line,
+    two lines, up to six targets, which is the tier-2 AoE band (100–150) per line. <code>burn(max, chance, duration,
+    potency)</code> builds a <code>StatusSpec</code> whose potency is a percent of the hit per 500 ms tick.</p>
+
+  <table>
+    <thead><tr><th>Tier (Year)</th><th>Primary, % per line</th><th>AoE, % per line</th><th>MP at max level</th><th>Max level</th></tr></thead>
+    <tbody>
+      <tr><td>1 (Apprentice)</td><td>120–170</td><td>70–100</td><td>8–14</td><td>10</td></tr>
+      <tr><td>2</td><td>170–260</td><td>100–150</td><td>14–28</td><td>15–20</td></tr>
+      <tr><td>3</td><td>240–340</td><td>150–220</td><td>26–45</td><td>15–20</td></tr>
+      <tr><td>4</td><td>350–600 (ultimate, long cooldown: 800–1500)</td><td>220–350</td><td>45–90</td><td>15–20 (ultimates 10)</td></tr>
+    </tbody>
+  </table>
+  <p>Multi-hit spells split the total across lines ("3 lines × 90% ≈ 270% total"). SP is 3 per level, so nobody
+    can max everything.</p>
+
+  <figure data-chart="school-budgets"><figcaption>Damage budget of every attack and summon at max level (damage % ×
+    hit lines per target), by School and Year, on a log scale. A new spell should land inside its Year's cluster.
+    A point far above the others is the kind of outlier the Phase 7 "School parity" pass trimmed.</figcaption></figure>
+
+  <h4 id="recipes-spell-vfx">Register its VFX</h4>
+
+  <p>Each School's VFX file wraps <code>registerVfx</code> with <code>lazyRegister</code>, so the first time any of
+    the School's effects plays, its textures are built first. From
+    <a data-src="src/skills/fireVfx.ts#L21">fireVfx.ts:21</a>:</p>
+
+  <pre><code class="lang-ts">export function generateFireTextures(scene: Phaser.Scene): void { scheduleIdle(scene, 'fire', buildFire); }
+
+defineSchool('fire', buildFire);
+const registerVfx = lazyRegister('fire', buildFire);</code></pre>
+
+  <p>Add your key next to the others in the School's register function
+    (<a data-src="src/skills/fireVfx.ts#L1033">fireVfx.ts:1033</a>):</p>
+
+  <pre><code class="lang-ts">export function registerFireVfx(): void {
+  registerVfx('fire_cast', (scene, o) =&gt; { castFx(scene, o, o.scale ?? 1); });
+  registerVfx('fire_cast_big', (scene, o) =&gt; { castFx(scene, o, 1.6 * (o.scale ?? 1)); });
+  registerVfx('fire_hit', (scene, o) =&gt; { hitFx(scene, o.x, o.y, o.scale ?? 1); });
+  registerVfx('fire_hit_big', (scene, o) =&gt; { hitFx(scene, o.x, o.y, 1.5 * (o.scale ?? 1)); });
+
+  registerVfx('fire_arrow_proj', arrowProj);
+  registerVfx('fire_burst_area', burstArea);
+  // …</code></pre>
+
+  <p>The return value matters. One-shot effects (<code>cast</code>, <code>hit</code>, <code>area</code>) clean up
+    after themselves and return nothing. Persistent visuals (a projectile, an aura, a summon body) return a
+    <code>GameObject</code> that the engine moves and destroys. A projectile visual is drawn pointing right, and the
+    engine sets its rotation. <a data-src="src/skills/fireVfx.ts#L133">arrowProj</a> returns its container and
+    falls back to procedural shapes when the pixel sheet (<code>pxLoop</code>) is missing. Copy that shape.</p>
+
+  <h4 id="recipes-spell-verify">Verify</h4>
+  <pre><code class="lang-bash">npx tsc --noEmit
+npm run dev        # http://localhost:5199</code></pre>
+  <pre><code class="lang-js">// browser console, on a fresh character
+arcana.levelTo(10); arcana.job('pyromancer');
+arcana.s.progression.learnSkill('fire_arrow');   // repeat to raise it; learn prerequisites first
+arcana.warp('whisperwood');</code></pre>
+  <p>The spell needs no registration beyond its array. The spellbook lists a job's spells with
+    <code>Registry.skillsForJob(job)</code> (<a data-src="src/core/registry.ts#L29">registry.ts:29</a>), and the
+    handbook and the charts read the same data. In the console, check for <code>[registry] duplicate skill id</code>
+    (id clash) and <code>[vfx] missing key "…"</code>. The second means a key you named is not registered, and you
+    see a white placeholder puff instead of your effect.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="recipes-monster">Add a monster</h3>
+
+  <p>A monster is a <code>MonsterDef</code> (<a data-src="src/core/types.ts#L303">types.ts:303</a>). Normal
+    monsters are built with <code>mk()</code> in <a data-src="src/data/monsters.ts#L80">monsters.ts:80</a>.
+    <code>mk()</code> turns a short <code>MonsterSpec</code> (level, behaviour, size, multipliers) into full stats
+    from the reference curves, so a monster's numbers follow the game's balance automatically. AI, statuses and
+    spawning are covered in <a href="#monsters">Monsters</a>.</p>
+
+  <pre class="mermaid">flowchart TB
+  A["1. item: etc drop in items.ts"] --> B["2. mk() entry in monsters.ts"]
+  B --> C["3. art: PixelSpec in monsterArt.ts"]
+  C --> D["4. source sheet: manifest + public/assets + CREDITS"]
+  B --> E["5. spawn entry in a map"]
+  B --> F["6. optional: quest kill or collect"]
+  E --> G["7. tsc, warp, fight"]</pre>
+
+  <h4 id="recipes-monster-steps">Checklist</h4>
+  <ol>
+    <li><strong>Its etc drop.</strong> Every <code>mk()</code> monster has a zone <code>etc</code> item. Add it to
+      <a data-src="src/data/items.ts#L23">ITEMS</a> with the <code>etc(id, name, description, icon, sellPrice)</code>
+      helper, e.g. <a data-src="src/data/items.ts#L49">yeti_bone</a>.</li>
+    <li><strong>The definition.</strong> Add a <code>mk({…})</code> entry to <code>MONSTERS</code> in its zone's
+      block. <code>behavior</code> is <code>walker</code>, <code>hopper</code> or <code>flyer</code> for normal
+      monsters (bosses have their own classes). <code>size</code> is the hitbox. <code>weak</code>/<code>resist</code>
+      take elements (×1.5 / ×0.5), and <code>immune</code> takes statuses.</li>
+    <li><strong>Art.</strong> Add a <code>PixelSpec</code> to <code>buildPixelSpecs()</code> in
+      <a data-src="src/art/monsterArt.ts#L1912">monsterArt.ts:1912</a>: which frames of which source sheet make
+      <code>idle</code>, <code>move</code> (and optionally <code>hit</code>, <code>die</code>, <code>attack</code>),
+      plus a palette <code>recolor</code>. Reusing a loaded sheet with a new ramp is how most of the roster was
+      made.</li>
+    <li><strong>A new source sheet</strong> (only if needed). Copy the PNG and its licence into
+      <code>public/assets/monsters/&lt;pack&gt;/</code>, add a key to <code>MSRC</code> and an entry to
+      <code>MONSTER_ASSETS</code> in <a data-src="src/art/manifests/monsters.ts#L9">manifests/monsters.ts</a>, and
+      add a row to <code>public/assets/monsters/CREDITS.md</code> and the Monsters table in
+      <a data-src="CREDITS.md#L19">CREDITS.md</a>. Only CC0, CC-BY or OGA-BY art (see <a href="#art">Art</a>).</li>
+    <li><strong>Spawn it</strong> in a map's <code>spawns</code> (see <a href="#recipes-map">Add a map</a>) whose
+      <code>levelRange</code> contains its level.</li>
+    <li><strong>Quest hooks</strong> (optional). Kill objectives name the monster id. Collect objectives name its
+      drop. Example: <a data-src="src/data/quests.ts#L125">q_finn_snails</a> uses
+      <code>{ kind: 'kill', monsterId: 'moss_snail', count: 10 }</code>.</li>
+  </ol>
+
+  <p>A real entry to copy, from <a data-src="src/data/monsters.ts#L266">monsters.ts:266</a>:</p>
+
+  <pre><code class="lang-ts">  mk({ id: 'snow_yeti', name: 'Snow Yeti', level: 20, behavior: 'walker', speed: 70, size: { w: 56, h: 72 },
+    hpMul: 1.05, expMul: 1.15, touchMul: 1.0, defMul: 1.2, weak: ['fire', 'shadow'], etc: 'yeti_fur', etcChance: 0.55,
+    extraDrops: [{ itemId: 'yeti_bone', chance: 0.5 }] }),</code></pre>
+
+  <p>And what <code>mk()</code> does with it (<a data-src="src/data/monsters.ts#L80">monsters.ts:80</a>):</p>
+
+  <pre><code class="lang-ts">function mk(s: MonsterSpec): MonsterDef {
+  const lv = s.level;
+  return {
+    // …
+    hp: Math.round(refMonsterHp(lv) * (s.hpMul ?? 1)),
+    exp: Math.max(1, Math.round(refMonsterExp(lv) * (s.expMul ?? 1))),
+    mesos: mesosFor(lv),
+    touchDamage: Math.round(refMonsterTouch(lv) * (s.touchMul ?? 1)),
+    def: Math.round(lv * 0.4 * (s.defMul ?? 1)),
+    // …
+    aggressive: s.aggressive ?? true,
+    // …
+    drops: [
+      { itemId: s.etc, chance: s.etcChance ?? 0.45, min: 1, max: 1 },
+      ...potionDrops(lv),
+      ...equipDrops(lv),
+      ...(s.extraDrops ?? []),
+    ],
+  };
+}</code></pre>
+
+  <p>For the Snow Yeti that works out to: <code>refMonsterHp(20)</code> = round((12 + 5·20) × 220% × 3.5) = 862,
+    × 1.05 → <strong>905 HP</strong>; <code>refMonsterExp(20)</code> = round(<code>expToNext(20)</code> / 40) = 96,
+    × 1.15 → <strong>110 EXP</strong>; touch round(8 + 20·4.5) = <strong>98</strong>; def round(20 × 0.4 × 1.2) =
+    <strong>10</strong>; mesos <strong>53–86</strong>. Potion and on-level equipment drops come for free from the
+    level brackets in <code>potionDrops</code>/<code>equipDrops</code>. ARCHITECTURE.md asks for multipliers of
+    roughly 0.8–1.3, and the early zones deliberately sit lower (<code>hpMul: 0.75</code> for the Moss Snail) because
+    of the starting mastery roll.</p>
+
+  <p>Its art reuses the bestiary's wartaur sheet with a snow-fur ramp
+    (<a data-src="src/art/monsterArt.ts#L1952">monsterArt.ts:1952</a>; the sheet is sliced by
+    <code>grid(MSRC.wartaur, 80, 80, 4, 48, 80)</code> at <a data-src="src/art/monsterArt.ts#L1925">line 1925</a>:
+    80×80 cells, 4 per row, anchor at x 48 and feet at y 80):</p>
+
+  <pre><code class="lang-ts">    snow_yeti: { flip: true, recolor: gradientMap(RAMP.snowFur, { hue: [8, 48], minSat: 0.15 }),
+      idle: { frames: wartaur(0, 2), rate: 2 }, move: { frames: wartaur(0, 1, 2, 3), rate: 7 } },</code></pre>
+
+  <aside class="tip">You can start without art. <code>ensureMonsterTexture</code>
+    (<a data-src="src/art/monsterArt.ts#L2466">monsterArt.ts:2466</a>) tries the pixel spec, then the procedural
+    painter. For an id with neither, <code>paintMonsterSheet</code> uses a generic fallback drawing. The monster is
+    playable from the first commit and gets real art later.</aside>
+
+  <figure data-chart="monster-hp"><figcaption>Monster HP against the reference curve, normal monsters and bosses on a
+    log scale. A new <code>mk()</code> monster lands on the curve times its <code>hpMul</code>. If yours sits far off
+    the line, its multiplier is outside the usual range.</figcaption></figure>
+
+  <h4 id="recipes-monster-verify">Verify</h4>
+  <pre><code class="lang-bash">npx tsc --noEmit
+npm run dev</code></pre>
+  <pre><code class="lang-js">arcana.levelTo(20); arcana.warp('frostfang_cliffs');
+// inspect what spawned:
+arcana.s.monsters</code></pre>
+  <p>Check that it walks on platforms rather than through them, faces the way it moves (set <code>flip</code> if
+    the source art faces left), plays its hit and death animations, and drops its etc item. Kill it with an element
+    in its <code>weak</code> list to see the ×1.5. If it renders as the generic fallback, its id has no
+    <code>PixelSpec</code> or the source sheet failed to load (check the network tab for the PNG).</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="recipes-map">Add a map</h3>
+
+  <p>A map is a <code>MapDef</code> (<a data-src="src/core/types.ts#L355">types.ts:355</a>) in
+    <a data-src="src/data/maps.ts#L1">src/data/maps.ts</a>: size, platforms, walls, ropes, portals, spawns, NPC
+    placements, a <code>theme</code> (art set) and <code>music</code>. <code>MapLoader</code> turns it into physics
+    bodies and layered visuals (see <a href="#world">World</a>). The file has no runtime imports, so you can sanity
+    check it with plain node.</p>
+
+  <p>Build it from the helpers at the top of the file (<a data-src="src/data/maps.ts#L13">maps.ts:13</a>):</p>
+
+  <pre><code class="lang-ts">const RESPAWN = 7000;
+/** Field boss respawn after death (A6 jitters it ±20% → ~8–12 min). */
+const FIELD_BOSS_RESPAWN = 600000;
+
+const ground = (x1: number, x2: number, y: number): PlatformDef =&gt; ({ x1, x2, y, oneWay: false });
+const plat = (x1: number, x2: number, y: number): PlatformDef =&gt; ({ x1, x2, y, oneWay: true });
+const wall = (x: number, y: number, w: number, h: number): WallDef =&gt; ({ x, y, w, h });
+/** Rope hanging from the platform at `top` down to just above the surface at `lowerY`. */
+const rope = (x: number, top: number, lowerY: number): RopeDef =&gt; ({ x, top, bottom: lowerY - 8, kind: 'rope' });
+const ladder = (x: number, top: number, lowerY: number): RopeDef =&gt; ({ x, top, bottom: lowerY - 2, kind: 'ladder' });
+const portal = (id: string, x: number, y: number, targetMap: string, targetPortal: string): PortalDef =&gt; ({ id, x, y, targetMap, targetPortal });
+/** Spawn across a platform's span (inset 40px from both edges). */
+const on = (monsterId: string, p: PlatformDef, count: number, respawnMs = RESPAWN): SpawnDef =&gt;
+  ({ monsterId, x1: p.x1 + 40, x2: p.x2 - 40, y: p.y, count, respawnMs });
+const span = (monsterId: string, x1: number, x2: number, y: number, count: number, respawnMs = RESPAWN): SpawnDef =&gt;
+  ({ monsterId, x1, x2, y, count, respawnMs });</code></pre>
+
+  <p>And copy the shape of an existing map, e.g. Whisperwood (<a data-src="src/data/maps.ts#L71">maps.ts:71</a>):</p>
+
+  <pre><code class="lang-ts">const whisperwood: MapDef = (() =&gt; {
+  const W = 3200, H = 1300, G = 1180;
+  const A = plat(300, 760, 1095), B = plat(1000, 1400, 1095), C = plat(1900, 2400, 1095), D = plat(2650, 2980, 1095);
+  const E = plat(520, 980, 1010), F = plat(1250, 1750, 1010), Gp = plat(2200, 2720, 1010);
+  // …
+  const K = plat(760, 1160, 755), L = plat(1880, 2240, 755);
+  const M = plat(950, 1500, 590), N = plat(2000, 2620, 590), R = plat(2700, 2820, 590);
+  // …
+  return {
+    id: 'whisperwood', name: 'Whisperwood', region: 'Practicum Grounds', theme: 'forest', music: 'forest',
+    width: W, height: H, levelRange: [1, 8],
+    platforms: [ground(0, W, G), A, B, C, D, E, F, Gp, O, Hh, I, J, K, L, M, N, R, Q],
+    walls: [hill],
+    ropes: [rope(720, Hh.y, E.y), rope(1620, I.y, F.y), rope(2520, J.y, Gp.y), rope(1060, M.y, K.y), rope(2160, N.y, L.y)],
+    portals: [portal('west', 70, G, 'mistvale', 'east'), portal('east', 3130, G, 'shroom_hollow', 'west')],
+    spawns: [
+      span('moss_snail', 420, 1440, G, 3), span('moss_snail', 1760, 3000, G, 2), on('moss_snail', A, 1), on('moss_snail', D, 1),
+      // …
+    ],
+    npcs: [{ npcId: 'scout_finn', x: 240, y: G, facing: 1 }],
+  };
+})();</code></pre>
+
+  <p>Notice the tiers. The ground is at 1180 and the platforms step up 85 px at a time (1095, 1010, 925, 840, 755),
+    each reachable by jumping. The next tier, 590, is 165 px above 755, so it gets a rope
+    (<code>rope(1060, M.y, K.y)</code>).</p>
+
+  <h4 id="recipes-map-steps">Checklist</h4>
+  <ol>
+    <li><strong>Id and look.</strong> A new <code>snake_case</code> id. The id is save data: never rename it once
+      shipped. Set <code>theme</code> to one of the existing <code>MapTheme</code>s (<code>town</code>,
+      <code>forest</code>, <code>mushroom</code>, <code>snow</code>, <code>volcano</code>, <code>storm</code>,
+      <code>sanctum</code>; <a data-src="src/core/types.ts#L346">types.ts:346</a>) and <code>music</code> to a
+      <code>MusicKey</code>. A new theme means new terrain, parallax and decor art plus a
+      <code>THEME_RUNTIME</code> entry (<a data-src="src/world/themes.ts#L39">themes.ts:39</a>).</li>
+    <li><strong>Geometry, following the design rules.</strong> The jump apex is about 105 px and a horizontal jump
+      about 150 px, so: stacked one-way platforms reachable by jump must be ≤ 90 px apart vertically, otherwise add a
+      rope or ladder, and horizontal gaps must be ≤ 120 px. The ground is one <code>ground(0, W, G)</code> spanning
+      the map. A platform's <code>y</code> is its walking surface. A rope runs from the surface it leads onto
+      (<code>top</code>) down to just above the lower one.</li>
+    <li><strong>Portals, both ends.</strong> A portal's <code>targetPortal</code> is the id of the portal you arrive
+      at. For a two-way connection add one portal here and one in the neighbouring map, each naming the other.
+      Whisperwood's <code>east</code> → <code>shroom_hollow</code>/<code>west</code> pairs with Shroom Hollow's
+      <code>west</code> → <code>whisperwood</code>/<code>east</code>. One-way exits are allowed (the Sanctum's
+      <code>town</code> portal arrives at the campus <code>east</code> portal, which leads elsewhere).</li>
+    <li><strong>Spawns.</strong> <code>on(monsterId, platform, count)</code> spreads monsters across a platform,
+      inset 40 px from its edges. <code>span(…)</code> takes explicit x-ranges (use it on the ground, clear of
+      portals). Keep monster levels inside <code>levelRange</code>.</li>
+    <li><strong>Register it</strong> in <code>MAPS</code> (<a data-src="src/data/maps.ts#L268">maps.ts:268</a>).
+      That's all the minimap needs: it draws the platforms, name, region and level range from the current
+      <code>MapDef</code>.</li>
+    <li><strong>Optional dressing.</strong> Hand-placed decor, waterfalls and a custom default spawn go in
+      <code>MAP_EXTRAS</code> (<a data-src="src/world/mapExtras.ts#L35">mapExtras.ts:35</a>). Without an entry the
+      map uses its theme's seeded scatter.</li>
+  </ol>
+
+  <figure data-chart="map-graph"><figcaption>Every map as a node and every portal pair as an edge. The campus chain
+    runs west to east through the practicum zones to the Sanctum, with the Trial Hall off the campus. A new map
+    should show up here connected. If it appears alone, a <code>targetMap</code> or <code>targetPortal</code> id is
+    wrong.</figcaption></figure>
+
+  <h4 id="recipes-map-verify">Verify</h4>
+  <pre><code class="lang-bash">npx tsc --noEmit
+npm run dev        # add ?debug=1 to see platform, wall and rope bodies</code></pre>
+  <pre><code class="lang-js">arcana.maps()                       // your id is listed
+arcana.warp('my_new_map', 'west')   // arrive at a specific portal
+arcana.warp('whisperwood', 'east')  // and walk through the connecting portal both ways</code></pre>
+  <p>Check that every tier can be reached by jumping or by a rope you placed, press <kbd>Up</kbd> at each portal, and watch the console for
+    <code>[game] unknown map …</code> (a bad <code>targetMap</code>).</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="recipes-school">Add a School</h3>
+
+  <p>A <dfn>School</dfn> is an element, a three-job line (Years 2–4), 24 spells, a Professor, two Exams, staffs
+    and a hall on campus. Unlike the recipes above, it changes contracts. Holy and Shadow were added exactly this
+    way: first the lead's contract commit <code>7e70b18</code> ("Phase 3 contract: Holy and Shadow branches, jobs,
+    poison/curse statuses, new glyphs/sfx, tree stubs"; see
+    <a data-src="ARCHITECTURE.md#L214">ARCHITECTURE.md "Phase 3"</a>), then the trees
+    (<code>fdd90e1</code>, <code>76abe50</code>), the data re-theme with professors and exams
+    (<code>3c91190</code>), and the campus halls (<code>ccf1505</code>). Plan on the same order.</p>
+
+  <pre class="mermaid">flowchart TB
+  C["1. contract: types.ts unions + dmgX + SfxKey"] --> S["2. stubs: school.ts, schoolVfx.ts, manifest"]
+  S --> I["3. wire: skills/index.ts, assets.ts"]
+  I --> T["4. tsc lists every Record to fill"]
+  T --> J["5. jobs.ts: 3 jobs + School helpers"]
+  T --> K["6. spells + VFX (24)"]
+  J --> N["7. professor NPC, scripts, exams"]
+  J --> E["8. staffs, robes, drop brackets"]
+  N --> H["9. campus hall, placement, credits"]</pre>
+
+  <h4 id="recipes-school-contract">1. The contract (lead-owned files)</h4>
+  <p>In <a data-src="src/core/types.ts#L11">types.ts</a>, add the School to <code>Element</code> and
+    <code>Branch</code>, its three jobs to <code>JobId</code>, a <code>dmgX</code> field to
+    <code>DerivedStats</code> (<a data-src="src/core/types.ts#L51">line 51</a>), a <code>cast_x</code> sound to
+    <code>SfxKey</code> (<a data-src="src/core/types.ts#L259">line 259</a>), and any new
+    <code>IconGlyph</code>s or <code>StatusKind</code>s the School needs. Phase 3 added glyphs (<code>halo</code>,
+    <code>skull</code>, <code>scythe</code>…), two statuses (<code>poison</code>, <code>curse</code>) and three
+    sounds.</p>
+  <p>Then create the stubs, exactly as Phase 3 did:</p>
+  <pre><code class="lang-ts">// src/skills/holy.ts (as created by 7e70b18)
+// OWNER: Holy tree agent. STUB — replace with real implementation.
+import type { SkillDef } from '../core/types';
+export const HOLY_SKILLS: SkillDef[] = [];</code></pre>
+  <p>Next, wire the School into the aggregator <a data-src="src/skills/index.ts#L17">src/skills/index.ts</a>
+    (<code>ALL_SKILLS</code>, <code>generateSkillTextures</code>, <code>registerAllVfx</code>) and its asset
+    manifest into <code>ALL_ASSETS</code> in <a data-src="src/art/assets.ts#L33">assets.ts</a>.</p>
+
+  <h4 id="recipes-school-compiler">2. Let <code>tsc</code> list the rest</h4>
+  <p>After widening the unions, <code>npx tsc --noEmit</code> reports every exhaustive lookup that lacks the new
+    key. In the current code those are:</p>
+  <table>
+    <thead><tr><th>Lookup</th><th>File</th><th>Keyed by</th></tr></thead>
+    <tbody>
+      <tr><td><code>ELEMENT_COLORS</code>, <code>BRANCH_COLORS</code>, <code>BRANCH_NAMES</code>, <code>STAT_LABELS</code></td><td><a data-src="src/ui/info.ts#L10">ui/info.ts</a></td><td>Element, Branch, DerivedStatKey</td></tr>
+      <tr><td><code>ELEMENT_NAME</code>; <code>STAT_LABEL</code></td><td><a data-src="src/guide/ui.ts#L49">guide/ui.ts</a>; <a data-src="src/guide/spells.ts#L13">guide/spells.ts</a></td><td>Element; DerivedStatKey</td></tr>
+      <tr><td>base derived stats (<code>dmgShadow: 0</code>…)</td><td><a data-src="src/systems/progression/stats.ts#L42">progression/stats.ts</a></td><td>DerivedStats</td></tr>
+      <tr><td><code>SFX</code> recipes</td><td><a data-src="src/systems/audio/sfx.ts#L27">audio/sfx.ts</a> (see <code>cast_shadow</code> at <a data-src="src/systems/audio/sfx.ts#L227">line 227</a>)</td><td>SfxKey</td></tr>
+      <tr><td>icon painters <code>P</code> and <code>PIXEL_ICONS</code></td><td><a data-src="src/art/icons.ts#L125">art/icons.ts</a></td><td>IconGlyph (only if you add glyphs)</td></tr>
+      <tr><td><code>BRANCH_ROOT_JOB</code>, <code>SCHOOL_NAME</code>, <code>SCHOOL_PROFESSOR</code></td><td><a data-src="src/data/jobs.ts#L110">data/jobs.ts</a></td><td>School</td></tr>
+      <tr><td>professor reactions, office hours, Forbidden Wing chat, School info, professor lines</td><td><a data-src="src/data/npcScripts.ts#L155">data/npcScripts.ts</a></td><td>School</td></tr>
+      <tr><td><code>SCHOOL_COLOR</code>; handbook exams</td><td><a data-src="src/ui/titleMenu.ts#L37">ui/titleMenu.ts</a>; <a data-src="src/guide/context.ts#L52">guide/context.ts</a></td><td>School</td></tr>
+    </tbody>
+  </table>
+  <p>The <code>School</code> type is its own union in <a data-src="src/data/jobs.ts#L106">jobs.ts:106</a>, so
+    extend it and <code>SCHOOLS</code> too:</p>
+  <pre><code class="lang-ts">export type School = 'fire' | 'ice' | 'lightning' | 'holy' | 'shadow';
+export const SCHOOLS: School[] = ['fire', 'ice', 'lightning', 'holy', 'shadow'];
+
+/** Year-2 job for each School (what Headmistress Maelis offers at level 10). */
+export const BRANCH_ROOT_JOB: Record&lt;School, JobId&gt; = {
+  fire: 'pyromancer', ice: 'cryomancer', lightning: 'stormcaller', holy: 'cleric', shadow: 'occultist',
+};</code></pre>
+
+  <aside class="warn"><strong>The compiler won't find these.</strong> Element-to-bonus lookups written as ternary
+    chains or lists compile fine without your School:
+    <ul>
+      <li>the elemental damage bonus in <a data-src="src/systems/CombatSystem.ts#L31">CombatSystem.ts:31</a>
+        (without it, your <code>dmgX</code> gear and passives do nothing);</li>
+      <li>the <code>FRACTION_STATS</code> sets and stat lists in <a data-src="src/ui/info.ts#L18">ui/info.ts</a> and
+        <a data-src="src/guide/spells.ts#L20">guide/spells.ts</a> (without them, <code>dmgX</code> shows as a raw
+        number instead of a percent);</li>
+      <li>the hard-coded School groups that these docs' charts use (<code>src/devdocs/charts/data.ts</code>).</li>
+    </ul>
+    Grep for an existing School's name (<code>grep -rn "'shadow'" src</code>) to catch them.</aside>
+
+  <h4 id="recipes-school-content">3. Content</h4>
+  <ol>
+    <li><strong>Jobs.</strong> Three <code>JobDef</code>s in <a data-src="src/data/jobs.ts#L72">jobs.ts</a>
+      (tiers 2–4, <code>requiredLevel: JOB_LEVELS[n]</code>, <code>parent</code> chain from
+      <code>apprentice</code>, a <code>look</code> for the robes), copied from the Holy block.</li>
+    <li><strong>Spells and VFX.</strong> 24 spells, 8 per Year, following <a href="#recipes-spell">Add a spell</a>.
+      In the VFX file call <code>defineSchool('&lt;branch&gt;', build)</code> with the <em>branch id</em>. When a
+      player picks a job, <code>warmSchoolSoon</code> looks the School up by branch to pre-build its textures.</li>
+    <li><strong>Professor.</strong> An <code>NpcDef</code> in <a data-src="src/data/npcs.ts#L5">npcs.ts</a>, a
+      <code>SCHOOL_PROFESSOR</code> entry, <code>professor</code> as its script in <code>SCRIPTS</code>
+      (<a data-src="src/data/npcScripts.ts#L1007">npcScripts.ts:1007</a>), and a placement in the campus map's
+      <code>npcs</code> in front of its hall.</li>
+    <li><strong>Exams.</strong> Year 3 and Year 4 Exam quests (<code>q_job_&lt;job&gt;</code>, given by the
+      Professor with <code>requiredJobBranch</code>) and their entries in <code>JOB_ADVANCEMENT_QUESTS</code>
+      (<a data-src="src/data/quests.ts#L10">quests.ts:10</a>). Copy
+      <a data-src="src/data/quests.ts#L80">q_job_priest</a>. Year 2 needs no quest: the Headmistress offers
+      <code>BRANCH_ROOT_JOB</code>.</li>
+    <li><strong>Gear.</strong> A level-15 staff and a level-35 scepter with <code>reqBranch</code> and a
+      <code>dmgX</code> bonus (copy <a data-src="src/data/items.ts#L68">dawn_staff</a>), optional robes, and their
+      ids added to the level brackets of <code>equipDrops</code> in <code>monsters.ts</code>.</li>
+    <li><strong>Matchups.</strong> Give some monsters <code>weak</code>/<code>resist</code> entries for the new
+      element, so the School has favourable zones and at least one favourable field boss (the comment above
+      <code>FIELD_BOSS_DEFS</code> lists each School's).</li>
+    <li><strong>Sound and art.</strong> A synth recipe for <code>cast_x</code>. A hall, sign and banner on campus
+      (<code>t_hall_&lt;school&gt;</code> in <code>src/art/world/town.ts</code>, placed via
+      <code>MAP_EXTRAS.mistvale</code>). VFX sheets under <code>public/assets/vfx/&lt;school&gt;/</code> with a
+      <code>CREDITS.md</code>, merged into <a data-src="CREDITS.md#L118">CREDITS.md</a> (Holy has its own
+      section).</li>
+  </ol>
+
+  <h4 id="recipes-school-verify">Verify</h4>
+  <pre><code class="lang-bash">npx tsc --noEmit       # zero errors means every Record has the School
+npm run build          # tsc + vite build
+npm run dev</code></pre>
+  <pre><code class="lang-js">arcana.levelTo(10); arcana.job('&lt;year2job&gt;');   // declare without the dialog
+arcana.levelTo(25); arcana.job('&lt;year3job&gt;');   // skips the Exam; test the Exam separately
+arcana.levelTo(40); arcana.job('&lt;year4job&gt;');</code></pre>
+  <p>Also play the real path once: talk to the Headmistress at level 10 (your School must be offered), finish the
+    Professor's Year 3 Exam, and check the title screen's slot card colour and the spellbook tabs.</p>
+
+  <!-- ===================================================================== -->
+  <details class="advanced"><summary>Advanced: pitfalls and how the code reacts</summary>
+    <ul>
+      <li><strong>Renaming an id breaks saves.</strong> Saves store ids. When a save loads,
+        <a data-src="src/systems/SaveSystem.ts#L394">SaveSystem.ts</a> refunds the SP of unknown skill ids and clears
+        their hotbar slots, resets an unknown job to <code>apprentice</code>, and sends an unknown map to the start
+        map. Players lose progress silently. Rename the display name and keep the id: the Academy re-theme kept
+        every id, and <code>q_maelis_archon</code> changed only its <code>name</code>. Lowering a skill's
+        <code>maxLevel</code> is handled: the excess levels are refunded as SP.</li>
+      <li><strong>Never assume a texture exists; ensure it.</strong> Art is generated lazily: a School's VFX
+        textures on its first effect (<code>lazyRegister</code>), monster sheets on first spawn
+        (<code>ensureMonsterTexture</code>), player sheets on demand. Code that does
+        <code>scene.add.image(x, y, 'fire_something')</code> outside those paths can run before the texture is
+        built. Register effects through the School's wrapped <code>registerVfx</code>, and call the matching
+        <code>ensure…</code> before using a key. Keep a procedural fallback for a sheet that fails to load, as
+        <code>arrowProj</code> does.</li>
+      <li><strong>Keep <code>requires</code> chains shallow.</strong> ARCHITECTURE.md asks for 2–3 roots per Year,
+        not one long chain. Cross-Year requirements are the sharp edge: the final QA had to lower Year-4 primaries
+        from "Year-3 spell at level 10" to level 5 (<code>81b17e1</code>), because a fresh Year-4 student couldn't
+        learn them. <code>canLearn</code> checks every entry, so a typo in a <code>skillId</code> makes a spell
+        unlearnable without any error.</li>
+      <li><strong>Stay in the balance bands.</strong> <code>damagePct</code> is per hit line, and the bands are per
+        line too. A 3-line spell at the single-line primary value is three times too strong. Ultimates earn
+        800–1500% only with a long cooldown. Monster multipliers outside roughly 0.8–1.3 show up as outliers on the
+        monster-HP chart. After a balance change, replay a Year: the pacing passes (<code>49fcaad</code>,
+        <code>e2126d0</code>) found problems the curves alone didn't.</li>
+      <li><strong>Duplicate ids don't fail.</strong> The Registry keeps the last entry and logs
+        <code>[registry] duplicate … id</code>. <code>registerVfx</code> overwrites and logs
+        <code>[vfx] duplicate key</code>. Both are only warnings, so read the console after every change.</li>
+      <li><strong>Persistent VFX are the engine's to destroy.</strong> If a projectile or aura visual starts
+        looping tweens, tie them to the object's lifetime (the lightning kit's <code>loopWhileAlive</code> exists
+        because they leaked). Otherwise tweens keep running on destroyed objects after every cast.</li>
+      <li><strong>Element bonuses need both halves.</strong> Adding <code>dmgX</code> to <code>DerivedStats</code>
+        and to gear does nothing until <code>CombatSystem.rollSkillDamage</code> maps the element to it.</li>
+    </ul>
+  </details>
+
+  <details class="advanced"><summary>Advanced: doing a recipe with parallel agents</summary>
+    <p>The recipes split along the ownership lines described in <a href="#history">How it was built</a>. A new
+      School is the largest change. It parallelises the way Phase 3 did: the lead lands the contract, stubs and
+      aggregator wiring in one commit. Then one agent owns <code>src/skills/&lt;school&gt;*.ts</code> and its
+      <code>public/assets/vfx/&lt;school&gt;/</code>, another owns the data files (jobs, NPCs, scripts, quests,
+      items), and a third owns campus art and the <code>mistvale</code> map entry. None of them edits
+      <code>types.ts</code>. Run the typecheck after each agent reports, not only at the end: a missing
+      <code>Record</code> entry in someone else's file is the signal that the contract and the work have drifted
+      apart.</p>
+  </details>
+</section>

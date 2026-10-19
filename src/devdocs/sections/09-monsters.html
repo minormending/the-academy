@@ -1,0 +1,579 @@
+<section id="monsters" data-title="Monsters, AI and field bosses" data-summary="MonsterDef and stats from the balance curves, the Monster entity and its AI, MonsterManager spawning and contact damage, drops and Pip, the five field bosses and the Lich Archon.">
+  <h2>Monsters, AI and field bosses</h2>
+
+  <p>
+    Monsters are split the same way as everything else in the game: <strong>data</strong> says what a monster is,
+    an <strong>entity</strong> class makes one live in the world, and a <strong>manager</strong> decides when and where
+    they exist. <a data-src="src/data/monsters.ts">src/data/monsters.ts</a> defines every monster as a
+    <code>MonsterDef</code>, with its numbers derived from the reference curves in
+    <a data-src="src/core/balance.ts">src/core/balance.ts</a>. <a data-src="src/entities/Monster.ts">Monster</a> is the
+    physics sprite with its AI, status effects and death. <a data-src="src/systems/MonsterManager.ts">MonsterManager</a>
+    spawns monsters from the map's spawn list, respawns them, applies contact damage and answers "which monsters are
+    near here?". <a data-src="src/systems/DropManager.ts">DropManager</a> turns a kill into loot on the floor, and Pip the
+    owl (<a data-src="src/systems/PetSystem.ts">PetSystem</a>) picks some of it up.
+  </p>
+  <p>
+    On top of the ordinary monsters sit two kinds of boss. Five <dfn>field bosses</dfn>, one per practicum map, appear on
+    a timer, announce themselves with a banner, and fight with telegraphed attacks: a red-orange warning shape appears on
+    the ground first, and the damage lands there a moment later. The <dfn>Lich Archon</dfn> is the final boss of the Arcane
+    Sanctum. The Trial Hall's wave arena reuses these monsters but is driven by <code>ArenaSystem</code>; it is covered in
+    <a href="#story">Story</a>.
+  </p>
+
+  <h3 id="monsters-def">MonsterDef and where the numbers come from</h3>
+  <p>The contract (<a data-src="src/core/types.ts#L301">types.ts:301</a>):</p>
+  <pre><code class="lang-ts">export type MonsterBehavior = 'walker' | 'hopper' | 'flyer' | 'stationary' | 'boss';
+
+export interface MonsterDef {
+  id: string;
+  name: string;
+  level: number;
+  hp: number;
+  exp: number;
+  mesos: [number, number];
+  touchDamage: number;
+  def: number;             // flat damage reduction applied to player hits (keep small)
+  speed: number;           // px/s
+  size: { w: number; h: number }; // hitbox
+  behavior: MonsterBehavior;
+  aggressive?: boolean;    // chases player after being hit (always true for boss)
+  weak?: Element[];        // x1.5
+  resist?: Element[];      // x0.5
+  immune?: StatusKind[];
+  drops: DropEntry[];
+  boss?: boolean;
+}</code></pre>
+  <p>Nobody types an HP or EXP number by hand. Each normal monster is written as a short <code>MonsterSpec</code> (id,
+    level, behaviour, speed, hitbox, element matchups, its zone's <dfn>etc item</dfn> (a crafting/quest drop) and a few
+    <em>multipliers</em>), and <code>mk()</code> (<a data-src="src/data/monsters.ts#L80">monsters.ts:80</a>) fills in the
+    rest from the curves:</p>
+  <pre><code class="lang-ts">function mk(s: MonsterSpec): MonsterDef {
+  const lv = s.level;
+  return {
+    id: s.id,
+    name: s.name,
+    level: lv,
+    hp: Math.round(refMonsterHp(lv) * (s.hpMul ?? 1)),
+    exp: Math.max(1, Math.round(refMonsterExp(lv) * (s.expMul ?? 1))),
+    mesos: mesosFor(lv),
+    touchDamage: Math.round(refMonsterTouch(lv) * (s.touchMul ?? 1)),
+    def: Math.round(lv * 0.4 * (s.defMul ?? 1)),
+    speed: s.speed,
+    size: s.size,
+    behavior: s.behavior,
+    aggressive: s.aggressive ?? true,
+    weak: s.weak,
+    resist: s.resist,
+    immune: s.immune,
+    drops: [
+      { itemId: s.etc, chance: s.etcChance ?? 0.45, min: 1, max: 1 },
+      ...potionDrops(lv),
+      ...equipDrops(lv),
+      ...(s.extraDrops ?? []),
+    ],
+  };
+}</code></pre>
+  <ul>
+    <li><strong>HP</strong>: <code>refMonsterHp(lv)</code> = 3.5 hits of the level-appropriate primary spell
+      (<code>refMatk(lv) × refSkillPct(lv) / 100 × 3.5</code>), so a normal monster dies to about 3–4 casts. See
+      <a href="#progression">Progression</a> for the curves.</li>
+    <li><strong>EXP</strong>: <code>refMonsterExp(lv)</code> = <code>expToNext(lv) / killsPerLevel(lv)</code>, so a level
+      takes about <code>8 + ⌊1.6·lv⌋</code> same-level kills.</li>
+    <li><strong>Touch damage</strong>: <code>refMonsterTouch(lv)</code> = <code>round(8 + 4.5·lv)</code>.
+      <strong>Defense</strong> is a small flat number, <code>round(0.4·lv × defMul)</code>.</li>
+    <li><strong>Mesos</strong> (money): <code>mesosFor(lv)</code> = <code>[round(3 + 2.5·lv), round(6 + 4·lv)]</code>, 6–10 at
+      level 1.</li>
+    <li><strong>Drops</strong>: the zone etc item (45% unless overridden), then two shared tables chosen by level band.
+      <code>potionDrops</code> gives level-appropriate potions at 3–12% (red/blue below 12, orange from 12, white and mana
+      elixirs from 25, plus elixirs from 40, with return scrolls at 3% from 12). <code>equipDrops</code> gives on-level gear
+      at 0.5–2% in eight bands (below 8, 15, 20, 25, 30, 35, 45, and 45+), for example the five School staves at 1% each for
+      levels 15–19.</li>
+    <li><strong>Multipliers</strong> stay in roughly ×0.8–1.3 so monsters of one level feel different: golems are tanky
+      (<code>hpMul: 1.3, defMul: 1.6</code>), flyers are frail. The earliest monsters run <em>below</em> the curve on purpose:
+      a comment above <code>MONSTERS</code> explains that the starting 45% mastery makes an average roll about 0.73 of max, so
+      reference HP would take 5–6 Arcane Bolts instead of 3–4.</li>
+  </ul>
+  <p>The resulting roster (values computed from the formulas above):</p>
+  <table>
+    <thead><tr><th>Monster</th><th>Lv</th><th>Map</th><th>Behaviour</th><th>HP</th><th>EXP</th><th>Touch</th><th>Weak / resist / immune</th></tr></thead>
+    <tbody>
+      <tr><td>Moss Snail</td><td>1</td><td>Whisperwood</td><td>walker, passive</td><td>62</td><td>3</td><td>10</td><td>–</td></tr>
+      <tr><td>Puff Slime</td><td>3</td><td>Whisperwood</td><td>hopper, passive</td><td>106</td><td>10</td><td>20</td><td>–</td></tr>
+      <tr><td>Cap Shroom</td><td>6</td><td>Whisperwood, Shroom Hollow</td><td>walker</td><td>185</td><td>25</td><td>35</td><td>–</td></tr>
+      <tr><td>Thorn Shroom</td><td>9</td><td>Shroom Hollow</td><td>walker</td><td>265</td><td>42</td><td>56</td><td>–</td></tr>
+      <tr><td>Stump Golem</td><td>13</td><td>Shroom Hollow</td><td>walker</td><td>623</td><td>74</td><td>74</td><td>weak shadow</td></tr>
+      <tr><td>Frost Bat</td><td>16</td><td>Frostfang Cliffs</td><td>flyer</td><td>581</td><td>73</td><td>72</td><td>weak fire, lightning</td></tr>
+      <tr><td>Snow Yeti</td><td>20</td><td>Frostfang Cliffs</td><td>walker</td><td>905</td><td>110</td><td>98</td><td>weak fire, shadow</td></tr>
+      <tr><td>Ice Wisp</td><td>23</td><td>Frostfang Cliffs</td><td>flyer</td><td>831</td><td>113</td><td>118</td><td>weak fire, holy · resist ice · immune freeze</td></tr>
+      <tr><td>Ember Imp</td><td>26</td><td>Cinder Caverns</td><td>hopper</td><td>1,342</td><td>102</td><td>125</td><td>weak ice · resist fire</td></tr>
+      <tr><td>Lava Salamander</td><td>30</td><td>Cinder Caverns</td><td>walker</td><td>1,786</td><td>128</td><td>150</td><td>weak ice, shadow · resist fire · immune burn</td></tr>
+      <tr><td>Magma Golem</td><td>34</td><td>Cinder Caverns</td><td>walker</td><td>2,484</td><td>173</td><td>193</td><td>weak ice · resist fire</td></tr>
+      <tr><td>Storm Harpy</td><td>37</td><td>Stormspire Peak</td><td>flyer</td><td>1,738</td><td>151</td><td>175</td><td>weak lightning, shadow</td></tr>
+      <tr><td>Crag Golem</td><td>40</td><td>Stormspire Peak</td><td>walker</td><td>4,341</td><td>211</td><td>226</td><td>weak lightning · resist holy</td></tr>
+      <tr><td>Thunder Drake</td><td>43</td><td>Stormspire Peak</td><td>flyer</td><td>3,396</td><td>229</td><td>222</td><td>weak ice, holy · resist lightning</td></tr>
+      <tr><td>Void Wisp</td><td>46</td><td>Arcane Sanctum</td><td>flyer</td><td>3,240</td><td>210</td><td>215</td><td>weak holy · resist shadow</td></tr>
+      <tr><td>Lich Archon</td><td>48</td><td>Arcane Sanctum</td><td>boss</td><td>793,800</td><td>9,200</td><td>280</td><td>weak holy · resist shadow</td></tr>
+    </tbody>
+  </table>
+  <p><code>weak</code> elements take ×1.5 damage and <code>resist</code> ×0.5 (the multiplier is applied in
+    <code>CombatSystem</code>, see <a href="#skills">Skills</a>). <code>immune</code> statuses are refused twice: by
+    <code>CombatSystem.tryApplyStatus</code> before rolling, and again in <code>Monster.applyStatus</code>. Every School has
+    something it is good against: undead and void creatures are weak to holy, the volcano to ice, the snow to fire.</p>
+  <figure data-chart="monster-levels"><figcaption>Every monster's level against the map it spawns in, with each map's
+    level range. Monsters climb in steps inside each range; Cap Shroom (6) is the one that also appears below its range,
+    in Shroom Hollow (8–15). Each field boss sits at the top of its zone (8, 14, 24, 34, 44), and the Lich Archon at 48
+    in the 45–50 Sanctum.</figcaption></figure>
+  <figure data-chart="monster-hp"><figcaption>Monster HP against <code>refMonsterHp</code> (log scale). Normal monsters
+    hug the curve: the first few sit visibly under it (Moss Snail 62 against a reference of 83) and the golems above it
+    (×1.3). Field bosses float 28–65× above their level's reference, and the Lich Archon is 200× (793,800 HP).</figcaption></figure>
+
+  <h4 id="monsters-matchups">Field boss matchups</h4>
+  <p>Field bosses use a second builder, <code>fieldBoss()</code> (<a data-src="src/data/monsters.ts#L192">monsters.ts:192</a>):
+    HP is <code>refMonsterHp × hpMul</code> (28–65), EXP <code>refMonsterExp × 18</code>, defense <code>round(0.6·lv)</code>,
+    mesos <code>[90·lv + 200, 140·lv + 400]</code>. Their drops are a guaranteed trophy, a 22% unique accessory, a pile of
+    3–6 zone etc items, potions at 6× the normal chance (capped at 100%) and one or two more of each, and on-level
+    equipment at 6× (capped at 50%). Their weaknesses are chosen so every School has a good matchup, as the comment above
+    the list says:</p>
+  <pre><code class="lang-ts">// School matchups (each School has at least one favourable mini-boss):
+//   fire → Shroom Monarch, Frostfang Alpha · ice → Magmaw, Tempest Wyrm · lightning → Frostfang Alpha ·
+//   holy → Shroom Monarch, Tempest Wyrm · shadow → Magmaw. The Matriarch (lv 8) is fought before Schools exist.</code></pre>
+
+  <details class="advanced">
+    <summary>Advanced: tuning monsters without breaking the curves</summary>
+    <ul>
+      <li><strong>Change the curve, not the monster</strong>, when a whole level band feels off. Every normal monster's
+        HP, EXP and touch move with <code>balance.ts</code>; hand-tuning one def's <code>hp</code> desynchronises it from
+        the <code>monster-hp</code> chart and the reference math in <a href="#progression">Progression</a>.</li>
+      <li><strong>EXP and HP are independent multipliers.</strong> A tanky monster with <code>expMul</code> left at 1 is a
+        worse farm than its neighbours; Magma Golem (<code>hpMul 1.3</code>, <code>expMul 1.05</code>) is deliberately so.
+        Player EXP per kill is further scaled by level difference in <code>Progression</code>
+        (<code>killExpMultiplier</code>).</li>
+      <li><strong><code>aggressive</code> defaults to true</strong> in <code>mk()</code>. Only Moss Snail and Puff Slime
+        opt out; they get knocked back but never chase.</li>
+      <li><strong>Drop chances are per entry and independent</strong>: a kill can roll the etc item, two potions and a
+        staff at once. Keep new <code>extraDrops</code> small; <code>DropManager</code> fans every success out on the floor.</li>
+      <li><strong>Ids are save and quest data.</strong> Quests count kills by <code>monsterId</code>, bounties are named
+        <code>q_bounty_&lt;bossId&gt;</code> with trophy <code>trophy_&lt;bossId&gt;</code>, and maps spawn by id. Add new ids;
+        don't rename.</li>
+    </ul>
+  </details>
+
+  <h3 id="monsters-ai">The Monster entity and its AI</h3>
+  <p>A <code>Monster</code> (<a data-src="src/entities/Monster.ts#L24">Monster.ts:24</a>) wraps one Arcade physics
+    sprite. Its <code>x</code>/<code>y</code> are the sprite position, and like the player, <strong>y is the feet</strong>.
+    The constructor builds the monster's sprite sheet on first use (<code>ensureMonsterTexture</code>), sizes the body to
+    <code>def.size</code> at the bottom-centre of the frame, adds colliders against the map's <code>solids</code> and
+    (except for flyers) its one-way <code>platforms</code>, and turns gravity off for flyers. Every frame
+    <code>update()</code> clamps <code>delta</code> to 50 ms (so a background tab can't teleport monsters through floors)
+    and runs <code>tick()</code> inside a <code>try</code> that warns once.</p>
+  <pre><code class="lang-ts">  protected tick(now: number, delta: number) {
+    if (!this._alive) return;
+    this.tickStatuses(delta);
+    if (!this._alive) return;
+    this.tickWorld(now, delta);
+    if (!this._alive) return;
+
+    if (this.isLocked()) {
+      this.body.setVelocityX(0);
+      if (this.flyer) this.body.setVelocityY(0);
+      if (this.statuses.has('freeze')) { if (!this.sprite.anims.isPaused) this.sprite.anims.pause(); }
+      else { if (this.sprite.anims.isPaused) this.sprite.anims.resume(); this.playAnim('idle'); }
+    } else {
+      if (this.sprite.anims.isPaused) this.sprite.anims.resume();
+      if (now &lt; this.hitUntil) {
+        this.tickHitstun(now);
+      } else {
+        this.runAI(now, delta, this.speedMult());
+      }
+    }
+    this.updateOverlays(now, delta);
+  }</code></pre>
+  <p>(<a data-src="src/entities/Monster.ts#L272">Monster.ts:272</a>.) The order matters: a burn tick can kill the monster,
+    so <code>_alive</code> is re-checked after each step. <code>tickWorld</code> is a hook for bosses (their projectiles
+    and warning zones keep moving while the boss itself is frozen). <code>speedMult()</code> applies chill: speed ×
+    (1 − potency), never below 0.1.</p>
+  <pre class="mermaid">stateDiagram-v2
+  [*] --> Wander: spawned with the map
+  [*] --> FadeIn: respawned
+  FadeIn --> Wander: 600 ms, no contact damage
+  Wander --> Chase: hit (aggressive only)
+  Chase --> Wander: 12 s without a hit, or player out of range
+  Wander --> Hitstun: takeDamage
+  Chase --> Hitstun: takeDamage
+  Hitstun --> Chase: after 280 ms
+  Wander --> Locked: freeze or stun
+  Chase --> Locked: freeze or stun
+  Locked --> Chase: status ends
+  Chase --> Dying: hp reaches 0
+  Hitstun --> Dying: hp reaches 0
+  Dying --> [*]: die anim, fade, destroy()</pre>
+  <p>"Chase" is not a stored state. It is <code>aggroTarget()</code> returning the player: <code>takeDamage</code> sets
+    <code>aggroUntil = now + 12000</code> for aggressive monsters and bosses, and until then the AI steers toward the player
+    as long as they are within 700 px horizontally and 150 px vertically (flyers: 650 and 380). Hitstun returns to Wander
+    instead of Chase for passive monsters, and any state can go to Dying (a burn tick can kill a frozen monster).</p>
+  <table>
+    <thead><tr><th>Behaviour</th><th>Wandering</th><th>Chasing</th></tr></thead>
+    <tbody>
+      <tr><td><code>walker</code> (<a data-src="src/entities/Monster.ts#L384">:384</a>)</td><td>Every 1.2–3.6 s (moving) or 0.7–2.2 s (idle) decides again: 62% chance to walk, half the time turning round. Turns back at a platform edge, a wall, or within 110 px of a portal.</td><td>Walks at the player; stops at an edge instead of falling off.</td></tr>
+      <tr><td><code>hopper</code> (<a data-src="src/entities/Monster.ts#L410">:410</a>)</td><td>Hops every 0.8–1.7 s with an upward speed of 320–410 px/s, 30% chance to turn. The edge check looks ahead by the hop's full horizontal reach.</td><td>Hops every 0.35–0.7 s toward the player.</td></tr>
+      <tr><td><code>flyer</code> (<a data-src="src/entities/Monster.ts#L432">:432</a>)</td><td>No gravity. Drifts at 0.6× speed inside its spawn <dfn>band</dfn> (the spawn's x-range), hovering on a sine wave about 26–56 px above the spawn line; pauses 25% of the time.</td><td>Flies at 1.1× speed toward a point 30 px above the player's feet, clamped between 12 and 300 px above the band.</td></tr>
+      <tr><td><code>stationary</code></td><td colspan="2">Stands still and turns to face its aggro target. No monster uses it today.</td></tr>
+      <tr><td><code>boss</code></td><td colspan="2">Falls back to the walker AI; real bosses override <code>runAI</code> (see below).</td></tr>
+    </tbody>
+  </table>
+  <p>Edge checks are what keep ground monsters on their ledge. <code>platform()</code> asks the map for the walkable span
+    under the feet (<code>platformUnder</code>, which tries <code>map.platformAt</code> and falls back to scanning the raw
+    surfaces) at most every 200 ms and only while grounded. <code>atEdge()</code>
+    (<a data-src="src/entities/Monster.ts#L355">Monster.ts:355</a>) then looks a little ahead of the body:</p>
+  <pre><code class="lang-ts">  protected atEdge(plat: PlatformDef | null, dir: number, ahead = 4, avoidPortals = false): boolean {
+    const half = this.def.size.w / 2;
+    const lookX = this.x + dir * (half * 0.5 + ahead);
+    if (lookX &lt; half || lookX &gt; this.map.widthPx - half) return true;
+    // Wandering monsters keep clear of portals so they don't camp the map exits.
+    if (avoidPortals &amp;&amp; this.nearPortal(lookX + dir * half * 0.5, dir)) return true;
+    if (!plat) return false;
+    return dir &gt; 0 ? lookX &gt;= plat.x2 : lookX &lt;= plat.x1;
+  }</code></pre>
+  <p>Because the map's walkables are split around walls (see <a href="#world-physics">World</a>), a wall standing on the
+    floor counts as an edge too.</p>
+
+  <h4 id="monsters-hit">Getting hit: aggro, hitstun and knockback</h4>
+  <p><code>takeDamage</code> (<a data-src="src/entities/Monster.ts#L148">Monster.ts:148</a>) receives damage that
+    <code>CombatSystem</code> has already calculated. It lowers HP, refreshes aggro, calls the <code>onDamaged</code> hook
+    (bosses use it to wake up and enrage), and dies at 0. Otherwise it flashes the sprite white for 70 ms and, unless the
+    monster is a boss or frozen/stunned, applies <dfn>hitstun</dfn> (280 ms during which the AI doesn't run) and
+    <dfn>knockback</dfn>: a horizontal shove away from the attacker at <code>distance / 0.16</code> px/s for 160 ms, so
+    the monster slides the skill's knockback distance (at least 8 px). Hitstun stops the slide at a platform edge, and a
+    new shove is only applied once the previous hitstun is nearly over, so a multi-hit spell doesn't launch a monster
+    across the map.</p>
+
+  <h4 id="monsters-status">Status effects</h4>
+  <p>Skills apply statuses through <code>CombatSystem.tryApplyStatus</code>, which rolls the chance, checks immunity,
+    turns burn/poison potency (a % of the hit) into damage per tick, clamps curse to 0–0.6 and chill to 0–0.9, and halves
+    freeze/stun durations on bosses. <code>Monster.applyStatus</code>
+    (<a data-src="src/entities/Monster.ts#L177">Monster.ts:177</a>) then stores it, one instance per kind: reapplying keeps
+    the longer duration and the stronger potency. Bosses additionally cap freeze/stun at 2.5 s.</p>
+  <table>
+    <thead><tr><th>Status</th><th>Effect on the monster</th><th>Visual</th></tr></thead>
+    <tbody>
+      <tr><td>burn, poison</td><td><code>potency</code> damage every 500 ms through <code>combat.damageMonster</code> (shown as DoT numbers)</td><td>orange/green flicker tint; rising embers or green puffs</td></tr>
+      <tr><td>chill</td><td>move speed × (1 − potency)</td><td>blue tint, falling snow motes</td></tr>
+      <tr><td>freeze</td><td>no movement, AI or contact damage; animation paused</td><td>ice crystal shell (sized in whole multiples of its 32×36 art), shatters into 7 shards when it ends</td></tr>
+      <tr><td>stun</td><td>no movement, AI or contact damage</td><td>three stars orbiting the head</td></tr>
+      <tr><td>shock</td><td>takes × (1 + potency) damage</td><td>yellow flicker, sparks</td></tr>
+      <tr><td>curse</td><td>takes × (1 + potency) damage <em>and</em> deals × (1 − potency) damage</td><td>violet tint, slow purple puffs</td></tr>
+    </tbody>
+  </table>
+  <p>Only one tint shows at a time, in priority order freeze, burn, shock, poison, curse, chill, stun. Status particles
+    spawn on a 90 ms clock. The damage side lives in two small methods:</p>
+  <pre><code class="lang-ts">  incomingDamageMult(): number {
+    const sh = this.statuses.get('shock');
+    const cu = this.statuses.get('curse');
+    return (sh ? 1 + Math.max(0, sh.potency) : 1) * (cu ? 1 + Math.max(0, cu.potency) : 1);
+  }
+
+  /** Multiplier on damage this monster deals (curse weakens it). */
+  /** Extra damage multiplier for this instance (Trial Hall scales waves above the zone's natural damage). */
+  damageMul = 1;
+
+  outgoingDamageMult(): number {
+    const cu = this.statuses.get('curse');
+    return this.damageMul * (cu ? 1 - Math.min(0.6, Math.max(0, cu.potency)) : 1);
+  }</code></pre>
+  <p>(<a data-src="src/entities/Monster.ts#L209">Monster.ts:209</a>.) <code>outgoingDamageMult()</code> is the single
+    place curse weakens a monster. Contact damage, every field boss attack (<code>FieldBoss.dmg()</code>) and both Lich
+    Archon attacks multiply by it, so a curse on a boss makes its telegraphed slams hurt less too.</p>
+
+  <h4 id="monsters-death">Death, exactly once</h4>
+  <p><code>die()</code> (<a data-src="src/entities/Monster.ts#L655">Monster.ts:655</a>) is the only place
+    <code>monster:killed</code> is emitted, and it is guarded so that happens once per monster:</p>
+  <pre><code class="lang-ts">  protected die() {
+    if (!this._alive) return;
+    this._alive = false;
+    this.hp = 0;
+    try { this.onBeforeDeath(); } catch (e) { console.warn('[monster] onBeforeDeath', e); }
+    for (const k of [...this.statuses.keys()]) this.removeStatus(k);
+    this.clearStatusVisuals();
+    // …
+    this.body.enable = false;
+    // …
+    try { bus.emit('monster:killed', { monster: this }); } catch (e) { console.error('[monster] monster:killed handler failed', e); }</code></pre>
+  <p>Three systems listen: <code>Progression</code> (EXP and quest kill counts), <code>DropManager</code> (loot) and
+    <code>MonsterManager</code> (respawn timer); bosses also listen to forget their dead adds. After the event the
+    monster plays its <code>die</code> animation, fades up and out over 260 ms and calls <code>destroy()</code>. A
+    <code>delayedCall</code> of 900 ms (50 ms with no death animation) finishes the job if the animation-complete event
+    never fires.</p>
+
+  <details class="advanced">
+    <summary>Advanced: entity invariants</summary>
+    <ul>
+      <li><strong><code>alive</code> flips before the event.</strong> A listener that deals damage (say, an on-kill
+        explosion) can call <code>takeDamage</code> on the dying monster; the <code>!this.alive</code> guard turns it into a
+        no-op, so EXP and drops can't be granted twice. Burn/poison loops check <code>_alive</code> each tick for the same
+        reason.</li>
+      <li><strong>Listeners must not throw.</strong> The bus is an event emitter that stops calling listeners after one
+        throws, and they run in registration order: <code>Progression</code>, <code>MonsterManager</code>,
+        <code>DropManager</code> (the order GameScene constructs them), then any boss. <code>Progression</code> and
+        <code>DropManager</code> wrap their handlers in <code>try</code>; the emit itself is wrapped too, so even a throwing
+        listener can't stop the corpse from fading. A new listener should catch its own errors, or the ones after it
+        (drops, respawns) silently stop working.</li>
+      <li><strong><code>destroy()</code> is idempotent</strong> and removes colliders, overlays, the HP bar, the death timer
+        and tweens. <code>MonsterManager.clear()</code> calls it on map change for monsters that are mid-death, which is why
+        the fade's <code>onComplete</code> and the timer both go through <code>finish()</code> and check
+        <code>destroyed</code>.</li>
+      <li><strong>No allocation in hot paths.</strong> <code>boundsRef()</code> returns one reused rectangle for per-frame
+        callers (contact damage); <code>getBounds()</code> allocates and is for callers that keep the result. Never store
+        the result of <code>boundsRef()</code>.</li>
+      <li><strong>Bosses don't get knocked around.</strong> <code>takeDamage</code> skips hitstun and knockback for
+        <code>def.boss</code>, so their scripted attacks can't be interrupted by spam. Freeze and stun are the only way to
+        pause them, and both are capped (2.5 s here, 1.5 s plus a lockout for field bosses).</li>
+    </ul>
+  </details>
+
+  <h3 id="monsters-manager">MonsterManager: spawning, respawns and contact</h3>
+  <p><code>MonsterManager</code> (<a data-src="src/systems/MonsterManager.ts">MonsterManager.ts</a>) owns the list of live
+    monsters for the current map. <code>bindMap()</code> (<a data-src="src/systems/MonsterManager.ts#L74">:74</a>) runs on
+    every map load:</p>
+  <pre><code class="lang-ts">  bindMap(map: IMapInstance) {
+    this.clear();
+    this.map = map;
+    this.gen++;
+    if (map.def.safe) return;
+    // Build this map's monster sheets up front (one batch during the map load, not a hitch per first spawn).
+    for (const id of new Set((map.def.spawns ?? []).map(sp =&gt; sp.monsterId))) ensureMonsterTexture(this.scene, id);
+    (map.def.spawns ?? []).forEach((sp, i) =&gt; {
+      if (isFieldBoss(sp.monsterId)) { this.scheduleFieldBoss(i); return; }
+      for (let k = 0; k &lt; sp.count; k++) this.spawnInGroup(i, false);
+    });
+  }</code></pre>
+  <ul>
+    <li><strong>Spawn groups.</strong> Each <code>SpawnDef</code> is a group. <code>spawnInGroup</code> picks a random x in
+      the range (clamped by half the monster's width) and spawns at the group's <code>y</code>, recording the monster's
+      uid against the group index. Flyers get the range as their drift band.</li>
+    <li><strong>Respawn.</strong> On <code>monster:killed</code>, <code>onKilled</code> starts a timer for
+      <code>sp.respawnMs</code> (7 s for ordinary spawns; 3 min for the Lich Archon's Sanctum entry). When it fires, it tops
+      the group back up to <code>count</code> with a 600 ms fade-in during which the monster deals no contact damage.</li>
+    <li><strong>Choosing the class.</strong> <code>create()</code> instantiates the field boss class from
+      <code>FIELD_BOSS_CLASSES</code> if there is one, <code>LichArchon</code> for any other <code>behavior: 'boss'</code>, and
+      plain <code>Monster</code> otherwise.</li>
+    <li><strong>Contact damage.</strong> After updating every monster, <code>contactDamage()</code> checks living monsters
+      that can touch (not fading in, not frozen or stunned, not mid-telegraphed-attack) against the player's bounds and
+      calls <code>combat.hitPlayer(touchDamage × outgoingDamageMult(), monster.x)</code>. It stops after the first hit
+      each frame; the player's invulnerability frames after a hit stop the rest (see <a href="#physics">Physics</a>).</li>
+  </ul>
+  <pre><code class="lang-ts">  private contactDamage() {
+    const s = this.services;
+    if (!s.player || !s.combat) return;
+    if (s.progression?.isDead()) return;
+    if (s.player.isInvulnerable()) return;
+    const pb = s.player.getBounds();
+    for (const m of this.list) {
+      if (!m.canContact()) continue;
+      if (Phaser.Geom.Intersects.RectangleToRectangle(m.boundsRef(), pb)) {
+        const weak = (m as { outgoingDamageMult?: () =&gt; number }).outgoingDamageMult?.() ?? 1;
+        s.combat.hitPlayer(Math.max(1, Math.round(m.def.touchDamage * weak)), m.x);
+        return; // one contact hit per frame
+      }
+    }
+  }</code></pre>
+  <p>(<a data-src="src/systems/MonsterManager.ts#L267">MonsterManager.ts:267</a>.) The queries other systems use:</p>
+  <table>
+    <thead><tr><th>Method</th><th>Returns</th></tr></thead>
+    <tbody>
+      <tr><td><code>all()</code></td><td>A new array of living monsters (minimap, bosses counting adds).</td></tr>
+      <tr><td><code>inRect(rect)</code></td><td>Living monsters whose hitbox overlaps <code>rect</code> (area attacks).</td></tr>
+      <tr><td><code>nearest(x, y, maxDist, facing?, maxDy?)</code></td><td>The closest living monster measured to the <em>edge</em> of its hitbox, optionally only those in front (anything more than half its width behind is skipped) and within <code>maxDy</code> vertically. Ties go to the one more directly ahead. Used for auto-targeting.</td></tr>
+    </tbody>
+  </table>
+  <p>The skill engine does its own per-frame caching on top: <code>AttackRunner.live()</code>
+    (<a data-src="src/systems/skill/AttackRunner.ts#L118">AttackRunner.ts:118</a>) rebuilds a list of living monsters and
+    their bounds at most once per frame, because projectiles test for hits on every sub-step and used to call
+    <code>all()</code> and <code>getBounds()</code> each time.</p>
+
+  <details class="advanced">
+    <summary>Advanced: timers, generations and iteration safety</summary>
+    <ul>
+      <li><strong>The generation counter.</strong> <code>clear()</code> and <code>bindMap()</code> both increment
+        <code>gen</code>, and every respawn or field-boss callback captures <code>gen</code> when it is scheduled and
+        returns early if it changed. <code>clear()</code> also removes the timers, but the check covers a timer that is
+        already being dispatched during the map change.</li>
+      <li><strong>Update iterates a snapshot length.</strong> <code>update()</code> loops over the length at entry, so a
+        boss that summons adds mid-update doesn't update them this frame, and a map change that replaces
+        <code>this.list</code> mid-loop can't break the iteration (destroyed monsters ignore <code>update()</code>).
+        Destroyed monsters are pruned at the start of the next update.</li>
+      <li><strong>Respawn counts living members</strong>, not timers: a timer only spawns if
+        <code>aliveInGroup(i) &lt; count</code>, so two timers firing for the same group can't push it over
+        <code>count</code>. Monsters made with <code>spawn()</code> (debug, boss adds, Trial waves) belong to no group and never
+        respawn.</li>
+      <li><strong>Safe maps return early</strong>, so the campus never builds monster sheets.</li>
+      <li><strong>The boss fallback is a trap.</strong> Any new <code>behavior: 'boss'</code> monster without an entry in
+        <code>FIELD_BOSS_CLASSES</code> becomes a <code>LichArchon</code> (teleports, void-wisp summons and all). Give a new
+        boss its own class, or use <code>boss: true</code> with another behaviour.</li>
+    </ul>
+  </details>
+
+  <h3 id="monsters-drops">Drops and pickup</h3>
+  <p><code>DropManager</code> listens for <code>monster:killed</code> and calls <code>dropFromMonster</code>
+    (<a data-src="src/systems/DropManager.ts#L52">DropManager.ts:52</a>). Mesos drop 80% of the time from normal
+    monsters and always from bosses, which split the amount into 4 bags. Every <code>DropEntry</code> rolls
+    independently against its <code>chance</code>, with a quantity between <code>min</code> and <code>max</code>. The
+    successes are shuffled and fanned out sideways (22 px apart, 28 for bosses), each launched 35 ms after the last.</p>
+  <ul>
+    <li><strong>Flight.</strong> Drops are plain sprites with hand-rolled physics, not Arcade bodies: launched upward at
+      380 px/s under 1400 px/s² of gravity, aimed so they land on the surface under their target x
+      (<code>groundBelow</code>), clamped to the platform the monster stood on so loot doesn't rain off a ledge. They
+      bounce once at 32% of the impact speed, then rest and bob.</li>
+    <li><strong>Lifetime.</strong> 60 s, blinking for the last 6. At most 150 drops exist (<code>MAX_DROPS</code>); a new
+      one past the cap fades out the oldest <em>resting</em> drop.</li>
+    <li><strong>Pickup.</strong> Holding <kbd>Z</kbd> (or its rebound key) calls <code>tryPickup()</code> every 110 ms from
+      GameScene, which takes the nearest drop within 50 px (vertical distance counts 1.2×). Drops less than 250 ms into
+      their flight can't be grabbed. An item that doesn't fit in the bag is skipped so a meso bag under it can still be
+      collected, and "Your inventory is full." is logged at most every 1.5 s.</li>
+    <li><strong>Looks.</strong> Meso piles pick a coin by amount (bronze under 20, silver under 80, gold under 400, then a
+      bag); items use their inventory icon scaled to 28 px.</li>
+  </ul>
+
+  <h4 id="monsters-pip">Pip the owl</h4>
+  <p><code>PetSystem</code> (<a data-src="src/systems/PetSystem.ts">PetSystem.ts</a>) is an auto-loot familiar drawn from
+    a 14×14 pixel sprite defined in the file itself. Every 200 ms it scans <code>drops.dropPositions()</code> for loot
+    within 260 px of the player, flies to the nearest at 420 px/s, and when within 22 px calls
+    <code>drops.pickupNear(x, y, 28)</code>, the same pickup path as <kbd>Z</kbd>. A drop it fails to take (full bag) is
+    ignored for 3 s. If the player blinks or warps more than 700 px away it snaps back. It is toggled by the "familiar"
+    setting or <code>arcana.pet()</code>, and GameScene clears and rebinds it with the map like every other system.</p>
+
+  <h3 id="monsters-field-bosses">Field bosses</h3>
+  <p>Each of the five practicum maps from Whisperwood to Stormspire Peak has one field boss in its <code>spawns</code>, with a 10-minute <code>respawnMs</code>. The data
+    side (<code>FIELD_BOSSES</code>, <a data-src="src/data/monsters.ts#L155">monsters.ts:155</a>) records each boss's map,
+    the article for its banner ("A Shroom Monarch", but just "Magmaw") and an accent colour. The behaviour side is a base
+    class, <code>FieldBoss</code> (<a data-src="src/entities/monsters/FieldBoss.ts#L88">FieldBoss.ts:88</a>), and five
+    subclasses in <a data-src="src/entities/monsters/fieldBosses.ts">fieldBosses.ts</a>.</p>
+
+  <h4 id="monsters-boss-timer">When they appear</h4>
+  <p>A field boss is <em>not</em> spawned with the map. <code>bindMap</code> hands its spawn entry to
+    <code>scheduleFieldBoss</code> instead, which keeps one timer record per map for the whole session (not saved):</p>
+  <ul>
+    <li><strong>First visit</strong> to the map: it appears after <code>fieldBossFirstDelayMs</code>, 3 minutes.</li>
+    <li><strong>Coming back</strong> while it was alive or already due: after 10 s.</li>
+    <li><strong>After a kill</strong>: <code>respawnMs</code> (600,000 ms) × a random 0.8–1.2, so 8–12 minutes. The countdown
+      keeps running while you are on other maps.</li>
+    <li><strong>Level gate.</strong> When the timer fires and the player is more than one level below the boss, it checks
+      again every 60 s instead of spawning, so new students aren't ambushed.</li>
+  </ul>
+  <p>On spawn, the boss appears in the middle 30–70% of its span (away from the portals at the ends) with a fade-in, and
+    <code>announceFieldBoss</code> (<a data-src="src/systems/MonsterManager.ts#L230">MonsterManager.ts:230</a>) shows a
+    banner ("A Frostfang Alpha has appeared!" over "Lv.24 field boss"), logs where, plays a roar and shakes the camera.</p>
+
+  <h4 id="monsters-boss-loop">The fight loop</h4>
+  <p>A field boss starts in <code>roam</code> mode, wandering its <dfn>arena</dfn>: the floor span under its spawn point,
+    cut short by walls and by a 150 px keep-out either side of any portal (<code>arenaAround</code>). It also drops its
+    collider with one-way platforms so dashes and leaps never snag on ledges. It switches to <code>engaged</code> when the
+    player comes within 340 px horizontally and 300 px vertically, or when damaged: the shared top-of-screen boss bar
+    appears and it starts choosing attacks. After 7 s with the player far away (over 1300 px across or 650 px up or down)
+    it disengages and the bar goes away.</p>
+  <p>Each attack is a <code>BossAction</code> (<a data-src="src/entities/monsters/FieldBoss.ts#L20">FieldBoss.ts:20</a>):
+    a <code>weight</code> function (which can depend on distance), a cooldown, a <code>start</code>, and a
+    <code>tick</code> that returns <code>true</code> when the action is done. Between actions the boss walks to its
+    <code>keepDist</code> from the player, and when its action timer runs out <code>pickAction</code> makes a weighted
+    random pick among actions off cooldown. Almost every attack works through <code>telegraph()</code>:</p>
+  <pre><code class="lang-ts">  protected telegraph(rect: Phaser.Geom.Rectangle, durMs: number, onDone: (r: Phaser.Geom.Rectangle) =&gt; void,
+    kind: Tele['kind'] = 'ground', dir: 1 | -1 = 1, color = WARN) {
+    if (this.destroyed) return;
+    const g = this.scene.add.graphics().setDepth(DEPTH.VFX - 1);
+    this.teles.push({ g, rect, t: 0, dur: Math.max(200, durMs), kind, color, dir, onDone });
+  }</code></pre>
+  <p>(<a data-src="src/entities/monsters/FieldBoss.ts#L205">FieldBoss.ts:205</a>.) Every frame <code>tickTeles</code>
+    redraws each warning in the same red-orange (<code>WARN = 0xff3a2a</code>) so danger always reads the same: a
+    <code>ground</code> zone fills from the centre, a <code>column</code> (falling icicles, lightning) fills top-down, and a
+    <code>lane</code> (a charge) fills along its direction with chevrons. When the time is up it calls
+    <code>onDone(rect)</code>, which usually calls <code>hitIfOverlap(rect, this.dmg(mult))</code>.</p>
+  <pre class="mermaid">sequenceDiagram
+  participant B as FieldBoss.runAI
+  participant A as BossAction
+  participant T as telegraph list
+  participant P as Player
+  B->>B: action timer runs out, pickAction()
+  B->>A: start()
+  A->>T: telegraph(rect, 650 to 1000 ms, onDone)
+  loop each frame in tickWorld
+    T->>T: redraw warning, fill grows with t / dur
+    P->>P: sees the zone, moves out
+  end
+  T->>A: onDone(rect)
+  A->>P: hitIfOverlap(rect, dmg(mult)) via combat.hitPlayer
+  A->>A: optional hazard, projectiles or adds
+  A-->>B: tick() returns true
+  B->>B: endAction(), next gap from actionGap</pre>
+  <p>Other building blocks: <code>addHazard</code> leaves a lingering area (slime puddle, spore cloud, lava pool) that
+    ticks damage while you stand in it, with defense mitigation but no knockback or invulnerability frames;
+    <code>addProjectile</code> lobs something that can hit directly or call <code>onLand</code>; <code>makeCharge</code>
+    builds a lane telegraph followed by a dash to the far end of the arena that hits once; <code>makeSummon</code> calls
+    adds up to <code>maxAdds</code>. While a dash or leap is in progress <code>noContact</code> is set, so the body itself
+    doesn't also deal contact damage: the telegraphed hit is the damage.</p>
+  <table>
+    <thead><tr><th>Boss</th><th>Lv, map</th><th>Attacks (damage as × touch)</th><th>Extras</th></tr></thead>
+    <tbody>
+      <tr><td>Mossback Matriarch</td><td>8, Whisperwood</td><td>Shell Spin charge (900 ms lane, 480 px/s, ×1.25); Slime Spit: 2–3 globs on 850 ms ground zones (×0.8), each leaving a 5.2 s puddle (×0.15 per 0.5 s)</td><td>Calls 2–3 Moss Snails (max 4)</td></tr>
+      <tr><td>Shroom Monarch</td><td>14, Shroom Hollow</td><td>Royal Slam: leaps onto a 1 s zone (×1.4) and sends two shockwaves rolling outward (×1.0, jump them); Spore Cloud: three blooms (×0.45) that linger 5 s (×0.2 per 0.5 s)</td><td>Calls Cap/Thorn Shrooms (max 3)</td></tr>
+      <tr><td>Frostfang Alpha</td><td>24, Frostfang Cliffs</td><td>Roar: 6 s frenzy (×1.4 speed) and 3 falling icicles; Ground Pound: 650 ms zone in front (×1.4) then a line of 5 icicles, the first on you (×1.3 each); Charge (620 px/s, ×1.3, only the lowest 80 px hurt)</td><td>No adds</td></tr>
+      <tr><td>Magmaw</td><td>34, Cinder Caverns</td><td>Heavy Swing: 900 ms zone in front (×1.55); Geysers: 3 ground spots erupting into columns (×1.3) that leave lava pools</td><td>Enrages below 30% HP: 2 Ember Imps, a geyser volley, faster swings that leave lava, 5 geysers</td></tr>
+      <tr><td>Tempest Wyrm</td><td>44, Stormspire Peak</td><td>Dive charge (700 px/s, ×1.4); Storm Call: 4 lightning columns, three around you and one anywhere in the arena (×1.4); Storm Sweep: up to 9 columns marching across the arena</td><td>Hovers 14 px above the floor; keeps 170 px away</td></tr>
+    </tbody>
+  </table>
+  <p>Defeating one drops its <dfn>trophy</dfn> (<code>trophy_&lt;bossId&gt;</code>, 100%) and, 22% of the time, its unique
+    accessory: Ring of the Slow Garden, Monarch's Signet, Alpha Fang Necklace, Magmaw Gauntlets or Wyrmheart Amulet.
+    Prefect Finn posts a repeatable <dfn>Field Bounty</dfn> for each boss (<code>q_bounty_&lt;bossId&gt;</code> in
+    <a data-src="src/data/quests.ts#L27">quests.ts:27</a>): kill it and hand in the trophy for EXP, mesos and potions
+    (see <a href="#story">Story</a>).</p>
+
+  <details class="advanced">
+    <summary>Advanced: fairness rules and failure modes in boss code</summary>
+    <ul>
+      <li><strong>No chain-locking.</strong> <code>FieldBoss.applyStatus</code> caps freeze/stun at 1.5 s (after
+        <code>CombatSystem</code> has already halved it) and then refuses any freeze/stun for that duration plus 4 s. A
+        lightning or ice build can interrupt a boss but not lock it down for the whole fight.</li>
+      <li><strong>Telegraphs keep resolving while the boss is frozen</strong>, because they tick in
+        <code>tickWorld</code>, which runs even when locked. Freezing a boss mid-attack does not cancel the zone already on
+        the floor.</li>
+      <li><strong>The player's death can destroy the boss mid-loop.</strong> In the Trial Hall a lethal hit ends the run
+        and despawns the boss from inside <code>onDone</code>. <code>tickTeles</code> and <code>tickHazards</code> iterate a
+        copy (<code>slice()</code>) and check <code>destroyed</code> each step; <code>addHazard</code> and
+        <code>addProjectile</code> destroy their images immediately if the boss is already gone.</li>
+      <li><strong>Hazard damage is fixed at creation.</strong> <code>addHazard</code> receives <code>this.dmg(0.15)</code>
+        when the puddle appears, so a curse applied later does not weaken puddles already on the floor; new attacks do pick
+        it up.</li>
+      <li><strong>Arena clamping.</strong> <code>clampX</code> keeps every target point inside the arena, and charges end
+        at the arena edge or on a wall bump, so a boss can't follow the player through a portal or off its floor. If the
+        arena would be under 200 px wide it falls back to ±100 px around the spawn.</li>
+      <li><strong>Adding an attack.</strong> Return a <code>BossAction</code> from a method and add it to
+        <code>this.actions</code> in the constructor. Route every damage number through <code>this.dmg(mult)</code> (so curse
+        and the Trial Hall's <code>damageMul</code> apply), telegraph for 0.6–1 s, and give the action a
+        <code>cancel</code> if it sets velocity or <code>noContact</code>.</li>
+      <li><strong>Timers are session state.</strong> <code>fieldBossTimers()</code> reports each map's countdown, and
+        <code>fieldBossFirstDelayMs</code> is a public field you can shorten from the console
+        (<code>arcana.s.monsters.fieldBossFirstDelayMs = 5000</code>) before entering a map to test a boss.</li>
+    </ul>
+  </details>
+
+  <h3 id="monsters-lich">The Lich Archon</h3>
+  <p><code>LichArchon</code> (<a data-src="src/entities/monsters/LichArchon.ts#L19">LichArchon.ts:19</a>) predates the
+    field-boss base class and has its own small state machine: <code>dormant</code>, <code>idle</code>,
+    <code>volley</code>, <code>slam</code>, <code>teleport</code> and <code>summon</code>. It wakes when the player comes
+    within 640 px horizontally and 320 px vertically, or when hit, and shows its boss bar. In <code>idle</code> it walks
+    toward the player until within 170 px, and when its action timer runs out it picks:</p>
+  <table>
+    <thead><tr><th>Action</th><th>Weight</th><th>What happens</th></tr></thead>
+    <tbody>
+      <tr><td>Orb volley</td><td>40</td><td>An orb charges over its head for 680 ms, then a fan of 5 orbs flies at the player at 270 px/s (×0.85 touch each).</td></tr>
+      <tr><td>Ground slam</td><td>35 within 500 px, else 15</td><td>A 220 × 92 px warning zone under the player for 900 ms, then dark pillars (×1.5).</td></tr>
+      <tr><td>Teleport</td><td>30 beyond 380 px, else 10</td><td>Fades out, and 320 ms later reappears 220–320 px on the far side of the player.</td></tr>
+      <tr><td>Summon</td><td>25 when ready and fewer than 2 adds alive</td><td>Calls 2–3 Void Wisps above itself; 18 s cooldown.</td></tr>
+    </tbody>
+  </table>
+  <p>Below 30% HP it <dfn>enrages</dfn>: a pink aura, ×1.3 walking speed, shorter gaps between actions (×0.6), volleys of 7
+    faster orbs (330 px/s) fired twice, a second slam zone beside the first with shorter warnings (720 ms), and always 3
+    wisps on a 13 s summon cooldown. Its HP is <code>refMonsterHp(48) × 200</code> = 793,800, it is weak to holy and resists
+    shadow, and its Sanctum spawn respawns 3 minutes after death. Like the field bosses, both of its attacks go through
+    <code>outgoingDamageMult()</code>, so curse weakens orbs and slams as well as its touch.</p>
+  <aside class="note">The Lich does not override <code>applyStatus</code>, so it gets the base boss rule (freeze/stun halved
+    by combat, then capped at 2.5 s) without the field bosses' 4 s lockout.</aside>
+</section>

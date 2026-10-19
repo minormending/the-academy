@@ -1,0 +1,747 @@
+<section id="progression" data-title="Progression and balance" data-summary="balance.ts as the shared tuning contract, derived stats, EXP and levelling, SP/AP, jobs as school Years, Year-end Exams, respec, Academy Merits, items and the balance passes.">
+  <h2>Progression and balance</h2>
+
+  <p>This section covers everything that makes a student stronger over time: how much EXP a level costs, how
+    a character's numbers are computed, how spells and stats are bought with points, how a student moves from
+    Year 1 to Year 4, and how items and currencies feed into all of it. It also covers the one file every
+    content author had to agree on, <a data-src="src/core/balance.ts">src/core/balance.ts</a>.</p>
+
+  <p>A few terms first. A <dfn>balance curve</dfn> is a small function of level (for example
+    <code>refMatk(level)</code>) that says what a number <em>should</em> be at that level. <dfn>Base stats</dfn>
+    are the four numbers the player raises by hand (STR, DEX, INT, LUK). <dfn>Derived stats</dfn> are what the
+    game actually uses (max HP, magic attack, crit rate, cooldown reduction…), computed from level, base stats,
+    gear, passive spells and active buffs. <dfn>SP</dfn> (skill points) buy spell levels; <dfn>AP</dfn> (ability
+    points) buy base stats. A <dfn>job</dfn> is the character class; in The Academy each job tier is a
+    <dfn>school Year</dfn>, and moving up a tier is passing that Year.</p>
+
+  <pre class="mermaid">flowchart LR
+  B["core/balance.ts<br>reference curves"]
+  B --> MON["data/monsters.ts<br>HP, EXP, touch"]
+  B --> SK["skills/*.ts<br>damage % and MP"]
+  B --> ST["progression/stats.ts<br>baseDerived"]
+  B --> Q["data/quests.ts<br>EXP rewards"]
+  B --> AR["ArenaSystem<br>wave scaling"]
+  ST --> P["Progression<br>derived(), gainExp()"]
+  MON -- "monster:killed" --> P
+  SK -- "passives + buffs" --> P
+  P --> UI["HUD, stats window, spellbook"]</pre>
+
+  <!-- ===================================================================== -->
+  <h3 id="progression-balance">balance.ts: the shared tuning contract</h3>
+
+  <p>The game was built by ten agents working in parallel (see <a href="#history">how it was built</a>). The
+    monster author, the five skill-tree authors and the progression author never saw each other's numbers while
+    they worked, yet a level-30 Flamebinder still needs about three or four casts to kill a level-30 monster.
+    That works because everyone tuned against the same reference curves, owned by the lead and marked
+    "do not edit":</p>
+
+  <pre><code class="lang-ts">/** EXP needed to go from `level` to level+1. */
+export function expToNext(level: number): number {
+  return Math.floor(15 * Math.pow(level, 1.85) + 10);
+}
+
+/** Intended number of same-level normal kills per level. */
+export function killsPerLevel(level: number): number {
+  return 8 + Math.floor(level * 1.6);
+}
+
+/** Reference EXP for a normal monster of `level`. Bosses ~ 40x. */
+export function refMonsterExp(level: number): number {
+  return Math.max(3, Math.round(expToNext(level) / killsPerLevel(level)));
+}
+
+/** Expected player magic attack at `level` with on-level gear and INT-focused AP. */
+export function refMatk(level: number): number {
+  return 12 + 5 * level;
+}
+
+/** Reference single-target damage % of the level-appropriate primary skill (per hit line). */
+export function refSkillPct(level: number): number {
+  return level &lt; 10 ? 140 : level &lt; 25 ? 220 : level &lt; 40 ? 300 : 450;
+}
+
+/** Expected damage of one hit line of the primary skill. */
+export function refHit(level: number): number {
+  return (refMatk(level) * refSkillPct(level)) / 100;
+}
+
+/** Normal monster HP: ~3-4 primary-skill casts. Bosses ~ 250x. */
+export function refMonsterHp(level: number): number {
+  return Math.round(refHit(level) * 3.5);
+}
+
+/** Monster touch damage at `level`. */
+export function refMonsterTouch(level: number): number {
+  return Math.round(8 + level * 4.5);
+}
+
+/** Expected player max HP / MP at level (before passives). */
+export function refPlayerHp(level: number): number { return 60 + level * 20; }
+export function refPlayerMp(level: number): number { return 40 + level * 24; }
+// …
+export const SP_PER_LEVEL = 3;
+export const AP_PER_LEVEL = 5;</code></pre>
+  <p>(<a data-src="src/core/balance.ts#L7">balance.ts:7</a>.) The curves chain into each other: EXP per level
+    divided by the intended kill count gives monster EXP; reference magic attack times the reference skill
+    percentage gives one hit; three and a half hits is a monster's HP. Change <code>refMatk</code> and monster HP
+    moves with it, so the "casts to kill" stays the same.</p>
+
+  <table>
+    <thead><tr><th>Curve</th><th>Lv 1</th><th>Lv 10</th><th>Lv 25</th><th>Lv 40</th><th>Lv 49</th><th>Who uses it</th></tr></thead>
+    <tbody>
+      <tr><td><code>expToNext</code></td><td>25</td><td>1,071</td><td>5,794</td><td>13,810</td><td>20,098</td><td>Progression, quest rewards</td></tr>
+      <tr><td><code>killsPerLevel</code></td><td>9</td><td>24</td><td>48</td><td>72</td><td>86</td><td>refMonsterExp (design intent only)</td></tr>
+      <tr><td><code>refMonsterExp</code></td><td>3</td><td>45</td><td>121</td><td>192</td><td>234</td><td>monsters.ts, Trial Hall bonus EXP</td></tr>
+      <tr><td><code>refMatk</code></td><td>17</td><td>62</td><td>137</td><td>212</td><td>257</td><td>stats.ts calibration, skill authors</td></tr>
+      <tr><td><code>refSkillPct</code></td><td>140</td><td>220</td><td>300</td><td>450</td><td>450</td><td>skill authors</td></tr>
+      <tr><td><code>refMonsterHp</code></td><td>83</td><td>477</td><td>1,439</td><td>3,339</td><td>4,048</td><td>monsters.ts, Trial Hall HP normalisation</td></tr>
+      <tr><td><code>refMonsterTouch</code></td><td>13</td><td>53</td><td>121</td><td>188</td><td>229</td><td>monsters.ts, Trial Hall damage scaling</td></tr>
+      <tr><td><code>refPlayerHp</code> / <code>Mp</code></td><td>80 / 64</td><td>260 / 280</td><td>560 / 640</td><td>860 / 1,000</td><td>1,040 / 1,216</td><td>stats.ts calibration</td></tr>
+    </tbody>
+  </table>
+
+  <p>The whole climb from level 1 to 50 costs 355,958 EXP (the sum of <code>expToNext(1..49)</code>). By Year:
+    Year 1 (levels 1–10) is 3,296, Year 2 (10–25) 44,816, Year 3 (25–40) 139,106 and Year 4 (40–50) 168,740. The
+    first Year is a short tutorial; the last two are most of the game.</p>
+
+  <figure data-chart="exp-curve"><figcaption>EXP to the next level, with the four Years shaded. The 1.85 exponent
+    makes the curve bend upward steadily rather than in steps; hover a level to see the intended same-level kill
+    count (it grows from 9 at level 1 to 86 at level 49) and the reference monster EXP.</figcaption></figure>
+
+  <p>The comment block above <code>SP_PER_LEVEL</code> is the guidance every skill author followed
+    (<a data-src="src/core/balance.ts#L50-L59">balance.ts:50</a>):</p>
+  <table>
+    <thead><tr><th>Tier (Year)</th><th>Primary % per line</th><th>AoE % per line</th><th>MP at max level</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>120–170</td><td>70–100</td><td>8–14</td></tr>
+      <tr><td>2</td><td>170–260</td><td>100–150</td><td>14–28</td></tr>
+      <tr><td>3</td><td>240–340</td><td>150–220</td><td>26–45</td></tr>
+      <tr><td>4</td><td>350–600</td><td>220–350 (ultimates with long cooldowns 800–1500)</td><td>45–90</td></tr>
+    </tbody>
+  </table>
+  <p>Multi-hit skills split the total across lines (three lines of 90% is about 270%). Max skill levels are 10
+    for Year 1, 15–20 for Years 2–4 and 10 for ultimates. For example, Fire's Year 2 primary Flame Arrow scales
+    from 170% to 262% over 20 levels, right on the tier-2 band
+    (<a data-src="src/skills/fire.ts#L97">fire.ts:97</a>). How a percentage turns into damage is covered in
+    <a href="#skills">the skills section</a>.</p>
+
+  <figure data-chart="matk-curve"><figcaption>Reference magic attack against what the base formula gives an
+    INT build that spends AP with the Auto button and wears no gear. The base line runs a little under the
+    reference all the way; the widening gap (about 11 at level 10, about 35 at level 50) is what weapons and
+    accessories are meant to fill.</figcaption></figure>
+
+  <figure data-chart="hp-curves"><figcaption>Reference player HP and MP against reference monster HP. Monster HP
+    jumps at levels 10, 25 and 40 because <code>refSkillPct</code> steps up when a new Year's spells arrive
+    (refMonsterHp(24) = 1,016, refMonsterHp(25) = 1,439). Touch damage (tooltips) stays between about 16% and 22% of
+    the player's reference HP at every level.</figcaption></figure>
+
+  <details class="advanced"><summary>Advanced: the contract's invariants and where code departs from it</summary>
+    <ul>
+      <li><strong>Only the lead edits balance.ts.</strong> Ownership rule 1 in ARCHITECTURE.md. Every other module
+        <em>reads</em> it. A change here re-tunes monsters, quest rewards, the Trial Hall and stats calibration
+        at once, so treat it as a global rebalance and replay a few levels in each Year afterwards.</li>
+      <li><strong>Monsters derive from the curves, they don't copy numbers.</strong> <code>mk()</code> in
+        <a data-src="src/data/monsters.ts#L79">monsters.ts:79</a> sets
+        <code>hp = round(refMonsterHp(lv) × hpMul)</code>, <code>exp = round(refMonsterExp(lv) × expMul)</code> and
+        <code>touchDamage = round(refMonsterTouch(lv) × touchMul)</code>, with per-monster multipliers in roughly
+        the 0.8–1.3 band ARCHITECTURE.md asks for.</li>
+      <li><strong>Comments that drifted.</strong> balance.ts says bosses are "~250x" HP; after the 25–50 pacing pass
+        the Lich Archon uses <code>refMonsterHp(48) × 200</code>, and field bosses use 28–65× (they are
+        mini-bosses). The <code>killsPerLevel</code> figure is design intent: real pacing also includes quest
+        EXP, the above-level bonus and Trial Hall EXP.</li>
+      <li><strong>The Year steps are deliberate.</strong> Monster HP jumps at 10/25/40 because players get stronger
+        spells there. A student who stays a Year behind (no exam passed) hits a wall at those levels, which is
+        the intended pressure to sit the Exam.</li>
+      <li><strong>The ±15% target.</strong> ARCHITECTURE.md requires derived <code>matk</code> to land within ±15% of
+        <code>refMatk</code> for an INT build with on-level gear. At level 10 with the Sage Wand the formula gives
+        63 against a reference of 62; at level 40 with the Inferno Staff, Runed Gloves, Mana Ring and Arcane Amulet
+        it gives 223 against 212 (+5%).</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="progression-exp">EXP and levelling up</h3>
+
+  <p>Progression subscribes to <code>monster:killed</code> in its constructor. Each kill grants the monster's
+    <code>exp</code> scaled by the level difference:</p>
+  <pre><code class="lang-ts">/**
+ * EXP multiplier for a kill: monsters ≥10 levels below the player give progressively less
+ * (down to 10%); monsters above the player give a small bonus (up to +30%).
+ */
+export function killExpMultiplier(playerLevel: number, monsterLevel: number): number {
+  const diff = playerLevel - monsterLevel;
+  if (diff &gt;= 10) return Math.max(0.1, 0.7 - (diff - 10) * 0.06);
+  if (diff &lt; 0) return 1 + Math.min(0.15, -diff * 0.05);
+  return 1;
+}</code></pre>
+  <p>(<a data-src="src/systems/Progression.ts#L39">Progression.ts:39</a>.) Note the code caps the above-level
+    bonus at <strong>+15%</strong> (+5% per level, reached three levels up); the doc comment still says +30%, the
+    value before the balance follow-up commit <code>be584c4</code> lowered it.</p>
+  <table>
+    <thead><tr><th>Player level − monster level</th><th>EXP multiplier</th></tr></thead>
+    <tbody>
+      <tr><td>−1 / −2 / −3 or more</td><td>1.05 / 1.10 / 1.15</td></tr>
+      <tr><td>0 to 9</td><td>1.00</td></tr>
+      <tr><td>10 / 12 / 15</td><td>0.70 / 0.58 / 0.40</td></tr>
+      <tr><td>20 or more</td><td>0.10 (floor)</td></tr>
+    </tbody>
+  </table>
+
+  <p><code>gainExp</code> handles multi-level jumps (a quest reward can cross several levels) and pays SP and AP for
+    each level crossed:</p>
+  <pre><code class="lang-ts">  gainExp(amount: number) {
+    amount = Math.floor(amount);
+    if (!(amount &gt; 0)) return;
+    const s = this.state;
+    if (s.level &gt;= MAX_LEVEL) { s.exp = 0; return; }
+    s.exp += amount;
+    const startLevel = s.level;
+    while (s.level &lt; MAX_LEVEL &amp;&amp; s.exp &gt;= expToNext(s.level)) {
+      s.exp -= expToNext(s.level);
+      s.level += 1;
+      s.sp += SP_PER_LEVEL;
+      s.ap += AP_PER_LEVEL;
+    }
+    if (s.level &gt;= MAX_LEVEL) s.exp = 0;
+    if (s.level &gt; startLevel) {
+      this.cache = null;
+      const d = this.derived();
+      // EXP can still land after death (burn ticks, in-flight projectiles): don't revive via level-up.
+      if (!this.dead) {
+        s.hp = d.maxHp;
+        s.mp = d.maxMp;
+      }
+      // …
+      bus.emit('player:levelup', { level: s.level });
+      this.refreshQuests();
+      // Announce a new advancement only on the level-up that first crosses its required level.
+      // …
+      this.save();
+    }
+    this.changed();
+  }</code></pre>
+  <p>(<a data-src="src/systems/Progression.ts#L99">Progression.ts:99</a>.) <code>state.exp</code> is the EXP
+    <em>into the current level</em>, not a lifetime total. <code>MAX_LEVEL</code> is 50
+    (<a data-src="src/core/constants.ts#L19">constants.ts:19</a>), and EXP is pinned to 0 there.</p>
+
+  <pre class="mermaid">sequenceDiagram
+  participant M as Monster
+  participant P as Progression
+  participant G as GameScene
+  participant U as UI
+  M->>P: monster:killed (once)
+  P->>P: exp = def.exp × killExpMultiplier
+  P->>P: gainExp: loop while exp ≥ expToNext
+  P->>P: +3 SP, +5 AP per level, full heal
+  P-->>G: player:levelup
+  G->>G: level-up VFX + sfx
+  P-->>U: ui:log, banner, player:changed
+  P->>P: refreshQuests (level objectives), save()
+  P->>P: kill counts for active quests</pre>
+
+  <details class="advanced"><summary>Advanced: levelling edge cases</summary>
+    <ul>
+      <li><strong>Dead students can still level.</strong> A burn tick or an in-flight projectile can kill a monster
+        after the player died. The level is granted, but HP/MP are not refilled, so a level-up never revives the
+        player behind the death prompt's back.</li>
+      <li><strong>The advancement notice fires once.</strong> It checks whether any child job's
+        <code>requiredLevel</code> lies in <code>(startLevel, level]</code>, so a student who hovers around level 25
+        is told about the Year 3 Exam only on the level-up that first reaches it.</li>
+      <li><strong>Every level-up saves.</strong> So does every other milestone (see
+        <a href="#saves">saves</a>); the 30 s autosave is only a safety net.</li>
+      <li><strong>EXP from anything goes through <code>gainExp</code>.</strong> Quests, the Trial Hall bonus and kills
+        all use it, so SP/AP payouts and the quest refresh can't be skipped by a new EXP source.</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="progression-stats">Derived stats</h3>
+
+  <p><a data-src="src/systems/progression/stats.ts">progression/stats.ts</a> is pure math with no services, so the
+    save system can use it too (to fill a new character's HP and clamp a loaded one). The base formula:</p>
+  <pre><code class="lang-ts">/**
+ * Base formula (before equipment / passives / buffs).
+ * Calibrated so INT-focused AP (≈4 INT + 1 LUK per level) + on-level gear gives
+ * matk ≈ refMatk(level) = 12 + 5L (base ≈ 6.9 + 4.4L; gear supplies ≈ 5 + 0.6L).
+ */
+export function baseDerived(state: PlayerState): DerivedStats {
+  const L = Math.max(1, state.level | 0);
+  const { str, dex, int, luk } = state.base;
+  return {
+    maxHp: 55 + 19 * L + str,
+    maxMp: 36 + 20 * L + int * 0.4,
+    matk: int * 0.9 + luk * 0.3 + L * 0.5,
+    def: L * 0.3 + str * 0.2,
+    critRate: 0.05 + Math.max(0, luk - 6) * 0.001,
+    critDmg: 0.5,
+    mastery: 0.45 + Math.max(0, dex - 4) * 0.002,
+    speed: 200,
+    jump: 560,
+    hpRegen: 5 + L * 0.6 + str * 0.2,
+    mpRegen: 6 + L * 0.9 + int * 0.1,
+    mpShield: 0,
+    dmgAll: 0,
+    // … dmgFire, dmgIce, dmgLightning, dmgHoly, dmgShadow: 0
+    castSpeed: 0,
+    cdr: 0,
+  };
+}</code></pre>
+  <p>(<a data-src="src/systems/progression/stats.ts#L21">stats.ts:21</a>.) INT is by far the most valuable base
+    stat: 0.9 matk per point plus MP and MP regen. LUK adds a little matk and 0.1% crit per point above 6; DEX
+    raises <dfn>mastery</dfn> (the low end of the damage roll, see <a href="#skills">combat math</a>); STR adds HP,
+    DEF and HP regen.</p>
+
+  <p>Then every <dfn>stat modifier</dfn> (<code>{ stat, add?, mul? }</code>) is folded in:</p>
+  <pre><code class="lang-ts">/** final = (base + Σadd) × (1 + Σmul), then rounded/clamped. */
+export function applyModifiers(base: DerivedStats, mods: StatModifier[]): DerivedStats {
+  // … sum every add and every mul per stat (non-finite values ignored)
+  const out = { ...base };
+  for (const k of Object.keys(base) as DerivedStatKey[]) {
+    out[k] = (base[k] + (addSum[k] ?? 0)) * (1 + (mulSum[k] ?? 0));
+  }
+  for (const k of INT_STATS) out[k] = Math.max(0, Math.floor(out[k]));
+  out.maxHp = Math.max(1, out.maxHp);
+  out.maxMp = Math.max(1, out.maxMp);
+  out.matk = Math.max(1, out.matk);
+  out.speed = Math.max(60, out.speed);
+  out.jump = Math.max(200, out.jump);
+  out.critRate = clamp(out.critRate, 0, 1);
+  out.critDmg = Math.max(0, out.critDmg);
+  out.mastery = clamp(out.mastery, 0, 0.95);
+  out.mpShield = clamp(out.mpShield, 0, 0.9);
+  out.castSpeed = clamp(out.castSpeed, 0, 0.75);
+  out.cdr = clamp(out.cdr, 0, 0.6);
+  return out;
+}</code></pre>
+  <p>(<a data-src="src/systems/progression/stats.ts#L68">stats.ts:68</a>.) The modifiers come from three places:</p>
+  <ul>
+    <li><strong>Equipment</strong> and <strong>learned passives</strong>: <code>persistentModifiers(state)</code>
+      (<a data-src="src/systems/progression/stats.ts#L49">stats.ts:49</a>) walks the equipped items'
+      <code>equip.modifiers</code> and calls each learned passive skill's <code>passive(level)</code>.</li>
+    <li><strong>Active buffs</strong>: <code>Progression.derived()</code> asks the skill system for
+      <code>getBuffModifiers()</code> and passes them as <code>extra</code>
+      (<a data-src="src/systems/Progression.ts#L63">Progression.ts:63</a>).</li>
+  </ul>
+  <table>
+    <thead><tr><th>Derived stat</th><th>Clamp / rounding</th></tr></thead>
+    <tbody>
+      <tr><td>maxHp, maxMp, matk</td><td>floored, at least 1</td></tr>
+      <tr><td>def, hpRegen, mpRegen</td><td>floored, at least 0</td></tr>
+      <tr><td>speed / jump</td><td>floored, at least 60 / 200</td></tr>
+      <tr><td>critRate</td><td>0 to 1</td></tr>
+      <tr><td>mastery</td><td>0 to 0.95</td></tr>
+      <tr><td>mpShield</td><td>0 to 0.9</td></tr>
+      <tr><td>castSpeed</td><td>0 to 0.75</td></tr>
+      <tr><td>cdr (cooldown reduction)</td><td>0 to 0.6</td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>Worked example.</strong> A level-10 student who always pressed Auto has INT 46 and LUK 15, so base
+    matk = 46 × 0.9 + 15 × 0.3 + 10 × 0.5 = 50.9. With the Sage Wand (+13 matk): (50.9 + 13) × 1 = 63.9, floored to
+    <strong>63</strong>. <code>refMatk(10)</code> is 62. A buff granting <code>mul: 0.1</code> would make it
+    floor(63.9 × 1.1) = 70.</p>
+
+  <details class="advanced"><summary>Advanced: caching, additive multipliers and failure modes</summary>
+    <ul>
+      <li><strong>Cached until invalidated.</strong> <code>derived()</code> returns the cached object until
+        <code>invalidate()</code> is called. Learning a spell, equipping, unequipping, allocating AP and respec all
+        invalidate; the skill system calls <code>progression.invalidate()</code> whenever a buff starts or ends. A
+        new source of modifiers must do the same, or its effect shows up only after something unrelated
+        invalidates.</li>
+      <li><strong>Multipliers add, they don't compound.</strong> Two +10% effects give ×1.2, not ×1.21. That keeps
+        stacking predictable and makes the order of modifiers irrelevant.</li>
+      <li><strong>Fractional stats stay fractional.</strong> Only the eight <code>INT_STATS</code> are floored;
+        crit rate, mastery, cast speed, CDR and the <code>dmg*</code> bonuses keep their decimals.</li>
+      <li><strong>derived() also clamps vitals.</strong> If max HP drops (unequipping a robe, a buff ending), current
+        HP and MP are cut to the new max as a side effect of the next <code>derived()</code> call.</li>
+      <li><strong>A throwing passive can't break stats.</strong> Each <code>passive(lv)</code> call is wrapped in
+        try/catch, and if computing with buffs throws, <code>derived()</code> falls back to computing without them.
+        Unknown stat keys in a modifier are skipped (<code>m.stat in base</code>).</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="progression-points">SP, AP and learning spells</h3>
+
+  <table>
+    <thead><tr><th>Source</th><th>SP</th><th>AP</th></tr></thead>
+    <tbody>
+      <tr><td>New character</td><td>3 (plus Arcane Bolt level 1, free)</td><td>0</td></tr>
+      <tr><td>Each level-up (<code>SP_PER_LEVEL</code>, <code>AP_PER_LEVEL</code>)</td><td>3</td><td>5</td></tr>
+      <tr><td>Each job advancement (<code>JOB_ADVANCE_BONUS_SP</code>)</td><td>3</td><td>0</td></tr>
+      <tr><td>Total by level 50</td><td>3 + 49 × 3 + 3 × 3 = <strong>159</strong></td><td>245</td></tr>
+    </tbody>
+  </table>
+  <p>A School lineage (Year 1 core plus that School's 24 spells) has between 369 and 464 purchasable spell levels
+    (Holy 369, Fire 399, Ice 439, Lightning 449, Shadow 464, summing the <code>maxLevel</code> values in
+    <code>src/skills/*.ts</code> and leaving out the free Arcane Bolt level), so a graduate can fill roughly a third to two fifths of their
+    spellbook. That is the Phase 4 goal: "nobody can max everything — builds are choices".</p>
+
+  <p>The spellbook's learn button calls <code>canLearn</code>:</p>
+  <pre><code class="lang-ts">  canLearn(skillId: string): boolean {
+    const sk = Registry.skill(skillId);
+    if (!sk) return false;
+    if (this.state.sp &lt;= 0) return false;
+    if (!Registry.jobLineage(this.state.job).some(j =&gt; j.id === sk.job)) return false;
+    const cur = this.state.skills[skillId] ?? 0;
+    if (cur &gt;= sk.maxLevel) return false;
+    for (const r of sk.requires ?? []) {
+      if ((this.state.skills[r.skillId] ?? 0) &lt; r.level) return false;
+    }
+    return true;
+  }</code></pre>
+  <p>(<a data-src="src/systems/Progression.ts#L277">Progression.ts:277</a>.) A spell is learnable if its job is
+    anywhere in the student's <dfn>lineage</dfn> (the chain of jobs from Apprentice to the current one, from
+    <code>Registry.jobLineage</code>), it isn't maxed, and every <code>requires</code> entry is met. Requirements are
+    kept shallow so each Year has two or three roots: Flame Burst needs Flame Arrow 3, Kindle needs Flame Arrow 5
+    (<a data-src="src/skills/fire.ts#L110">fire.ts:110</a>). <code>learnSkill</code> spends 1 SP and puts a
+    newly learned castable spell in the first free hotbar slot on either page, skipping slots 10 and 11 of each
+    page (the potion keys).</p>
+
+  <p>AP can be spent one point at a time (<code>allocateAp</code>) or with the stats window's Auto button:</p>
+  <pre><code class="lang-ts">  /** INT-heavy auto distribution: ~4 INT per 1 LUK (relative to the starting 10/6). */
+  autoAllocateAp() {
+    const s = this.state;
+    if (s.ap &lt;= 0) return;
+    while (s.ap &gt; 0) {
+      const intGain = s.base.int - 10;
+      const lukGain = s.base.luk - 6;
+      if (lukGain * 4 &lt; intGain) s.base.luk += 1; else s.base.int += 1;
+      s.ap -= 1;
+    }
+    this.invalidate();
+  }</code></pre>
+  <p>(<a data-src="src/systems/Progression.ts#L316">Progression.ts:316</a>.) This is the build
+    <code>baseDerived</code> was calibrated for, and the one the <code>matk-curve</code> chart draws.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="progression-jobs">Jobs as school Years</h3>
+
+  <p>Phase 4 re-themed the four job tiers as the four Years of a magic school. Year 1 is the shared core
+    curriculum; at level 10 the student declares one of five <dfn>Schools</dfn>; Years 3 and 4 deepen it, and the
+    Year 4 job is the graduate title. Tier levels come from <code>JOB_LEVELS = { 1: 1, 2: 10, 3: 25, 4: 40 }</code>
+    (<a data-src="src/core/constants.ts#L20">constants.ts:20</a>), and every <code>JobDef</code> in
+    <a data-src="src/data/jobs.ts#L12">jobs.ts:12</a> names its <code>parent</code>, so the jobs form a tree.</p>
+
+  <table>
+    <thead><tr><th>Year (tier, level)</th><th>Fire</th><th>Ice</th><th>Lightning</th><th>Holy</th><th>Shadow</th></tr></thead>
+    <tbody>
+      <tr><td>1 (1, Lv 1)</td><td colspan="5">Apprentice (<code>apprentice</code>), everyone</td></tr>
+      <tr><td>2 (2, Lv 10)</td><td>Pyromancer</td><td>Cryomancer</td><td>Stormcaller</td><td>Cleric</td><td>Occultist</td></tr>
+      <tr><td>3 (3, Lv 25)</td><td>Flamebinder</td><td>Frostbinder</td><td>Stormbinder</td><td>Priest</td><td>Necromancer</td></tr>
+      <tr><td>4 (4, Lv 40)</td><td>Inferno Sage</td><td>Glacial Sage</td><td>Tempest Sage</td><td>Hierophant</td><td>Umbral Sage</td></tr>
+      <tr><td>Professor</td><td>Pyra (<code>pyra</code>)</td><td>Glacius (<code>glacius</code>)</td><td>Voltis (<code>voltis</code>)</td><td>Seraphine (<code>seraphine</code>)</td><td>Morvane (<code>morvane</code>)</td></tr>
+    </tbody>
+  </table>
+  <p>Job ids are the lower-case names with underscores (<code>inferno_sage</code>, <code>umbral_sage</code>). The
+    School helpers sit at the bottom of jobs.ts:</p>
+  <pre><code class="lang-ts">export type School = 'fire' | 'ice' | 'lightning' | 'holy' | 'shadow';
+export const SCHOOLS: School[] = ['fire', 'ice', 'lightning', 'holy', 'shadow'];
+
+/** Year-2 job for each School (what Headmistress Maelis offers at level 10). */
+export const BRANCH_ROOT_JOB: Record&lt;School, JobId&gt; = {
+  fire: 'pyromancer', ice: 'cryomancer', lightning: 'stormcaller', holy: 'cleric', shadow: 'occultist',
+};
+// … SCHOOL_NAME: 'Fire', 'Ice'…; SCHOOL_PROFESSOR: 'pyra', 'glacius'…
+
+export function isSchool(b: string | undefined | null): b is School {
+  return !!b &amp;&amp; (SCHOOLS as string[]).includes(b);
+}
+
+/** School Year for a job tier (Year 1 = Apprentice … Year 4 = graduate title). */
+export function yearOfTier(tier: number): number { return Math.max(1, Math.min(4, tier | 0)); }</code></pre>
+  <p>(<a data-src="src/data/jobs.ts#L106">jobs.ts:106</a>.) In code a School is a job <code>branch</code>; the
+    Apprentice's branch is <code>'none'</code>, which is why <code>isSchool</code> exists.</p>
+
+  <pre class="mermaid">flowchart LR
+  Y1["Year 1<br>Apprentice"] -- "Lv 10, Headmistress Maelis<br>(no exam)" --> Y2["Year 2<br>declare a School"]
+  Y2 -- "Lv 25 + Year 3 Exam<br>(School's Professor)" --> Y3["Year 3"]
+  Y3 -- "Lv 40 + Year 4 Exam<br>(School's Professor)" --> Y4["Year 4<br>graduate title"]
+  Y4 -- "Final Thesis + Commencement" --> G["Graduated"]</pre>
+
+  <h4 id="progression-exams">Year-end Exams</h4>
+  <p>Advancing to Year 3 or Year 4 requires passing that School's <dfn>Year-end Exam</dfn>, a quest listed in
+    <code>JOB_ADVANCEMENT_QUESTS</code> (<a data-src="src/data/quests.ts#L10">quests.ts:10</a>). The declaration at
+    level 10 has no exam. Each School's exams target monsters weak to its element (commit <code>bf642b6</code>):</p>
+  <table>
+    <thead><tr><th>School</th><th>Year 3 Exam (Lv 25, collect 20)</th><th>Year 4 Exam (Lv 40, defeat 30 + collect 10)</th></tr></thead>
+    <tbody>
+      <tr><td>Fire</td><td>Yeti Fur (Snow Yetis)</td><td>Crag Golems, Golem Shards</td></tr>
+      <tr><td>Ice</td><td>Imp Horns (Ember Imps)</td><td>Magma Golems, Magma Cores</td></tr>
+      <tr><td>Lightning</td><td>Wisp Essences (Ice Wisps)</td><td>Storm Harpies, Harpy Feathers</td></tr>
+      <tr><td>Holy</td><td>Wisp Essences (Ice Wisps)</td><td>Thunder Drakes, Seal Fragments</td></tr>
+      <tr><td>Shadow</td><td>Yeti Bones (Snow Yetis)</td><td>Storm Harpies, Harpy Feathers</td></tr>
+    </tbody>
+  </table>
+  <p>Rewards are shared per Year: Year 3 pays <code>xp(25, 0.3)</code> = 1,738 EXP, 3,000 mesos and 15 White Potions;
+    Year 4 pays <code>xp(40, 0.3)</code> = 4,143 EXP, 12,000 mesos and 5 Elixirs
+    (<a data-src="src/data/quests.ts#L56">quests.ts:56</a>). The dialog flow that offers, grades and promotes is in
+    <a href="#story">the story section</a>.</p>
+
+  <pre><code class="lang-ts">  availableAdvancements(): JobId[] {
+    const s = this.state;
+    return Registry.jobs()
+      .filter(j =&gt; j.parent === s.job &amp;&amp; s.level &gt;= j.requiredLevel)
+      .filter(j =&gt; {
+        const qid = JOB_ADVANCEMENT_QUESTS[j.id];
+        return !qid || s.quests[qid]?.status === 'turned_in';
+      })
+      .map(j =&gt; j.id);
+  }
+
+  /** Validates parent + level (the tier-3/4 trial quests are gated by NPC scripts / availableAdvancements). */
+  advanceJob(job: JobId): boolean {
+    const def = Registry.job(job);
+    const s = this.state;
+    if (!def || def.parent !== s.job || s.level &lt; def.requiredLevel) return false;
+    s.job = job;
+    s.sp += JOB_ADVANCE_BONUS_SP;
+    // … full heal, "You are now a Year N student…" log
+    bus.emit('player:job', { job });
+    this.refreshQuests();
+    this.changed();
+    this.save();
+    return true;
+  }</code></pre>
+  <p>(<a data-src="src/systems/Progression.ts#L330">Progression.ts:330</a>.) <code>player:job</code> makes
+    GameScene swap the player's sprite sheet (<code>player.setJob</code>) and play the advancement effect.</p>
+
+  <figure data-chart="spells-by-year"><figcaption>Spells per School per Year, stacked by kind. Year 1 is the same
+    ten core spells for everyone; every School then has exactly eight per Year (24 in all), and attacks are the
+    largest share in every School (11 or 12 of the 24). Compare where each School puts its buffs, passives and
+    summons: that is most of what makes the Schools play differently.</figcaption></figure>
+
+  <details class="advanced"><summary>Advanced: where the Exam gate actually lives</summary>
+    <ul>
+      <li><strong><code>advanceJob</code> does not check the Exam.</strong> It only checks parent and level, as its
+        comment says. The gate is enforced by the callers: the Professor script only offers "Make me a…" after the
+        exam quest is <code>turned_in</code>, and <code>availableAdvancements</code> (used by the UI) filters on it.
+        The debug console's <code>arcana.job('pyromancer')</code> relies on this to skip ahead. If you add another
+        path that promotes a student, gate it the same way.</li>
+      <li><strong>No transfers.</strong> Once declared, the branch is fixed: only children of the current job can
+        be advanced to, and every other School's exam fails <code>canAcceptQuest</code> on
+        <code>requiredJobBranch</code>. The shop's "Sell junk" button relies on this to treat other Schools'
+        exam materials as junk.</li>
+      <li><strong>Lineage means old spells stay.</strong> Spells are learnable for any job in the lineage, so a
+        Year 4 student can still spend SP on Year 1 and Year 2 spells.</li>
+      <li><strong>Adding a School</strong> means a new <code>Branch</code> in types.ts, three <code>JobDef</code>s,
+        entries in all four School maps, a Professor NPC and script lines, and two exam quests in
+        <code>JOB_ADVANCEMENT_QUESTS</code>. <a href="#recipes">The recipes section</a> walks through it.</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="progression-respec">Respec: unlearning a Year</h3>
+
+  <p>Phase 5 added a way to undo build mistakes one Year at a time. The Spellbook (<kbd>K</kbd> by default) has an
+    <em>Unlearn Year</em> button on each unlocked Year tab; it costs one <dfn>Tome of Unlearning</dfn>, sold by Bram
+    for 2,500 mesos or at the Merit Exchange for 150 Merits.</p>
+  <pre><code class="lang-ts">  respecTier(tier: JobTier): number {
+    const job = Registry.jobLineage(this.state.job).find(j =&gt; j.tier === tier);
+    if (!job) return 0;
+    let refund = 0;
+    for (const sk of Registry.skillsForJob(job.id)) {
+      const lv = this.state.skills[sk.id] ?? 0;
+      if (lv &lt;= 0) continue;
+      // The free starting Arcane Bolt level is not refundable (it was never bought with SP).
+      const free = sk.id === 'app_arcane_bolt' ? 1 : 0;
+      refund += Math.max(0, lv - free);
+      if (free) this.state.skills[sk.id] = free; else delete this.state.skills[sk.id];
+      if (!free) this.state.hotbar = this.state.hotbar.map(e =&gt; (e === sk.id ? null : e));
+    }
+    if (!refund) return 0;
+    this.state.sp += refund;
+    this.invalidate();
+    // … log "You unlearned your &lt;job&gt; spells (+N SP)."
+    return refund;
+  }</code></pre>
+  <p>(<a data-src="src/systems/Progression.ts#L152">Progression.ts:152</a>.) The window takes the tome first, then
+    calls <code>respecTier</code>, and gives the tome back if nothing was refunded
+    (<a data-src="src/ui/skillsWindow.ts#L184">skillsWindow.ts:184</a>). The button needs two clicks: the first
+    arms it and shows the refund, the second (if nothing changed in between) confirms.</p>
+
+  <details class="advanced"><summary>Advanced: respec invariants</summary>
+    <ul>
+      <li><strong>SP is conserved.</strong> Every refunded level was bought with exactly one SP, except the free
+        Arcane Bolt level, which stays learned. A student can't farm SP by unlearning.</li>
+      <li><strong>Dependants go too.</strong> Because a whole Year is unlearned, a <code>requires</code> chain inside
+        that Year can't be left half-satisfied. Requirements never cross Years in the current data; if you add one,
+        unlearning the earlier Year would leave a later spell learned without its prerequisite (harmless at cast
+        time, but surprising in the spellbook).</li>
+      <li><strong>Hotbar and passives.</strong> Unlearned spells leave the hotbar; passives disappear from
+        <code>derived()</code> through the <code>invalidate()</code> call.</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="progression-merits">Academy Merits</h3>
+
+  <p><dfn>Academy Merits</dfn> are a second currency stored in <code>state.merits</code> (optional in
+    <code>PlayerState</code>, so pre-Phase 5 saves load with 0). They are earned in the Trial Hall
+    (<code>meritsForWave(n) = 2 + 2n</code>, doubled on every fifth wave, so ten waves pay 164) and through the
+    1,000-Merit graduation award, and they are spent only at Bram's Merit Exchange.</p>
+  <pre><code class="lang-ts">  addMerits(amount: number) {
+    amount = Math.floor(amount);
+    if (!amount) return;
+    this.state.merits = Math.max(0, (this.state.merits ?? 0) + amount);
+    // … "+N Academy Merits" log
+    this.changed();
+  }</code></pre>
+  <p>(<a data-src="src/systems/Progression.ts#L144">Progression.ts:144</a>.) The shop UI is mesos-only, so the
+    exchange is a series of dialog pages that end in <code>buyWithMerits(itemId, costEach, qty)</code>
+    (<a data-src="src/systems/Progression.ts#L782">Progression.ts:782</a>), which checks the balance, adds the
+    items, deducts Merits and saves.</p>
+  <table>
+    <thead><tr><th>Merit Exchange page</th><th>Offers (cost)</th></tr></thead>
+    <tbody>
+      <tr><td>Study Aids</td><td>Return Scroll ×5 (20), Elixir (30), Elixir ×5 (140), Power Elixir (80), Power Elixir ×5 (380), Tome of Unlearning (150)</td></tr>
+      <tr><td>Field Trophies</td><td>Ring of the Slow Garden (400), Monarch's Signet (700), Alpha Fang Necklace (1,200), Magmaw Gauntlets (2,000), Wyrmheart Amulet (3,000)</td></tr>
+    </tbody>
+  </table>
+  <p>(<code>MERIT_SHOP</code>, <a data-src="src/data/npcScripts.ts#L854">npcScripts.ts:854</a>.) The trophies are
+    the field bosses' rare accessory drops, offered here for students who don't want to farm them.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="progression-items">Items, equipment, inventory and shops</h3>
+
+  <p>Every item is an <code>ItemDef</code> in <a data-src="src/data/items.ts#L23">items.ts:23</a>, built by three
+    helpers that also set sell prices: consumables sell for 25% of their price, equipment for 30% (unless given
+    explicitly), and etc items have only a sell price.</p>
+  <pre><code class="lang-ts">function equip(id: string, name: string, description: string, icon: IconSpec, slot: EquipSlot, reqLevel: number,
+  price: number, modifiers: StatModifier[], reqBranch?: Branch, sellPrice?: number): ItemDef {
+  return {
+    id, name, type: 'equip', description, icon, price, sellPrice: sellPrice ?? Math.max(1, Math.floor(price * 0.3)), maxStack: 1,
+    equip: { slot, reqLevel, reqBranch, modifiers },
+  };
+}
+// …
+  equip('ember_staff', 'Ember Staff', 'A charred staff whose gem never stops smoldering.', { glyph: 'staff', color: 0x6a2a1a, color2: 0xff7a2a },
+    'weapon', 15, 5000, [add('matk', 18), add('dmgFire', 0.1)], 'fire'),</code></pre>
+  <p>(<a data-src="src/data/items.ts#L13">items.ts:13</a>.) Equipment modifiers are ordinary
+    <code>StatModifier</code>s, so they flow through <code>applyModifiers</code> like passives do. The weapon line
+    is the main source of the matk "gap" in the chart above:</p>
+  <table>
+    <thead><tr><th>Weapon</th><th>Level</th><th>Bonus</th><th>Locked to</th></tr></thead>
+    <tbody>
+      <tr><td>Oak Wand (starting)</td><td>1</td><td>+5 matk</td><td>any</td></tr>
+      <tr><td>Willow Staff</td><td>8</td><td>+10 matk</td><td>any</td></tr>
+      <tr><td>Sage Wand</td><td>10</td><td>+13 matk, +5% cast speed</td><td>any</td></tr>
+      <tr><td>Ember / Frost / Storm Staff, Dawn / Grave Staff</td><td>15</td><td>+18 matk, +10% own element</td><td>that School</td></tr>
+      <tr><td>Inferno / Glacier / Tempest Staff, Sunlit / Umbral Scepter</td><td>35</td><td>+28 matk, +15% own element, +3% crit</td><td>that School</td></tr>
+      <tr><td>Archon Staff (Lich Archon drop)</td><td>45</td><td>+36 matk, +10% all damage, +10% crit damage</td><td>any</td></tr>
+    </tbody>
+  </table>
+  <p>The Holy and Shadow robes (Acolyte Vestments, Grave Robes, level 22) are School-locked too.
+    <code>equipBlocker</code> explains why an item can't be worn ("Requires level 15.", "Only students of the
+    Fire School can use this.", <a data-src="src/systems/Progression.ts#L527">Progression.ts:527</a>).</p>
+
+  <h4>Inventory</h4>
+  <ul>
+    <li><strong>48 stacks</strong> (<code>MAX_INVENTORY_STACKS</code>). Consumables stack to 100 (Return Scrolls 50),
+      most etc items to 200 (tomes and trophies 10), equipment to 1. <code>roomFor</code> answers "how many more fit"; <code>canFit</code>
+      simulates several adds after some removals, which is how quest turn-in checks room before it changes
+      anything.</li>
+    <li><strong>Potions on the hotbar.</strong> Hotbar entries are skill ids or <code>"item:&lt;id&gt;"</code>. A new
+      character has Red and Blue Potions on keys 1 and 2 of <em>both</em> hotbar pages, and
+      <code>setHotbar</code> lets the same potion sit once per page. When the assigned potion runs out,
+      <code>useItem</code> falls back to the strongest potion of the same kind that you do have (White, Orange, Red
+      for HP; Mana Elixir, Blue for MP) and says so once
+      (<a data-src="src/systems/Progression.ts#L467">Progression.ts:467</a>).</li>
+    <li><strong>Item cooldowns</strong> are per item (<code>cooldownMs</code>: 300 ms for potions, 1 s for the Elixir and the
+      Return Scroll, 1.5 s for the Power Elixir). A potion that would heal nothing is refused and not consumed.</li>
+  </ul>
+
+  <h4>Shops</h4>
+  <table>
+    <thead><tr><th>NPC</th><th>Stock</th></tr></thead>
+    <tbody>
+      <tr><td>Bram (Quartermaster)</td><td>Fixed list: the five potions, Elixir, Return Scroll, Tome of Unlearning (<code>POTION_SHOP</code>)</td></tr>
+      <tr><td>Tilda (Armorer)</td><td>Every equip with a price, up to level max(10, your level + 8), hiding other Schools' locked items, sorted by level</td></tr>
+    </tbody>
+  </table>
+  <p>Both open the shared shop window through <code>ui:shop</code>. <code>buy</code> and <code>sell</code> are on
+    Progression (<a data-src="src/systems/Progression.ts#L583">Progression.ts:583</a>). The shop's
+    <em>Sell junk</em> button sells, after a confirm click, every etc item not needed by an unfinished quest you
+    could still take (other Schools' exam materials count as junk once you have declared) and every unequipped
+    piece of gear at least 10 levels below you (<a data-src="src/ui/dialogs.ts#L188">dialogs.ts:188</a>).</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="progression-death">Regeneration, death and respawn</h3>
+
+  <p><code>Progression.update</code> runs first in every frame. Every 5 s it applies one regen tick of
+    <code>hpRegen</code>/<code>mpRegen</code>, tripled on a safe map (the campus), and every 30 s it autosaves
+    (<a data-src="src/systems/Progression.ts#L736">Progression.ts:736</a>).</p>
+
+  <pre><code class="lang-ts">/** Fraction of the current level's EXP requirement lost on death. */
+export const DEATH_EXP_PENALTY = 0.05;
+
+/** EXP lost when dying at this level/exp (never drops below 0 EXP, no penalty at max level). */
+export function deathExpLoss(level: number, exp: number): number {
+  if (level &gt;= MAX_LEVEL) return 0;
+  return Math.max(0, Math.min(exp, Math.floor(expToNext(level) * DEATH_EXP_PENALTY)));
+}</code></pre>
+  <p>(<a data-src="src/systems/progression/stats.ts#L8">stats.ts:8</a>.) Dying at level 10 costs up to 53 EXP; at
+    level 40, up to 690. A student never loses a level. <code>respawn()</code> applies the penalty, sets HP to 50% of
+    max and MP to at least 50%, and emits <code>player:revived</code>; GameScene then moves the player to campus.</p>
+
+  <pre class="mermaid">sequenceDiagram
+  participant C as Combat / Monster
+  participant P as Progression
+  participant G as GameScene
+  participant U as UI
+  C->>P: loseHp(amount)
+  P->>P: hp reaches 0, dead = true
+  P-->>G: player:died
+  G->>G: player.onDeath(), death sfx
+  G-->>U: ui:death (prompt)
+  U->>P: respawn()
+  P->>P: exp -= deathExpLoss, hp 50%, mp ≥ 50%
+  P-->>G: player:revived
+  G->>G: player.revive(), changeMap(campus)
+  P->>P: save()</pre>
+
+  <details class="advanced"><summary>Advanced: death invariants</summary>
+    <ul>
+      <li><strong>While dead, nothing heals.</strong> <code>heal</code>, regen ticks, <code>useItem</code> and
+        <code>spendMp</code> all refuse while <code>dead</code>, and <code>loseHp</code> ignores further hits, so a
+        burn tick can't fire <code>player:died</code> twice.</li>
+      <li><strong>A save written while dead is repaired on load.</strong> If the tab is closed at the death prompt,
+        <code>repairState</code> applies the same penalty and sends the student to campus (see
+        <a href="#saves">saves</a>), so reloading is never a way to skip the penalty or to revive on a hostile
+        map.</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="progression-passes">The balance passes</h3>
+
+  <p>After the first integration, balance was tuned in a few focused passes recorded in the git log (the commit
+    messages say why; the diffs show what moved):</p>
+  <table>
+    <thead><tr><th>Commit</th><th>What changed</th></tr></thead>
+    <tbody>
+      <tr><td><code>5bc80f6</code> movement/combat QA</td><td>Early HP tuning alongside the movement fixes.</td></tr>
+      <tr><td><code>49fcaad</code> pacing 1–25</td><td>Message: MP regen up, cheaper Arcane Bolt and Blue Potions, more potion and meso drops, softer Stump Golems and Yetis. The diff itself raises the Year 3 exam drops: Yeti Fur 40% → 55%, Yeti Bone 35% → 50%, Wisp Essence to 55%.</td></tr>
+      <tr><td><code>214db26</code></td><td>Field bosses wait until you are near their level; Stump Golems no longer resist Holy.</td></tr>
+      <tr><td><code>e2126d0</code> pacing 25–50</td><td>School parity (Arc Storm and Totem trimmed, Glacial Lance fixed, Blazing Orb and Angel Ray up). Year 3 EXP slowed: Ember Imp <code>expMul</code> 0.95 → 0.8, Salamander 1.05 → 0.88, Magma Golem 1.25 → 1.05, Harpy 0.95 → 0.85, Crag Golem 1.25 → 1.1. Lich Archon HP ×250 → ×200, field boss HP raised. Year 3 exam reward 20 Orange → 15 White Potions. Trial Hall ramp steepened.</td></tr>
+      <tr><td><code>be584c4</code> follow-ups</td><td>Glacial Lance up, Thunder Bolt down, ten Void Wisps make the Arcane Sanctum grindable, the <strong>above-level EXP bonus capped at +15%</strong> (was +30%, in <code>killExpMultiplier</code>), Trial Hall waves hit at their target level with more elites.</td></tr>
+      <tr><td><code>81b17e1</code></td><td>Message: one Year 4 primary per School reachable at Year 3 level 5, alongside the cast buffer.</td></tr>
+    </tbody>
+  </table>
+
+  <details class="advanced"><summary>Advanced: tuning safely</summary>
+    <ul>
+      <li><strong>Tune multipliers, not curves.</strong> To make one zone faster, change the monsters'
+        <code>expMul</code>/<code>hpMul</code> (what the 25–50 pass did) rather than balance.ts, which moves every
+        zone and every quest reward at once.</li>
+      <li><strong>Quest EXP follows the curve.</strong> All quest rewards are <code>xp(level, fraction)</code> of
+        <code>expToNext</code>, so a curve change rescales them automatically; a hand-written EXP number would
+        not.</li>
+      <li><strong>Watch the Year boundaries.</strong> The monster HP step at 10/25/40 assumes the student has the new
+        Year's spells. If you lower a School's Year 2 primary, levels 10–14 feel it first.</li>
+      <li><strong>There is no balance test suite.</strong> Pacing was checked by playthrough QA (Phase 5 levels
+        1–25, Phase 7 levels 25–50 per School). The charts in this section are the quickest way to see a curve
+        change before playing.</li>
+    </ul>
+  </details>
+</section>

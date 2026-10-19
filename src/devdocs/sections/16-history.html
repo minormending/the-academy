@@ -1,0 +1,451 @@
+<section id="history" data-title="How it was built" data-summary="The build story from git: a lead Claude session, ten parallel builder subagents, Codex runs, eight roadmap phases and the QA waves between them.">
+  <h2>How it was built</h2>
+
+  <p>The Academy was written by a team of AI agents. One <dfn>lead session</dfn> (an orchestrating Claude Code
+    session) wrote the shared contracts, owned the files that glue everything together, and handed self-contained
+    jobs to helpers. Most helpers were <dfn>builder subagents</dfn>: Claude subagents started by the lead, each given
+    a brief and a set of files it alone could edit. Some jobs went to <dfn>Codex</dfn>, a separate coding agent,
+    either to build a whole feature or to review code the Claude agents wrote. The lead integrated each batch, tested
+    it in a browser and committed it. The README says it in one line: the game was built by AI agents (Claude
+    subagents and Codex) directed by a lead Claude session.</p>
+
+  <p>This section tells that story from what the repository records: <code>git log</code>,
+    <a data-src="ROADMAP.md">ROADMAP.md</a> and <a data-src="ARCHITECTURE.md">ARCHITECTURE.md</a>, which the lead
+    extended phase by phase as the design record. Two terms used throughout:</p>
+  <ul>
+    <li>A <dfn>contract</dfn> is a type or function signature that several agents code against, mostly in
+      <a data-src="src/core/types.ts">src/core/types.ts</a>. Agents may read contracts but not change them.</li>
+    <li>A <dfn>stub</dfn> is a placeholder file that already exports the exact names and signatures the rest of the
+      game imports, but does nothing yet. An agent "fills in" its stubs.</li>
+  </ul>
+
+  <p>The numbers below were counted from the repository with the commands shown in the table.</p>
+
+  <table>
+    <thead><tr><th>Fact</th><th>Value</th><th>How it was counted</th></tr></thead>
+    <tbody>
+      <tr><td>Commits</td><td>75</td><td><code>git rev-list --count HEAD</code></td></tr>
+      <tr><td>First and last commit</td><td>2026-10-18 17:29 to 2026-10-19 04:13 (UTC−4)</td><td><code>git log --format='%ad'</code></td></tr>
+      <tr><td>Commits marked "via Codex"</td><td>10</td><td><code>git log --oneline | grep -c "via Codex"</code></td></tr>
+      <tr><td>Commits fixing Codex review findings</td><td>1 (<code>5ba20ad</code>)</td><td><code>grep -c "Codex review"</code></td></tr>
+      <tr><td>QA-pass commits</td><td>5 (UI, progression, movement/combat, pixel, final)</td><td><code>grep "QA"</code></td></tr>
+      <tr><td>Pacing and balance commits</td><td>4</td><td><code>grep -E "Pacing|Balance"</code></td></tr>
+      <tr><td>Roadmap bookkeeping commits</td><td>7</td><td>subjects starting "Roadmap" or "ROADMAP"</td></tr>
+      <tr><td>Commits that changed <code>src/core/types.ts</code></td><td>6 (597 lines at scaffold, 622 now)</td><td><code>git log --oneline -- src/core/types.ts</code></td></tr>
+      <tr><td>Commits that changed <code>src/core/vfx.ts</code> or <code>src/core/balance.ts</code></td><td>1 each (the scaffold)</td><td><code>git log --oneline -- &lt;file&gt;</code></td></tr>
+    </tbody>
+  </table>
+
+  <p>Every commit has the same author and a <code>Co-Authored-By: Claude</code> trailer, including the Codex ones.
+    That fits the rule that agents never ran <code>git</code>: the lead made every commit, and "(via Codex)" in the
+    subject is the only record of who wrote the code.</p>
+
+  <figure data-chart="content-counts"><figcaption>What the team produced: spells, monsters, maps, items, quests, NPCs
+    and jobs, plus source lines per <code>src/</code> folder. <code>src/skills</code> and <code>src/art</code> are the
+    two largest folders, because every spell has its own pixel VFX. <code>src/core</code>, the lead's contract layer,
+    is among the smallest. The contract stayed small so many agents could share it.</figcaption></figure>
+
+  <!-- ===================================================================== -->
+  <h3 id="history-team">The team and its rules</h3>
+
+  <p>Phase 1 split the game into ten areas, one per builder agent, and one area for the lead. The split is the
+    Ownership table in <a data-src="ARCHITECTURE.md#L46">ARCHITECTURE.md</a>. Many source files still start with
+    an <code>// OWNER:</code> header naming the agent that wrote them, e.g.
+    <code>// OWNER: A3 (fire-tree).</code> at the top of <a data-src="src/skills/fire.ts#L1">fire.ts</a>.</p>
+
+  <table>
+    <thead><tr><th>Agent</th><th>Area</th><th>Owns (namespace)</th></tr></thead>
+    <tbody>
+      <tr><td>lead</td><td>contracts, boot, game scene orchestration</td><td><code>src/core/*</code>, <code>src/main.ts</code>, <code>BootScene.ts</code>, <code>GameScene.ts</code>, <code>src/skills/index.ts</code>, <code>ARCHITECTURE.md</code></td></tr>
+      <tr><td>A1 player</td><td>movement, physics, ropes, one-way platforms, blink, hit reaction</td><td><code>src/entities/Player.ts</code>, <code>src/entities/player/*</code></td></tr>
+      <tr><td>A2 skill-engine</td><td>casting, attack patterns, buffs, summons, combat math, Apprentice skills</td><td><code>SkillSystem.ts</code>, <code>CombatSystem.ts</code>, <code>src/systems/skill/*</code>, <code>src/skills/apprentice.ts</code></td></tr>
+      <tr><td>A3 / A4 / A5</td><td>fire / ice / lightning trees and their VFX</td><td><code>src/skills/&lt;tree&gt;.ts</code>, <code>&lt;tree&gt;Vfx.ts</code>, <code>src/skills/&lt;tree&gt;/*</code></td></tr>
+      <tr><td>A6 monsters</td><td>defs, art, AI, statuses, spawning, boss, drops</td><td><code>src/data/monsters.ts</code>, <code>src/art/monsterArt.ts</code>, <code>Monster.ts</code>, <code>MonsterManager.ts</code>, <code>DropManager.ts</code></td></tr>
+      <tr><td>A7 world</td><td>maps, loader, terrain and parallax art, portals, ambient</td><td><code>src/data/maps.ts</code>, <code>src/world/*</code>, <code>src/art/tileArt.ts</code>, <code>src/art/world/*</code></td></tr>
+      <tr><td>A8 ui</td><td>title, HUD, hotbar, windows, dialogs, minimap</td><td><code>src/ui/*</code>, <code>TitleScene.ts</code></td></tr>
+      <tr><td>A9 progression</td><td>player state, stats, jobs, items, NPCs, quests, saves</td><td><code>Progression.ts</code>, <code>SaveSystem.ts</code>, <code>NpcManager.ts</code>, <code>src/data/{items,jobs,npcs,quests,npcScripts}.ts</code></td></tr>
+      <tr><td>A10 art-audio</td><td>character art, icons, particles, common VFX, synth SFX and music</td><td><code>src/art/characters.ts</code>, <code>icons.ts</code>, <code>particles.ts</code>, <code>AudioSystem.ts</code>, <code>src/systems/audio/*</code></td></tr>
+    </tbody>
+  </table>
+
+  <p>Every builder brief included the <a data-src="ARCHITECTURE.md#L24">ground rules for builder agents</a>. In
+    short:</p>
+  <ol>
+    <li><strong>Edit only your files.</strong> New files only inside your own namespace. Never touch the lead's
+      files.</li>
+    <li><strong>Keep every stub export</strong> (name and signature compatible). Adding exports is fine.</li>
+    <li><strong>Code only against the seams:</strong> <code>src/core/types.ts</code> interfaces,
+      <code>Registry</code>, <code>bus</code> and <code>playVfx</code>. Never import another agent's concrete class,
+      except a short list of shared helpers (<code>iconDataUrl</code>, <code>playerTextureKey</code>,
+      <code>newPlayerState</code>, <code>getAudio</code>…).</li>
+    <li><strong>Constructors don't call services.</strong> The services object is filled in after every service is
+      constructed. Subscribing to <code>bus</code> is fine; real work happens lazily.</li>
+    <li><strong>Typecheck your own files</strong> with <code>npx tsc --noEmit</code> and get them to zero errors.
+      Errors in other agents' files are not yours: they are mid-edit.</li>
+    <li><strong>No npm dependencies, no <code>git</code>, no dev server.</strong> The lead does the playtesting.</li>
+    <li>Use the Phaser 3.60+ API (particles are <code>scene.add.particles(…)</code>); grep the Phaser typings when
+      unsure.</li>
+    <li><strong>Degrade, don't throw:</strong> missing textures or data must never crash <code>update</code>.</li>
+    <li><strong>Report at the end:</strong> files written, public API, assumptions about other modules, and any
+      contract problems worked around.</li>
+  </ol>
+
+  <p>The team changed after Phase 1. The art pivot used new agents named <code>PX1</code> (pixel characters),
+    <code>PX3</code> (world), <code>PX4</code> (pixel VFX) and <code>PX5</code> (pixel UI). They appear in
+    <code>OWNER</code> headers such as <code>// OWNER: PX4 (pixel VFX; formerly A10)</code> in
+    <a data-src="src/art/particles.ts#L1">particles.ts</a>. Phase 3 added a "Holy tree agent". Phase 6 added a
+    "story agent" (<a data-src="src/data/storyQuests.ts#L1">storyQuests.ts</a>), and Phase 7 added
+    <code>P7a</code> (save slots) and <code>P7b</code> (bindings and settings, see
+    <a data-src="src/core/settings.ts#L2">settings.ts</a>). Codex built ten features of its own (see
+    <a href="#history-codex">below</a>).</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="history-scaffold">Scaffold first: contracts and stubs</h3>
+
+  <p>The first commit, <code>5063081 Scaffold: contracts, orchestrator scenes, module stubs</code>, has no
+    gameplay in it. It changed 52 files (2,788 inserted lines, 1,156 of them <code>package-lock.json</code>). It
+    contains the full 597-line <code>types.ts</code>, the balance curves, the event bus, the
+    <code>Registry</code>, the VFX registry, a 243-line <code>GameScene</code> that wires services together, a
+    182-line <code>ARCHITECTURE.md</code>, and one stub per owned file. A tree agent's stubs were three and four
+    lines long (from <code>git show 5063081:src/skills/fire.ts</code> and <code>…fireVfx.ts</code>):</p>
+
+  <pre><code class="lang-ts">// OWNER: A3 (fire-tree). STUB — replace with real implementation.
+import type { SkillDef } from '../core/types';
+export const FIRE_SKILLS: SkillDef[] = [];
+
+// OWNER: A3 (fire-tree). STUB — replace with real implementation.
+import Phaser from 'phaser';
+export function generateFireTextures(scene: Phaser.Scene): void {}
+export function registerFireVfx(): void {}</code></pre>
+
+  <p>A system stub already implemented its interface, so <code>GameScene</code> compiled and ran from day one
+    (from <code>git show 5063081:src/systems/SkillSystem.ts</code>):</p>
+
+  <pre><code class="lang-ts">// OWNER: A2 (skill-engine). STUB — replace with real implementation.
+export class SkillSystem implements ISkillSystem {
+  constructor(private scene: Phaser.Scene, private services: GameServices) {}
+  tryCast(skillId: string): CastResult { return 'unknown'; }
+  getCooldownRemaining(skillId: string) { return 0; }
+  // …
+  update(time: number, delta: number) {}
+  clearWorld() {}
+}</code></pre>
+
+  <p>The lead's seams were written to tolerate missing work. <code>playVfx</code> in
+    <a data-src="src/core/vfx.ts#L17">vfx.ts:17</a> draws a generic puff and warns once for any key that no agent
+    has registered yet. That is how a skill agent could reference <code>'fire_hit'</code> before the VFX existed.
+    This file has not changed since the scaffold:</p>
+
+  <pre><code class="lang-ts">export function playVfx(scene: Phaser.Scene, key: string | undefined, o: VfxOptions): Phaser.GameObjects.GameObject | void {
+  if (!key) return;
+  const fn = registry.get(key);
+  if (fn) return fn(scene, o);
+  if (!warned.has(key)) { warned.add(key); console.warn(`[vfx] missing key "${key}"`); }
+  const c = scene.add.circle(o.x, o.y, 10, 0xffffff, 0.8).setDepth(DEPTH.VFX);
+  scene.tweens.add({ targets: c, scale: 2.5, alpha: 0, duration: 250, onComplete: () =&gt; c.destroy() });
+}</code></pre>
+
+  <p>The second commit, <code>d2eb3eb Integrate 10 builder modules</code>, landed everything the ten agents
+    wrote: 87 files, 22,885 lines inserted, 191 deleted (mostly stub bodies). Its timestamp is 32 minutes after the
+    scaffold's.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="history-phases">The eight phases</h3>
+
+  <p><a data-src="ROADMAP.md#L17">ROADMAP.md</a> lists eight phases. It was written in commit <code>50e9b8b</code>
+    ("ROADMAP to finished (resume protocol + phases 5-8)"), when Phases 1–4 were already done. The lead then
+    ticked items off in seven bookkeeping commits. The table maps each phase to the commits that landed it.</p>
+
+  <table>
+    <thead><tr><th>Phase</th><th>What it delivered</th><th>Representative commits</th></tr></thead>
+    <tbody>
+      <tr><td>1. Foundation</td><td>Contracts, 10 builder agents, integration, a QA wave</td>
+        <td><code>5063081</code> scaffold · <code>d2eb3eb</code> integrate · <code>6492f47</code>, <code>ff9c063</code> GameScene fixes · <code>c04ef65</code> UI QA · <code>7faacd7</code> progression QA · <code>5bc80f6</code> movement/combat QA · <code>3ddfd19</code> balance</td></tr>
+      <tr><td>2. Pixel-art pivot</td><td>CC0/CC-BY art for characters, monsters, world, VFX and UI; credits</td>
+        <td><code>c6de896</code> pipeline (manifests, <code>PIXEL_SCALE</code>) · <code>99dbf07</code> characters · <code>e0cffe6</code> UI · <code>c88904b</code> monsters · <code>1b9a307</code> world · <code>f2c2b46</code> VFX · <code>67893fe</code> final pixel QA</td></tr>
+      <tr><td>3. Holy &amp; Shadow</td><td>Contract, jobs, poison/curse statuses, two new trees</td>
+        <td><code>7e70b18</code> Phase 3 contract · <code>c09fa9c</code> audio (Codex) · <code>fdd90e1</code> Shadow tree (Codex)</td></tr>
+      <tr><td>4. The Academy</td><td>Rename, school Years, 10 Year-1 spells and 5 Schools × 24, professors, exams, five-hall campus, spellbook UI, two-page hotbar, Pip, field bosses</td>
+        <td><code>7d96785</code> rename · <code>8260e98</code>, <code>23d73a5</code>, <code>44a5347</code>, <code>58dc6ac</code>, <code>76abe50</code>, <code>a563d43</code> spellbooks · <code>3c91190</code>, <code>ccf1505</code> re-theme · <code>2a87c88</code> hotbar · <code>665f98f</code>, <code>20e4ef8</code> familiar · <code>5ba20ad</code> Codex review fixes · <code>1938592</code> field bosses</td></tr>
+      <tr><td>5. Systems &amp; feel</td><td>Respec, gamepad, Trial Hall, pacing QA 1–25</td>
+        <td><code>415b340</code>, <code>f4edf35</code> respec · <code>f5343f7</code> gamepad · <code>d097273</code> Trial Hall · <code>49fcaad</code>, <code>214db26</code> pacing</td></tr>
+      <tr><td>6. Story &amp; structure</td><td>13-step main questline, Year 1 orientation, Merit Exchange, graduation credits</td>
+        <td><code>7010dc0</code> story · <code>55763b7</code> credits roll and quest log · <code>4791d48</code> Phase 6 complete</td></tr>
+      <tr><td>7. QoL &amp; polish</td><td>Six save slots, key rebinding, settings, pacing QA 25–50</td>
+        <td><code>1a6d93d</code> save slots · <code>b506a48</code> controls · <code>2770b91</code> QoL (Codex) · <code>e2126d0</code>, <code>be584c4</code> pacing · <code>1e80a33</code> bindings fix</td></tr>
+      <tr><td>8. Ship</td><td>Regression QA, performance, README, credits, published build</td>
+        <td><code>0fdd88a</code> perf · <code>3bb9f3a</code> Phaser chunk · <code>87a57f8</code> README · <code>632a578</code> CREDITS · <code>b2a181f</code> final QA · <code>d46ff56</code> ship</td></tr>
+    </tbody>
+  </table>
+
+  <p>Two more commits came after the roadmap was complete: <code>69f5906</code> (multi-page build and the GitHub
+    Pages workflow, see <a href="#build">Build</a>) and <code>8172eb8</code> (README links).</p>
+
+  <pre class="mermaid">gantt
+  title Commit span of each phase (first to last commit, 18 to 19 Oct)
+  dateFormat YYYY-MM-DD HH:mm
+  axisFormat %H:%M
+  section Build
+  1 Foundation        :2026-10-18 17:29, 2026-10-18 18:42
+  2 Pixel-art pivot   :2026-10-18 18:42, 2026-10-18 19:45
+  3 Holy and Shadow   :2026-10-18 19:31, 2026-10-18 19:41
+  4 The Academy       :2026-10-18 19:41, 2026-10-18 20:41
+  5 Systems and feel  :2026-10-18 20:41, 2026-10-18 22:51
+  6 Story             :2026-10-18 22:17, 2026-10-18 22:35
+  7 QoL and polish    :2026-10-18 21:14, 2026-10-19 01:49
+  8 Ship              :2026-10-19 00:50, 2026-10-19 03:46
+  section Publish
+  GitHub Pages        :2026-10-19 04:12, 2026-10-19 04:13</pre>
+
+  <p>The bars overlap because phases were not strictly sequential. For example, the save-slot commit (Phase 7) and
+    the story commit (Phase 6) both have the timestamp 22:17, and <code>a9dad10</code> ticks both off together.
+    A bar only covers committed work. Agents were writing code before each phase's first commit, and git cannot
+    show when that started.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="history-orchestration">How one phase ran</h3>
+
+  <p>Every phase followed the same loop. Step 5 of the resume protocol states it: after each phase, typecheck,
+    <code>npm run build</code>, browser smoke test, commit, tick it in the roadmap.</p>
+
+  <pre class="mermaid">sequenceDiagram
+  participant L as Lead session
+  participant K as types.ts and stubs
+  participant A as Claude builder
+  participant X as Codex
+  participant Q as Checks
+  participant R as ROADMAP.md
+  L->>K: add contract fields, stub files, wire GameScene
+  L->>L: commit contract (e.g. 7e70b18)
+  par disjoint files
+    L->>A: brief: own these files, keep stub exports
+  and
+    L->>X: brief: one feature in its own files
+  end
+  A-->>L: report (files, API, assumptions)
+  X-->>L: patch
+  L->>Q: npx tsc --noEmit, npm run build
+  L->>Q: browser smoke test
+  Q-->>L: bugs found
+  L->>L: fix or re-dispatch, commit
+  L->>R: tick the item [x]</pre>
+
+  <h4 id="history-resume">The resume protocol</h4>
+
+  <p>A long build will hit usage limits. When it does, the session stops mid-phase, and a resumed or fresh session
+    has to work out what was going on. <a data-src="ROADMAP.md#L7">ROADMAP.md</a> answers that with a five-step
+    <dfn>resume protocol</dfn>:</p>
+  <ol>
+    <li>Read <code>ROADMAP.md</code>, <code>ARCHITECTURE.md</code> and <code>git log --oneline | head -30</code>.</li>
+    <li>Run <code>git status</code>. Uncommitted work from an interrupted agent gets typechecked: commit it if it
+      compiles and matches a phase, otherwise note it and redo that task.</li>
+    <li>Check for still-running agents (their completion notices arrive on their own) and never start a
+      duplicate.</li>
+    <li>Start the first phase that is not <code>[x]</code>, dispatching parallel agents under the ownership rules
+      (disjoint files; the lead owns <code>src/core/*</code>, <code>src/scenes/*</code>,
+      <code>src/main.ts</code>).</li>
+    <li>After each phase: typecheck, build, smoke test, commit, tick it in the roadmap.</li>
+  </ol>
+  <p>The status markers <code>[x]</code> done, <code>[~]</code> in progress and <code>[ ]</code> pending are the
+    state machine. The bookkeeping commits (<code>0978bb9</code> "Trial Hall done, Phase 6 in progress",
+    <code>c889a24</code> "Phase 7 started", <code>a8522e0</code> "Phases 5 and 7 complete; Phase 8 underway") exist
+    so the next session reads the truth from the file.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="history-contracts">Changing a contract mid-build</h3>
+
+  <p>Builders could not edit <code>types.ts</code>; the header of
+    <a data-src="src/core/types.ts#L1">types.ts</a> tells them to note a needed contract change in their report and
+    work around it locally. When a phase needed a new contract, the lead added it first, in its own commit, before
+    dispatching anyone. Phase 3 is the clearest case. <code>7e70b18 Phase 3 contract</code> touched 18 files
+    (180 lines inserted): it widened the unions and added the new derived stats, statuses, glyphs and sounds. These
+    are the current lines of <a data-src="src/core/types.ts#L11">types.ts:11</a>:</p>
+
+  <pre><code class="lang-ts">export type Element = 'neutral' | 'fire' | 'ice' | 'lightning' | 'holy' | 'shadow';
+export type Branch = 'none' | 'fire' | 'ice' | 'lightning' | 'holy' | 'shadow';
+export type JobTier = 1 | 2 | 3 | 4;
+
+export type JobId =
+  | 'apprentice'                                   // tier 1 (start, lv 1)
+  // …
+  | 'cleric' | 'priest' | 'hierophant'            // holy  tiers 2,3,4
+  | 'occultist' | 'necromancer' | 'umbral_sage';  // shadow tiers 2,3,4</code></pre>
+
+  <p>The same commit also did the following:</p>
+  <ul>
+    <li>Created stub files for the new trees (<code>holy.ts</code>, <code>holyVfx.ts</code>, <code>shadow.ts</code>,
+      <code>shadowVfx.ts</code>, empty manifests) and wired them into the lead's aggregator
+      <a data-src="src/skills/index.ts#L17">src/skills/index.ts</a>, so the trees were part of the game before they
+      had a single spell.</li>
+    <li>Made the smallest engine changes the new statuses needed: <code>poison</code> ticks and <code>curse</code>'s
+      <code>incomingDamageMult</code>/<code>outgoingDamageMult</code> in <code>Monster.ts</code>, plus
+      <code>dmgHoly</code>/<code>dmgShadow</code> in the element bonus in
+      <a data-src="src/systems/CombatSystem.ts#L31">CombatSystem.ts:31</a>. Tree agents could then rely on those
+      statuses.</li>
+    <li>Wrote the brief into ARCHITECTURE.md (<a data-src="ARCHITECTURE.md#L214">"Phase 3: two more trees"</a>): ids,
+      identities ("Holy: sustain, smite, control"; "Shadow: attrition, curses, minions"), the <code>onCast</code>
+      recipe for heals and drains, and the VFX rules.</li>
+  </ul>
+  <p>Only then did the tree work start: the Shadow tree and the holy/shadow cast sounds came back from Codex
+    (<code>fdd90e1</code>, <code>c09fa9c</code>), and the Holy tree was committed in Phase 4 at full size
+    (<code>76abe50</code>, 24 spells; its files carry <code>OWNER: Holy tree agent</code>).</p>
+
+  <p>The pattern repeats for smaller features:</p>
+  <ul>
+    <li><strong>Familiar.</strong> <code>1fc2da2</code> (lead) added <code>pickupNear</code>/<code>dropPositions</code>
+      to the drops contract. <code>665f98f</code> (Codex) wrote Pip in <code>PetSystem.ts</code>, "not yet wired".
+      <code>20e4ef8</code> (lead) wired it into <code>GameScene</code>.</li>
+    <li><strong>Story.</strong> <code>50e9b8b</code> registered an empty <code>STORY_QUESTS</code> stub in the
+      Registry before the story agent started, so the agent only had to fill one file.</li>
+    <li><strong>Trial Hall.</strong> The roadmap item reads "Trial Hall wave arena (+ GameScene wiring by lead)".</li>
+  </ul>
+  <p>Over the whole build only six commits changed <code>types.ts</code>, and <code>vfx.ts</code> and
+    <code>balance.ts</code> never changed after the scaffold.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="history-ownership">Ownership over time, and the re-theme</h3>
+
+  <p>Ownership moved as the work changed shape. The art pivot (Phase 2) kept gameplay code fixed and asked new
+    agents to load licensed pixel art into the <em>existing</em> texture keys, frame layouts and animation keys
+    (<a data-src="ARCHITECTURE.md#L186">"Art pivot"</a>, rule 1). So A10's character and particle files passed to
+    PX1 and PX4, and PX5 added a pixel layer to A10's icon painter, A8's title screen ("pixel pass by PX5") and A2's
+    damage numbers. Later, A9's save system got slots "by P7a". The <code>OWNER</code> headers record both
+    owners, e.g. <a data-src="src/systems/SaveSystem.ts#L1">SaveSystem.ts:1</a>.</p>
+
+  <p>The biggest change was the Phase 4 re-theme from "Arcana Story" to <strong>The Academy</strong>. Every player
+    is now a student, job tiers are school Years, the town is the campus, and quests are Assignments. The rule in
+    <a data-src="ARCHITECTURE.md#L248">ARCHITECTURE.md</a> was that save keys and all ids stay unchanged, because
+    ids are what a save stores. The code still shows this:</p>
+  <ul>
+    <li>The campus map is still <code>mistvale</code>, and <a data-src="src/data/maps.ts#L1">maps.ts</a> opens with
+      "map ids are save data — never rename them".</li>
+    <li>The save key is still <code>'arcana-story-save-v1'</code>
+      (<a data-src="src/core/constants.ts#L32">constants.ts:32</a>), and the debug global is still
+      <code>arcana</code>.</li>
+    <li>NPC ids kept their old names behind new titles: <code>elder_maelis</code> is Headmistress Maelis and
+      <code>scout_finn</code> is Prefect Finn.</li>
+    <li>When the repeatable Lich quest needed a new name in Phase 6 (<code>4791d48</code>), only its
+      <code>name</code> changed (to "Bounty: The Lich Archon (Repeat)"). The id stayed <code>q_maelis_archon</code>.</li>
+  </ul>
+
+  <!-- ===================================================================== -->
+  <h3 id="history-qa">QA waves</h3>
+
+  <p>Parallel agents can't playtest each other's work. Typechecking only proves the pieces fit, not that the game
+    plays right. So after integration the lead ran <dfn>QA passes</dfn>: focused playthroughs of one area at a time,
+    each ending in a single commit of fixes.</p>
+
+  <table>
+    <thead><tr><th>Commit</th><th>Pass</th><th>Some of what it fixed (from the subject)</th></tr></thead>
+    <tbody>
+      <tr><td><code>c04ef65</code></td><td>UI</td><td>duplicate logs/banners, windows under the HUD, buff cancel, sell confirm</td></tr>
+      <tr><td><code>7faacd7</code></td><td>Progression</td><td>dead-save repair, no heal while dead, atomic quest turn-in</td></tr>
+      <tr><td><code>5bc80f6</code></td><td>Movement/combat</td><td>jump latch, embed recovery, mirrored left projectiles, centred <code>aoe_self</code>, tween leaks, portal-safe AI</td></tr>
+      <tr><td><code>67893fe</code></td><td>Pixel art</td><td>player outline, icon subscriber leak, bat death frames</td></tr>
+      <tr><td><code>5ba20ad</code></td><td>Codex review</td><td>fan volleys spread across distinct foes, pickup skips items that don't fit, Consecration ends on shutdown</td></tr>
+      <tr><td><code>b2a181f</code></td><td>Final (Phase 8)</td><td>Trial death crash, graduation merit save, hazard curse double-apply, F5-safe UI keys</td></tr>
+    </tbody>
+  </table>
+
+  <p>Balance got its own passes: <code>49fcaad</code> (pacing 1–25) and <code>e2126d0</code> (pacing 25–50,
+    "School parity"), each followed by a smaller commit of follow-ups.</p>
+
+  <h4 id="history-codex">What Codex built</h4>
+  <p>Ten commits are marked "(via Codex)". Each is a feature with clear edges, mostly in its own files:</p>
+  <ul>
+    <li>Spellbooks: Shadow tree (<code>fdd90e1</code>, 14 skills) and its expansion to 24 (<code>a563d43</code>),
+      Ice to 24 (<code>44a5347</code>), Lightning to 24 (<code>58dc6ac</code>), the Year 1 core curriculum
+      (<code>8260e98</code>, 10 spells).</li>
+    <li>Audio: synth voices for <code>cast_holy</code>, <code>cast_shadow</code> and <code>curse</code>
+      (<code>c09fa9c</code>).</li>
+    <li>Systems: Pip the familiar (<code>665f98f</code>), respec with the Tome of Unlearning (<code>f4edf35</code>),
+      the gamepad bridge (<code>f5343f7</code>, a new <code>GamepadBridge.ts</code> plus four lines in
+      <code>main.ts</code>), and QoL (<code>2770b91</code>: potion fallback, bag badge, Sell junk).</li>
+  </ul>
+  <p>The roadmap also names Codex reviews (Phase 1) and a "Codex final review" (Phase 8). The only commit that names
+    them is <code>5ba20ad</code>. Other review fixes went into the general QA commits, so git can't tell them
+    apart.</p>
+
+  <!-- ===================================================================== -->
+  <details class="advanced"><summary>Advanced: what made parallel agents work</summary>
+    <ul>
+      <li><strong>Disjoint files.</strong> No two agents ever owned the same file, so there were never merge
+        conflicts. The lead integrated by copying work in, not by merging. When a feature crossed areas (the
+        familiar, the Trial Hall), it was split into a contract change (lead), a new file (agent) and a wiring change
+        (lead).</li>
+      <li><strong>Frozen contracts.</strong> <code>types.ts</code> changed in six commits, always by the lead and
+        always before the work that needed it. An agent that wanted a new field reported it instead of adding it, so
+        ten agents never saw ten versions of the contract.</li>
+      <li><strong>Stubs with exact signatures.</strong> Because every import resolved from the first commit,
+        <code>npx tsc --noEmit</code> worked for everyone at once. An agent could check "my files have zero errors"
+        while the files around it were still empty.</li>
+      <li><strong>Four seams, all forgiving.</strong> <code>Registry</code> (look up data by id),
+        <code>bus</code> (events instead of direct calls), <code>playVfx</code> (string keys with a fallback puff)
+        and the <code>GameServices</code> interfaces. A skill could name a VFX key, a monster could drop an item id,
+        and a map could place an NPC id that a different agent was still writing. Missing pieces produced a warning,
+        not a crash. Unknown drop items still render, with a fallback texture.</li>
+      <li><strong>Shared numbers, not shared code.</strong> <a data-src="src/core/balance.ts#L51">balance.ts</a>
+        gave every agent the same reference curves (<code>refMatk</code>, <code>refMonsterHp</code>, per-tier
+        skill-% bands). The fire tree and the monster roster were tuned in parallel and still met in the middle.
+        See <a href="#progression">Progression</a>.</li>
+      <li><strong>"Never assume a texture exists — ensure it."</strong> The Phase 8 lazy-art rule
+        (<a data-src="ARCHITECTURE.md#L294">ARCHITECTURE.md</a>) made texture generation idempotent and on-demand
+        (<code>ensureOnce</code>, <code>lazyRegister</code>, <code>ensureMonsterTexture</code>). Load order between
+        agents' generators stopped mattering. See <a href="#art">Art</a>.</li>
+    </ul>
+  </details>
+
+  <details class="advanced"><summary>Advanced: what went wrong, and how it was caught</summary>
+    <p>Every bug below is in the log. Each one sat at a seam between two agents' work, or between the code and real
+      hardware, which is exactly where a single agent's typecheck can't look.</p>
+    <ul>
+      <li><strong>Lost taps.</strong> Phaser clears a key's "just down" flag on keyup, so a tap shorter than one
+        frame never cast. <code>6492f47</code> latched presses from <code>'down'</code> events in
+        <code>GameScene</code>, and much later <code>e8d3158</code> added a cast buffer for taps during a cast
+        lock. Found by playing, not by types.</li>
+      <li><strong>Novas centred on the staff.</strong> The engine's cast origin is the staff tip, 18 px in front of
+        the mage. <code>aoe_self</code> areas were centred there, so novas looked off-centre. <code>5bc80f6</code>
+        added <code>centerX</code> (the body) to the attack origin and centred <code>aoe_self</code> on it.</li>
+      <li><strong>Leaks between owners.</strong> A UI subscriber to the pixel icon sheet was never released
+        (<code>67893fe</code> made <code>onPixelIconsReady</code> return an unsubscribe function). Looping tweens
+        outlived their containers (<code>5bc80f6</code> added <code>loopWhileAlive</code>).</li>
+      <li><strong>A contract applied twice.</strong> Phase 3 defined curse as "deals ×(1−p) contact damage". The
+        field-boss hazard code applied <code>outgoingDamageMult()</code> to damage that already included it. The
+        final QA (<code>b2a181f</code>) removed the second multiplication, commented "curse already applied".</li>
+      <li><strong>Re-entrancy.</strong> In the Trial Hall, a field boss's telegraph could kill the player, which
+        despawned the boss while it was still iterating its own telegraph list. <code>b2a181f</code> iterates
+        snapshots and returns early once <code>destroyed</code> is set.</li>
+      <li><strong>Requires chains too deep.</strong> Several Year-4 primaries required a Year-3 spell at level 10,
+        so a fresh Year-4 student couldn't learn one. <code>81b17e1</code> lowered those to level 5 (e.g.
+        <code>fire_inferno_lance</code> now requires <code>fire_orb</code> 5).</li>
+      <li><strong>Reserved keys.</strong> Rebinding could swap Esc onto another action and leave no way to close
+        windows. Fixed in <code>1e80a33</code>.</li>
+    </ul>
+  </details>
+
+  <details class="advanced"><summary>Advanced: lessons for extending the game with agents</summary>
+    <ul>
+      <li><strong>Write the contract change yourself, first, in its own commit.</strong> Then brief agents against
+        the committed contract. A widened union (<code>Element</code>, <code>Branch</code>, <code>SfxKey</code>)
+        makes the compiler list every <code>Record&lt;Element, …&gt;</code> that needs an entry, so <code>tsc</code>
+        becomes the checklist (see <a href="#recipes-school">Add a School</a>).</li>
+      <li><strong>Hand out files, not tasks.</strong> A brief should name the files an agent owns, the stubs it must
+        keep, the seams it may use, and what to report. If two tasks need the same file, either sequence them or
+        split the file first.</li>
+      <li><strong>Keep the lead's files few and boring.</strong> <code>GameScene</code>, <code>skills/index.ts</code>
+        and <code>registry.ts</code> are wiring. The less logic lives there, the less the lead becomes a
+        bottleneck.</li>
+      <li><strong>Budget a QA pass per phase.</strong> Every phase in the log ends with fixes that only a browser
+        run could find. Typecheck, <code>npm run build</code> and a smoke test are the minimum.</li>
+      <li><strong>Treat ids as forever.</strong> Rename text, never ids: saves, quests, maps and spawn tables all
+        refer to them by string.</li>
+      <li><strong>Keep the roadmap honest.</strong> A resumed session trusts <code>ROADMAP.md</code> and
+        <code>git status</code> over memory. Tick items only after the commit that lands them.</li>
+    </ul>
+  </details>
+
+  <figure data-chart="module-graph"><figcaption>Imports between top-level <code>src/</code> folders. The
+    ownership seams are visible: almost everything imports <code>core</code> (types, Registry, bus, VFX
+    registry), while <code>core</code> itself reaches out only to the data and skill aggregators that
+    <code>Registry</code> indexes.</figcaption></figure>
+</section>

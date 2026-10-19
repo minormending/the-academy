@@ -1,0 +1,516 @@
+<section id="ui" data-title="The DOM UI" data-summary="src/ui: a DOM overlay on the canvas — UIRoot and the bus, the scaler, windows, HUD and hotbar, dialogs and shops, the title menu, the credits roll and the pixel CSS skin.">
+  <h2>The DOM UI</h2>
+
+  <p>Everything you click in The Academy is plain HTML. The HUD, the hotbar, the Spellbook, the shop, the NPC dialog
+    box and the title menu are DOM elements inside one <code>&lt;div id="ui-root"&gt;</code> that sits on top of
+    Phaser's <code>&lt;canvas&gt;</code>. Only things that live <em>in the world</em> are Phaser objects: floating
+    damage numbers (<a data-src="src/systems/skill/DamageNumbers.ts">DamageNumbers.ts</a>) and the name tags under
+    the player and NPCs (<a data-src="src/entities/player/NameTag.ts">NameTag.ts</a>). They move with the camera and
+    sort by depth with the sprites, so they belong on the canvas.</p>
+
+  <p>This section covers <a data-src="src/ui/UIRoot.ts">src/ui/</a> (agent A8 in the original build, plus the
+    pixel pass "PX5"). Terms used throughout:</p>
+  <ul>
+    <li><dfn>overlay</dfn>: the <code>#ui-root</code> element, laid out at the game's logical 1280×720 and
+      CSS-scaled to cover the canvas exactly.</li>
+    <li><dfn>UIRoot</dfn>: the class that builds the overlay for a game session. It implements the
+      <code>IUI</code> service, so GameScene sees it as <code>services.ui</code>
+      (see <a href="#architecture">Architecture</a>).</li>
+    <li><dfn>UICtx</dfn>: a small context object handed to every UI component (services, scaler, tooltip, drag
+      manager, persisted layout, <code>sfx()</code>, <code>log()</code>, window open/toggle).</li>
+    <li><dfn>signature</dfn>: a string a window computes from the state it draws. Unchanged signature means no
+      re-render.</li>
+  </ul>
+
+  <pre class="mermaid">flowchart LR
+  subgraph emitters["Game systems"]
+    PR["Progression"]
+    GS["GameScene"]
+    NP["NpcManager / scripts"]
+  end
+  PR -- "player:levelup, item:gained…" --> BUS(("bus"))
+  GS -- "map:changed, ui:banner…" --> BUS
+  NP -- "ui:dialog, ui:shop" --> BUS
+  BUS --> ON["UIRoot.on() wrappers"]
+  ON --> BN["Banners"]
+  ON --> CL["ChatLog"]
+  ON --> DS["DialogWindow / ShopWindow"]
+  ON --> MD["markAllDirty()"]
+  MD --> WIN["windows + hotbar: dirty flag"]
+  LOOP["GameScene.update() → ui.update()"] --> WIN
+  WIN --> R["signature changed? → render()"]
+  ON -.->|"syncInputBlock"| GS</pre>
+
+  <!-- ===================================================================== -->
+  <h3 id="ui-uiroot">UIRoot: construction, bus, frame</h3>
+
+  <p>GameScene creates the UI last of all services (<code>s.ui = new UIRoot(this, s)</code>) and calls
+    <code>s.ui.update(time, delta)</code> at the end of every frame. The constructor follows the project rule that
+    constructors may build DOM and subscribe to the bus but must not call other services, because the services
+    object is still being filled in. It finds or creates <code>#ui-root</code>, makes the scaler, tooltip and drag
+    manager, builds the <code>UICtx</code>, then the HUD pieces, the windows, the dialog, shop, death prompt and
+    credits roll (<a data-src="src/ui/UIRoot.ts#L82">UIRoot.ts:82</a>). Construction order is the DOM order, so
+    it is also the stacking order for elements without a <code>z-index</code>.</p>
+
+  <p>Every bus subscription goes through one wrapper that catches handler errors and remembers the unsubscribe
+    function:</p>
+  <pre><code class="lang-ts">  private on&lt;K extends keyof GameEvents&gt;(ev: K, fn: (p: GameEvents[K]) =&gt; void) {
+    this.unsubs.push(bus.on(ev, (p) =&gt; { try { fn(p); } catch (e) { console.warn(`[ui] ${String(ev)} handler failed`, e); } }));
+  }</code></pre>
+  <p>(<a data-src="src/ui/UIRoot.ts#L137">UIRoot.ts:137</a>). The subscriptions
+    (<a data-src="src/ui/UIRoot.ts#L141">UIRoot.ts:141</a>) map game events to UI reactions:</p>
+  <table>
+    <thead><tr><th>Event</th><th>UI reaction</th></tr></thead>
+    <tbody>
+      <tr><td><code>player:changed</code></td><td>Mark hotbar and every window dirty.</td></tr>
+      <tr><td><code>player:damaged</code></td><td>HP gauge "hit" animation (the damage trail lingers 380 ms).</td></tr>
+      <tr><td><code>player:levelup</code></td><td>LEVEL UP! banner (Progression already logs the chat line).</td></tr>
+      <tr><td><code>player:job</code></td><td>"EXAM PASSED — YEAR n" banner, a Spellbook hint, closes the exam window.</td></tr>
+      <tr><td><code>item:gained</code>, <code>mesos:gained</code></td><td>Coalesced chat lines ("Gained Red Potion ×3", "+1,234 mesos").</td></tr>
+      <tr><td><code>map:changed</code></td><td>Rebuild the minimap, "Entered …" line.</td></tr>
+      <tr><td><code>quest:updated</code></td><td>Delayed "Assignment Complete!" banner, credits roll after graduation.</td></tr>
+      <tr><td><code>skill:cast</code> / <code>skill:fail</code></td><td>Hotbar slot flash / shake.</td></tr>
+      <tr><td><code>ui:dialog</code>, <code>ui:closeDialog</code>, <code>ui:shop</code></td><td>Open or close the NPC dialog or shop.</td></tr>
+      <tr><td><code>ui:banner</code>, <code>ui:log</code></td><td>Area banner, chat log (with the filters described in the Advanced block below).</td></tr>
+      <tr><td><code>ui:death</code></td><td>Close dialog and shop, show the respawn prompt.</td></tr>
+      <tr><td><code>ui:open</code></td><td>Open a named window (e.g. the Year-end Exam chooser from an NPC script).</td></tr>
+    </tbody>
+  </table>
+
+  <p><code>update()</code> (<a data-src="src/ui/UIRoot.ts#L357">UIRoot.ts:357</a>) runs the first-frame
+    <code>start()</code> (welcome line, saved volumes, auto-open Help for a new character), re-checks the scaler,
+    turns EXP deltas into a single coalesced "+N EXP" line, ticks the HUD and every window, and then decides whether
+    gameplay input must be blocked. The whole body is in a <code>try</code>; errors are logged at most once every 2 s,
+    so a broken window can never stop the game loop.</p>
+
+  <h4 id="ui-input-block">Blocking gameplay input</h4>
+  <p>Most windows do not pause anything: you can fight with the Spellbook open, as in MapleStory. Only a conversation,
+    a shop, the credits roll or a focused text field take the keyboard away from the game:</p>
+  <pre><code class="lang-ts">  private syncInputBlock() {
+    const want = this.dialog.isOpen || this.shop.isOpen || this.credits.isOpen || isTextInput(document.activeElement);
+    if (want === this.blocked) return;
+    this.blocked = want;
+    try { this.services.game.setInputBlocked(want); } catch { /* ignore */ }
+  }</code></pre>
+  <p>(<a data-src="src/ui/UIRoot.ts#L350">UIRoot.ts:350</a>). On the other side,
+    <a data-src="src/scenes/GameScene.ts#L118">GameScene.setInputBlocked</a> disables Phaser's global key capture
+    (so typed characters reach the input field), resets held keys and turns off player control:</p>
+  <pre><code class="lang-ts">  setInputBlocked(blocked: boolean) {
+    this.inputBlocked = blocked;
+    const kb = this.input.keyboard!;
+    if (blocked) { kb.disableGlobalCapture(); kb.resetKeys(); } else { kb.enableGlobalCapture(); }
+    this.s.player.setControlEnabled(!blocked &amp;&amp; !this.transitioning);
+  }</code></pre>
+
+  <h4 id="ui-keys">Window keys</h4>
+  <p><code>keyDown</code> (<a data-src="src/ui/UIRoot.ts#L243">UIRoot.ts:243</a>) is a <code>window</code>
+    listener. Its order of precedence: an open Controls window that is capturing a key wins
+    (<code>controlsClaimKey</code>); a focused text field only gets Esc (blur); the death prompt and credits roll
+    swallow everything; an open dialog handles Esc, Enter/Space and digit keys. Otherwise the key is looked up in the
+    rebindable bindings (<a href="#input">Input</a>): Esc or the menu action closes the topmost open window (highest
+    <code>z</code>) or opens the menu; the other actions toggle Spellbook, Inventory, Character, Assignments, Help
+    and the minimap. Key names in UI text always come from <code>keyLabel(getBinding(action))</code>, never a
+    hard-coded letter.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="ui-scaler">Keeping the overlay on the canvas</h3>
+
+  <p>Phaser runs with <code>scale: { mode: Phaser.Scale.FIT, autoCenter: CENTER_BOTH }</code>
+    (<a data-src="src/main.ts#L28">main.ts:28</a>): the 1280×720 canvas is scaled to fit the window and centred,
+    leaving bars on two sides. The overlay has to follow. <code>UIScaler</code>
+    (<a data-src="src/ui/scaler.ts#L15">scaler.ts:15</a>) sizes <code>#ui-root</code> to the logical 1280×720 once,
+    sets <code>transform-origin: 0 0</code>, and on every change copies the canvas rectangle onto it as a
+    <code>left/top</code> plus a uniform <code>scale()</code>:</p>
+  <pre><code class="lang-ts">  apply() {
+    const canvas = this.game.canvas;
+    if (!canvas) return;
+    const r = canvas.getBoundingClientRect();
+    if (r.width &lt; 1) return;
+    const parent = (this.root.offsetParent as HTMLElement | null) ?? document.body;
+    const p = parent.getBoundingClientRect();
+    const k = r.width / GAME_WIDTH;
+    const left = r.left - p.left + (parent.scrollLeft || 0);
+    const top = r.top - p.top + (parent.scrollTop || 0);
+    const key = `${left.toFixed(1)},${top.toFixed(1)},${k.toFixed(4)}`;
+    if (key === this.last) return;
+    // …
+    st.transform = `scale(${k})`;
+  }</code></pre>
+  <p>(<a data-src="src/ui/scaler.ts#L45">scaler.ts:45</a>). It is triggered by window <code>resize</code>, Phaser's
+    <code>Scale.Events.RESIZE</code>, a <code>ResizeObserver</code> on the canvas, and a cheap poll from
+    <code>update()</code> every 300 ms, because the margins that <code>autoCenter</code> adds do not fire the
+    observer. The cache key means an unchanged layout costs one <code>getBoundingClientRect</code>.</p>
+
+  <p>Because all UI code works in logical pixels, anything that reads mouse positions converts first:
+    <code>scaler.toLogical(clientX, clientY)</code> divides by <code>k</code>. Window dragging, the drag ghost and
+    tooltip placement all use it. In <a data-src="src/style.css#L6">style.css</a> the root itself has
+    <code>pointer-events: none</code> and its children <code>auto</code>, so empty overlay space never steals clicks
+    from the canvas.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="ui-building">Building DOM: dom.ts and context.ts</h3>
+
+  <p>There is no framework. <a data-src="src/ui/dom.ts#L7">dom.ts</a> provides <code>h(tag, props,
+    ...children)</code>, a hyperscript-style builder: <code>class</code>, <code>style</code> (string or object),
+    <code>text</code>, <code>onxxx</code> listeners and <code>data-*</code>/<code>aria-*</code> attributes, with
+    <code>null</code>/<code>false</code> children skipped. A window title bar is typical:</p>
+  <pre><code class="lang-ts">    this.titleBar = h('div', { class: 'ax-win-title' }, h('span', { class: 'ax-win-gem' }), this.titleText, this.titleExtra, closeBtn);
+    this.body = h('div', { class: 'ax-win-body' });
+    this.el = h('div', { class: `ax-window ${opts.className ?? ''}`, style: `width:${opts.width}px;display:none;` }, this.titleBar, this.body);</code></pre>
+  <p>(<a data-src="src/ui/window.ts#L38">window.ts:38</a>). The rest of <code>dom.ts</code> is small and used
+    everywhere: <code>setText</code>/<code>toggleClass</code> that only touch the DOM when the value changes,
+    <code>loadJson</code>/<code>saveJson</code> that swallow storage errors, number and time formatters,
+    <code>cssColor</code>/<code>shade</code> for turning <code>0xRRGGBB</code> data colours into CSS,
+    <code>safe(fn, fallback)</code> for calls into other services, and <code>isTextInput</code>.</p>
+
+  <p><a data-src="src/ui/context.ts#L10">context.ts</a> defines <code>UICtx</code> and <code>Layout</code>, the
+    persisted UI preferences in <code>localStorage["arcana-ui-layout-v1"]</code>: window positions
+    (<code>pos:&lt;id&gt;</code>) and flags such as the minimap toggle, the Spellbook sort and per-character
+    "help seen" and "credits seen". <a data-src="src/ui/session.ts#L5">session.ts</a> holds two module-level flags
+    that cross the Title → Game boundary: <code>markNewCharacter()</code> (so the HUD auto-opens Help once) and
+    <code>markReturnToSelect()</code> (so Quit to Title lands on Character Select).</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="ui-windows">Windows: frame, z-order and dragging</h3>
+
+  <p>Every window extends <code>UIWindow</code> (<a data-src="src/ui/window.ts#L20">window.ts:20</a>). The base class
+    owns the frame (title bar with a gem, title text, an extra slot such as the SP pill, a close button), open/close
+    with <code>ui_open</code>/<code>ui_close</code> sounds, persistent position, and the render loop. Subclasses
+    implement <code>render()</code> and usually <code>signature()</code>:</p>
+  <pre><code class="lang-ts">  tick(time: number, delta: number) {
+    if (!this.isOpen) return;
+    if (this.dirty) {
+      this.dirty = false;
+      let sig: string;
+      try { sig = this.signature(); } catch { sig = `x${++sigCounter}`; }
+      if (sig !== this.lastSig) {
+        this.lastSig = sig;
+        try { this.render(); } catch (e) { console.warn(`[ui] ${this.id} render failed`, e); }
+        // Content height can change (tabs, dialog options): keep the whole window above the HUD.
+        if (!this.dragOff) this.clampIntoView('v');
+      }
+    }
+    try { this.frame(time, delta); } catch { /* never throw in update */ }
+  }</code></pre>
+  <p>(<a data-src="src/ui/window.ts#L86">window.ts:86</a>). Two levels of laziness: a window only checks its
+    signature when something marked it dirty (a bus event via <code>markAllDirty()</code>, or its own button handler
+    via <code>invalidate()</code>), and only rebuilds its DOM when the signature differs. Signatures are usually a
+    <code>JSON.stringify</code> of the state slices the window shows, for example the inventory's
+    <code>[tab, inventory, mesos, level, job]</code>. <code>render()</code> rebuilds the body with
+    <code>replaceChildren</code>; per-frame work that must not rebuild (the dialog typewriter, cooldown text) goes in
+    <code>frame()</code>.</p>
+
+  <p><strong>Z-order.</strong> <code>bringToFront()</code> sets <code>z-index</code> to <code>ctx.nextZ()</code>, a
+    counter that starts at 100, on open and on any pointerdown inside the window. HUD pieces use fixed small
+    <code>z-index</code> values in <a data-src="src/ui/ui.css#L238">ui.css</a> (vignette 5, chat 14, minimap and
+    buffs 15, Trial Hall panel 16, status bar 20, EXP bar 21, hotbar 22, banners 30–31), so any window is drawn above
+    the HUD. The death prompt (50000), tooltip (60000) and drag ghost (70000) sit above windows.</p>
+
+  <p><strong>Keeping windows above the HUD</strong> also means geometry. <code>clampIntoView</code>
+    (<a data-src="src/ui/window.ts#L118">window.ts:118</a>) keeps at least 80 px of the window horizontally on screen
+    while dragging, pushes it fully on screen when it opens, and keeps its bottom above <code>HUD_TOP</code>
+    (720 − 66 = 654 px, the top of the status bar) minus 6 px whenever it re-renders or a drag ends, so a window
+    that grows (a new tab, more dialog options) never slides under the hotbar.</p>
+
+  <p><strong>Dragging a window</strong> uses pointer events on the title bar with
+    <code>setPointerCapture</code>, converting through <code>scaler.toLogical</code>; the final position is saved to
+    <code>Layout</code>. <strong>Dragging content</strong> (spells and potions to the hotbar, hotbar to hotbar) is a
+    separate system, <a data-src="src/ui/drag.ts#L18">DragManager</a>. <code>drag.bind(el, () =&gt; payload)</code>
+    arms a source; a drag only starts after the pointer moves 5 px, so clicks and double-clicks still work. While
+    dragging, a ghost icon follows the pointer, the slot under it gets <code>ax-drop-hover</code>, and hovering a
+    hotbar page button dispatches a custom <code>ax-drag-over</code> event that flips the page. On release
+    <code>UIRoot.onDrop</code> (<a data-src="src/ui/UIRoot.ts#L280">UIRoot.ts:280</a>) swaps or sets hotbar entries;
+    dropping a hotbar entry onto the game world (not a window, hotbar or status bar) clears that slot. A
+    capture-phase <code>click</code> listener eats the click that the browser fires at the end of a drag.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="ui-hud">The HUD</h3>
+
+  <p><a data-src="src/ui/hud.ts">hud.ts</a> holds four always-on pieces.</p>
+  <ul>
+    <li><strong>StatusBar</strong> (<a data-src="src/ui/hud.ts#L60">hud.ts:60</a>): level, name and
+      "Year n · Job", HP and MP gauges, and the quick-menu buttons (Char, Items, Skills, Tasks, Help, Menu) whose key
+      hints follow the bindings. A bag badge appears when the inventory is within 4 stacks of
+      <code>MAX_INVENTORY_STACKS</code>, and a one-time banner fires when it is full. The full-width EXP bar is a
+      separate element at the very bottom.</li>
+    <li><strong>Gauge</strong> (<a data-src="src/ui/hud.ts#L20">hud.ts:20</a>): each bar has a fill and a
+      <dfn>lag layer</dfn>. The fill eases toward the target (rate <code>dt/1000 × 14</code>); the lag layer holds for
+      380 ms after a hit and then drains at least 25%/s, which draws the classic damage trail. Both are
+      <code>transform: scaleX()</code>, so updates never trigger layout.</li>
+    <li><strong>Hotbar</strong> (<a data-src="src/ui/hud.ts#L163">hud.ts:163</a>): 24 entries in two pages of 12
+      (<code>HOTBAR_SIZE</code>, <code>HOTBAR_PAGE_SIZE</code>). Only 12 slot elements exist; each carries its
+      absolute index (<code>page × 12 + i</code>) in <code>data-hotbar-slot</code>, rewritten on a page flip, so drops
+      and swaps work across pages. Visual order mirrors the keyboard, two rows <code>Q W E R T 1 / A S D F G 2</code>
+      (<code>HOTBAR_ORDER = [0, 1, 2, 3, 4, 10, 5, 6, 7, 8, 9, 11]</code>). Page changes go through
+      <code>game.setHotbarPage()</code>, and the bar follows the <code>hotbar:page</code> event. Right-click clears a
+      slot.</li>
+    <li><strong>BuffTray</strong> and <strong>Vignette</strong>: buff icons with a conic countdown ring that blink in
+      their last 5 s and cancel on right-click; a red screen-edge vignette that fades in below 30% HP and pulses.</li>
+  </ul>
+
+  <p><strong>Cooldown overlays.</strong> Each frame, for every skill slot on the current page, the hotbar reads
+    <code>skills.getCooldownRemaining/Total</code> and paints a <code>conic-gradient</code> wedge, only when the whole
+    percentage changes. The text shows whole seconds above 1 s and tenths below. When a cooldown ends the slot plays an
+    <code>ax-ready</code> blink; a slot whose MP cost exceeds current MP is dimmed.</p>
+
+  <p><strong>Potion fallback.</strong> A potion slot keeps working after that potion runs out. The hotbar shows the
+    item that <code>useItem</code> would actually drink, following the same strongest-first order:</p>
+  <pre><code class="lang-ts">  private displayedItem(id: string): string {
+    const p = this.ctx.s.progression;
+    if (p.countItem(id) &gt; 0) return id;
+    // Match useItem's strongest-first potion kinds; mixed HP/MP elixirs stay separate.
+    const kinds = [['white_potion', 'orange_potion', 'red_potion'], ['mana_elixir', 'blue_potion']];
+    return kinds.find(kind =&gt; kind.includes(id))
+      ?.find(candidate =&gt; p.countItem(candidate) &gt; 0 &amp;&amp; Registry.item(candidate)?.consumable) ?? id;
+  }</code></pre>
+  <p>(<a data-src="src/ui/hud.ts#L270">hud.ts:270</a>). The slot then shows the substitute's icon and count with an
+    <code>ax-potion-fallback</code> marker, and its tooltip says "Out of Red Potion — using Orange Potion".</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="ui-window-list">The windows</h3>
+
+  <table>
+    <thead><tr><th>Window (key)</th><th>File</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td>Spellbook (K)</td><td><a data-src="src/ui/skillsWindow.ts#L40">skillsWindow.ts</a></td>
+        <td>One tab per school Year in your lineage, plus locked previews of what is ahead (an Apprentice previews all
+          five Schools). Two-column spell cards, kind filter chips, sort toggle, SP and "Invested n / capacity" header,
+          per-Year Unlearn.</td></tr>
+      <tr><td>Inventory (I)</td><td><a data-src="src/ui/inventoryWindow.ts#L14">inventoryWindow.ts</a></td>
+        <td>Equip / Use / Etc tabs, a 6-column grid of at least 24 cells, double-click to use or equip, drag consumables
+          to the hotbar, mesos footer. Gear you can't wear is marked <code>ax-unusable</code>.</td></tr>
+      <tr><td>Character (P)</td><td><a data-src="src/ui/statsWindow.ts">statsWindow.ts</a></td>
+        <td>Base stats with AP buttons, derived stats, a 3×3 equipment paper-doll around the portrait.</td></tr>
+      <tr><td>Assignments (J)</td><td><a data-src="src/ui/questsWindow.ts#L13">questsWindow.ts</a></td>
+        <td>In Progress / Available / Handed in, with objective progress; re-renders when bindings change because quest
+          text carries live key hints.</td></tr>
+      <tr><td>Menu (Esc), Help (H), Year-end Exam</td><td><a data-src="src/ui/miscWindows.ts#L28">miscWindows.ts</a></td>
+        <td>Menu: Resume, Controls, Settings (SFX/music sliders, shake, damage-number size, familiar), How to Play, Save,
+          Quit to Title with confirm. Help: controls cheat-sheet. <code>JobsWindow</code>: the School / Year chooser,
+          widened to fit five cards when declaring a School.</td></tr>
+      <tr><td>Controls</td><td><a data-src="src/ui/controlsWindow.ts#L17">controlsWindow.ts</a></td>
+        <td>Keyboard rebinding with "Press a key…" capture and the gamepad map. Not in UIRoot's window list; it
+          re-renders itself and swallows key events in the capture phase while capturing.</td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>Spellbook details.</strong> The filter chips are by spell <em>kind</em>, not School: All, Attacks, Buffs
+    (buffs and movement spells), Passives, Summons, each with a count, disabled when empty
+    (<a data-src="src/ui/skillsWindow.ts#L21">skillsWindow.ts:21</a>). Tabs carry the School:
+    "Year 2 · Pyromancer", tinted by <code>BRANCH_COLORS</code>. The sort toggle cycles Book order → Learnable first
+    → Highest level, and "Learnable first" is remembered in <code>Layout</code>. Shift-clicking <kbd>+</kbd> spends up
+    to 5 SP. Double-clicking a learned active spell auto-places it: current page first, skipping the
+    <kbd>1</kbd>/<kbd>2</kbd> potion slots unless nothing else is free
+    (<a data-src="src/ui/skillsWindow.ts#L258">skillsWindow.ts:258</a>). <strong>Unlearn Year</strong> is a
+    two-click confirm that spends one Tome of Unlearning and calls <code>progression.respecTier(tier)</code>; the
+    button re-reads live state on the confirming click and refunds the tome if nothing was refunded
+    (<a data-src="src/ui/skillsWindow.ts#L157">skillsWindow.ts:157</a>; mechanics in
+    <a href="#progression">Progression</a>).</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="ui-dialogs">Dialogs, shops and the death prompt</h3>
+
+  <p><a data-src="src/ui/dialogs.ts">dialogs.ts</a> holds the three modal-ish surfaces. NPC scripts never touch them
+    directly; they emit <code>ui:dialog</code> or <code>ui:shop</code> with a spec (see <a href="#story">Story</a>).</p>
+  <ul>
+    <li><strong>DialogWindow</strong> (<a data-src="src/ui/dialogs.ts#L15">dialogs.ts:15</a>): portrait, name and
+      title on the left; text typed at 70 characters per second on the right. The typed text sits over an invisible
+      copy of the full text, so the box never resizes while typing. Click or Enter/Space skips; digits pick options.
+      Each new spec increments <code>gen</code>, which lets <code>choose()</code> tell whether an option's action
+      opened a follow-up dialog (then it must not close) or closed this one.</li>
+    <li><strong>ShopWindow</strong> (<a data-src="src/ui/dialogs.ts#L111">dialogs.ts:111</a>): Buy / Sell tabs with
+      quantity steppers (−, +, +10). Selling equipment, or a stack worth 1,000 mesos or more, needs a second click
+      ("Sure?"). <strong>Sell junk</strong> sells materials no unfinished assignment needs (another School's exam
+      materials count as junk once you have declared) and unequipped gear at least 10 levels below you, again with a
+      confirm that re-checks the list before selling.</li>
+    <li><strong>DeathModal</strong> (<a data-src="src/ui/dialogs.ts#L286">dialogs.ts:286</a>): "You have fallen…"
+      with Return to Town, which calls <code>progression.respawn()</code>. <code>UIRoot.update</code> also shows it if
+      the player is dead but <code>ui:death</code> was missed.</li>
+  </ul>
+
+  <h4 id="ui-feedback">Banners, chat log, tooltip, minimap</h4>
+  <ul>
+    <li><a data-src="src/ui/banners.ts#L8">Banners</a>: an area banner near the top (map name or "Assignment
+      Complete!", 2.8 s) and big centred banners (LEVEL UP!, EXAM PASSED) on a queue. An area banner that arrives
+      while a big one is showing waits for it.</li>
+    <li><a data-src="src/ui/chatlog.ts#L11">ChatLog</a>: bottom-left system log, up to 60 lines, lines fade after
+      9 s.</li>
+    <li><a data-src="src/ui/tooltip.ts#L8">Tooltip</a>: one shared element. <code>attach(el, build)</code> builds the
+      content lazily on hover, flips to the other side of the cursor near screen edges, hides during a drag, and
+      <code>check()</code> hides it each frame if its anchor was removed by a re-render.</li>
+    <li><a data-src="src/ui/minimap.ts#L10">Minimap</a>: a 2D canvas (at most 216×112, drawn at 2× resolution) with
+      a static layer cached per map and player/NPC/monster dots refreshed about 12 times a second.</li>
+    <li><a data-src="src/ui/info.ts">info.ts</a>: shared tooltip builders (<code>skillTooltip</code>,
+      <code>itemTooltip</code>), colours and names per School, and the derived-stat table.</li>
+  </ul>
+
+  <details class="advanced"><summary>Advanced: deduplicating logs and banners</summary>
+    <p>Several systems announce the same moment, and the UI is where the repetition is removed. The rules, from the
+      UI QA pass (<code>c04ef65</code>):</p>
+    <ul>
+      <li><strong>One owner per message.</strong> Progression logs "Level up!" and quest accept / ready / turn-in lines;
+        UIRoot adds only banners. Before the QA pass both logged.</li>
+      <li><strong>EXP is summed, not per kill.</strong> <code>ui:log</code> lines matching <code>/^\+[\d,]+ EXP$/</code>
+        are dropped; <code>trackExp()</code> diffs <code>level/exp</code> each frame (across level-ups, using
+        <code>expToNext</code>) and feeds <code>chat.gain('exp', …)</code>, which sums gains arriving within
+        2.6 s into one line.</li>
+      <li><strong>Repeats collapse.</strong> <code>ChatLog.push</code> searches the last 6 lines for the same text
+        within 5.2 s and turns it into "text (×n)", moving it to the bottom.</li>
+      <li><strong>Talk-only story steps are silent.</strong> A step accepted and handed in within one conversation never
+        shows "Ready to hand in", and "Assignment Complete!" waits 1 s
+        (<code>COMPLETE_DELAY_MS</code>) and is cancelled if the quest was handed in meanwhile.</li>
+      <li><strong>Banners collapse.</strong> <code>Banners.enqueue</code> updates a showing LEVEL UP! banner in place
+        (with a bump animation) instead of queueing another, so <code>arcana.levelTo(30)</code> shows one banner.
+        Several job advancements at once keep only the newest.</li>
+    </ul>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h3 id="ui-title">Title screen and Character Select</h3>
+
+  <p>The Title screen is two layers. <a data-src="src/scenes/TitleScene.ts#L37">TitleScene.create()</a> draws the
+    backdrop in Phaser and plays the <code>title</code> music; <a data-src="src/ui/titleMenu.ts#L68">TitleMenu</a>
+    builds the DOM menu in the same <code>#ui-root</code> with its own <code>UIScaler</code>.</p>
+
+  <p><strong>The backdrop</strong> is composed from world art that BootScene already loaded: the sanctum sky, far
+    mountains and mid ruins drifting as integer-scaled <code>TileSprite</code>s, an additive tinted copy of the sky to
+    lift it to moonlit indigo, a ×4 moon with a stepped halo, 90 twinkling pixel stars, shooting stars every 3.8 s,
+    recoloured storm clouds and the mage tower (<a data-src="src/scenes/TitleScene.ts#L119">TitleScene.ts:119</a>).
+    Drift offsets are floored to whole source pixels every frame (<code>Math.floor((t / 1000) * speed)</code>) so
+    nothing shimmers. If those textures are missing, the scene falls back to the procedural night sky in stepped colour
+    bands and, on WebGL, adds Phaser's Pixelate post-FX.</p>
+
+  <p><strong>The menu</strong> has four views: <code>main</code> (Continue, Character Select, New Game),
+    <code>select</code>, <code>new</code> (name entry) and <code>confirm</code> (delete or replace).
+    Character Select shows the six save slots (<code>SAVE_SLOTS = 6</code>) as cards in 3 columns with level, Year,
+    job, map and play time; the selected card animates the student's idle cycle at 8 fps from frames read out of the
+    player sheet with <code>textures.getBase64</code>. Keys: arrows choose, Enter plays, <kbd>N</kbd> new,
+    <kbd>Del</kbd> delete, Esc back. Names must be 2–12 characters of letters, digits, space,
+    <code>- _ '</code>. Starting a game calls <code>markReturnToSelect()</code>, so Quit to Title comes back to the
+    slot just played. While the name field is focused, the menu disables Phaser's keyboard capture
+    (<a data-src="src/ui/titleMenu.ts#L536">titleMenu.ts:536</a>). The file also starts loading both pixel fonts at
+    import time, because Phaser name tags and damage digits rasterise text into canvases and need the real font before
+    BootScene's <code>document.fonts.ready</code> resolves.</p>
+
+  <h4 id="ui-credits">The graduation credits roll</h4>
+  <p><a data-src="src/ui/creditsRoll.ts">creditsRoll.ts</a> is armed when the graduation quest is first turned in and
+    starts once no dialog, shop or death prompt is in the way. It is a full-screen overlay driven by
+    <code>frame(delta)</code> from <code>UIRoot.update</code>, not CSS animations, so it follows the game loop: fade-in
+    (1 s), title cards, then a roll that scrolls 52 px/s in whole 2 px steps. The art credits are not hard-coded:
+    <code>loadArtCredits()</code> fetches each domain's <code>CREDITS.md</code> from <code>public/assets</code>
+    (characters, monsters, world, vfx, vfx/holy, ui) and <code>parseCreditsMarkdown</code> reads every table with
+    Author and License columns (<a data-src="src/ui/creditsRoll.ts#L79">creditsRoll.ts:79</a>). It plays the title
+    theme and restores the map's track afterwards, blocks gameplay input while open, and is remembered per save slot and
+    character name so it plays once.</p>
+
+  <!-- ===================================================================== -->
+  <h3 id="ui-skin">The pixel skin: ui.css and uiIcons.ts</h3>
+
+  <p><a data-src="src/ui/ui.css">ui.css</a> prefixes every class with <code>ax-</code> and keeps all colours and
+    fonts in CSS variables on <code>#ui-root</code> (<a data-src="src/ui/ui.css#L17">ui.css:17</a>):</p>
+  <pre><code class="lang-css">#ui-root {
+  --ax-gold: #dad45e;
+  --ax-ink: #deeed6;
+  --ax-k: #140c1c;            /* DB16 outline black */
+  --ax-indigo: #2b2e66;
+  --ax-hp: #d04648;
+  --ax-mp: #597dce;
+  /* … */
+  --ax-font: "Kenney Pixel", "Courier New", monospace;
+  --ax-head: "Kenney Mini", "Kenney Pixel", monospace;
+  --ax-ts: 1px 1px 0 var(--ax-k);
+  --ax-outline: -2px 0 0 var(--ax-k), 2px 0 0 var(--ax-k), 0 -2px 0 var(--ax-k), 0 2px 0 var(--ax-k), 2px 2px 0 var(--ax-k), -2px 2px 0 var(--ax-k), 2px -2px 0 var(--ax-k), -2px -2px 0 var(--ax-k);
+  --ax-img: url("/assets/ui/golden/panel.png");
+  /* … */
+  -webkit-font-smoothing: none;
+  image-rendering: pixelated;
+}</code></pre>
+  <p>The rules the file follows (stated in its header):</p>
+  <ul>
+    <li><strong>Fonts.</strong> Kenney Pixel at 16 px is exactly one font pixel per CSS pixel; Kenney Mini is used at
+      multiples of 8 px (16/24/32/48/64/96) for headings and banners. Bold and italic are forced off, and font smoothing
+      is disabled.</li>
+    <li><strong>Frames.</strong> Windows, the hotbar, minimap and title panel are 9-slice frames cut from Buch's CC0
+      "Golden UI", palette-swapped to indigo, drawn with <code>border-image: var(--ax-img) 7 9 7 10 fill / 14px 18px
+      14px 20px</code>, i.e. each source pixel at 2×. Buttons use the gold button images in normal, hover and pressed
+      states; slots, wells, tooltips, tabs and gauge rims are hand-made 9-slices in the same palette.</li>
+    <li><strong>Outlines.</strong> Text over the game uses <code>--ax-outline</code>, an 8-direction 2 px
+      <code>text-shadow</code> that draws a hard pixel outline instead of a blur.</li>
+    <li><strong>No smooth effects.</strong> No blurred shadows, rounded corners or smooth gradients: bevels are inset
+      <code>box-shadow</code>s, drop shadows have zero blur, and animations use <code>steps()</code>.</li>
+  </ul>
+
+  <p><a data-src="src/ui/uiIcons.ts#L36">uiIcons.ts</a> turns icon specs and character looks into DOM elements.
+    <code>iconEl(spec, size)</code> asks the art painter (<code>iconDataUrl</code>, see <a href="#art">Art
+    pipeline</a>) for a data URL at twice the display size and renders an <code>&lt;img data-ik&gt;</code>; if
+    there is no painter output it falls back to a CSS circle with the label's initial. Icons are drawn before the pixel
+    icon sheet has loaded, so the module subscribes once to <code>onPixelIconsReady</code> and swaps the
+    <code>src</code> of every live <code>img.ax-icon[data-ik]</code> when it arrives.
+    <code>portraitEl(look, size)</code> does the same for dialog and exam portraits, with a CSS silhouette (robe, head,
+    hat by <code>hatStyle</code>) as the fallback.</p>
+
+  <details class="advanced"><summary>Advanced: subscriber leaks and destroy()</summary>
+    <p>UIRoot is created once per GameScene run and destroyed on Quit to Title (GameScene's teardown calls
+      <code>s.ui.destroy()</code>). Anything the UI registers outside its own elements outlives the elements unless it
+      is removed, and a leaked closure keeps the whole old UI (and its services object) alive. The inventory of what
+      <code>destroy()</code> (<a data-src="src/ui/UIRoot.ts#L384">UIRoot.ts:384</a>) undoes:</p>
+    <ul>
+      <li>every bus subscription (<code>unsubs</code>) and pending "Assignment Complete" timers;</li>
+      <li>the <code>window</code> keydown listener and the root's contextmenu / dragstart / mousedown listeners;</li>
+      <li>Phaser's keyboard capture, re-enabled if the UI was blocking input when torn down;</li>
+      <li>each component's own: the status bar's <code>onPixelIconsReady</code> and <code>onBindingsChanged</code>
+        unsubscribers, the hotbar's <code>hotbar:page</code> subscription, the quests window's bindings listener, the
+        menu's settings listener and the Controls window instance, banner timers, the drag manager's capture-phase click
+        listener, the scaler's resize listeners and <code>ResizeObserver</code>.</li>
+    </ul>
+    <p><code>onPixelIconsReady</code> returning an unsubscribe function is itself a fix from the final pixel QA
+      (<code>67893fe</code>, "icon subscriber leak"): the status bar used to register a callback per UIRoot that was
+      never released. When you add a component, give it a <code>destroy()</code>, call it from UIRoot's
+      <code>destroy()</code>, and route every <code>bus.on</code> / <code>onXxxChanged</code> through something that
+      remembers the unsubscriber. GameScene's teardown (on scene <code>SHUTDOWN</code>) calls
+      <code>bus.removeAll()</code> after <code>ui.destroy()</code>, which is a backstop for bus listeners only:
+      <code>window</code>/<code>document</code> listeners, the icon-sheet callbacks and the bindings and settings
+      listeners live outside the bus and are released only by <code>destroy()</code>. Two more edges: the
+      <code>uiIcons</code> module-level subscription and caches are intentionally global (shared by Title and Game), and
+      <code>destroy()</code> is idempotent (<code>destroyed</code> flag), so a second call is harmless.</p>
+  </details>
+
+  <details class="advanced"><summary>Advanced: keyboard focus, F5 and other browser defaults</summary>
+    <ul>
+      <li><strong>Rebindable keys can collide with browser shortcuts.</strong> If a player binds the Spellbook to
+        <kbd>F5</kbd>, the browser would reload the page. <code>keyDown</code> calls <code>preventDefault()</code> for
+        any key bound to a UI action, before the <code>e.repeat</code> check, so even auto-repeat never reaches the
+        browser (<a data-src="src/ui/UIRoot.ts#L261">UIRoot.ts:261</a>). Gameplay keys get the same treatment from
+        Phaser's global key capture, which is why blocking input must disable that capture.</li>
+      <li><strong>Buttons never take focus.</strong> A root-level <code>mousedown</code> handler calls
+        <code>preventDefault()</code> on buttons. Otherwise a clicked button keeps focus and the next <kbd>Space</kbd>
+        (jump) or <kbd>Enter</kbd> clicks it again. The title menu does the same for buttons and save cards, and settings
+        sliders blur themselves on release.</li>
+      <li><strong>Synthetic keys.</strong> The gamepad bridge dispatches keyboard events on <code>window</code>. Those
+        reach listeners in registration order rather than capture-phase first, which is why UIRoot explicitly asks
+        <code>controlsClaimKey(e)</code> before acting (<a data-src="src/ui/controlsWindow.ts#L222">controlsWindow.ts:222</a>).</li>
+      <li><strong>Right-click and native drag</strong> are disabled on the overlay (<code>contextmenu</code>,
+        <code>dragstart</code>), because right-click means "clear slot" or "cancel buff" here.</li>
+    </ul>
+  </details>
+
+  <details class="advanced"><summary>Advanced: why DOM instead of Phaser UI, and what it costs</summary>
+    <p>The architecture fixes the split (DOM for windows and HUD, Phaser for damage numbers and name tags); these are the
+      trade-offs it buys.</p>
+    <ul>
+      <li><strong>Gains.</strong> Text layout, wrapping and scrolling lists (the Spellbook holds up to 24 spells per
+        School), real <code>&lt;input&gt;</code> elements for names and sliders, hover and right-click events per element,
+        9-slice frames through <code>border-image</code>, and windows that stay crisp at any canvas scale because the
+        browser re-rasterises text after the CSS <code>scale()</code>. None of it touches the WebGL renderer, so a busy
+        Spellbook costs no draw calls.</li>
+      <li><strong>Costs.</strong> Two coordinate systems (client pixels vs. logical pixels: always go through
+        <code>toLogical</code>); DOM writes are expensive enough that the HUD caches every value it writes
+        (<code>setText</code>, <code>toggleClass</code>, <code>lastCd</code>, signatures); and the overlay cannot sit
+        <em>between</em> world layers, so anything that must be occluded by sprites has to be a Phaser object.</li>
+      <li><strong>Failure modes.</strong> The UI must survive missing services and data: calls into other systems are
+        wrapped in <code>safe()</code>, render errors are caught per window, and a failed icon or portrait falls back to
+        CSS. The z-index counter never resets during a session; it would need about 50,000 window raises to pass the
+        death prompt's 50000, so in practice windows stay below it.</li>
+    </ul>
+  </details>
+</section>

@@ -1,0 +1,270 @@
+<section id="overview" data-title="Overview and tech stack" data-summary="What The Academy is, the stack and why, how to run it, the arcana debug console, the repo map, the three pages and a reading order.">
+  <h2>Overview and tech stack</h2>
+  <p>
+    The Academy is a MapleStory-style 2D side-scroller in 16-bit pixel art where every character is a mage. It runs in
+    the browser on Phaser 3 with Arcade physics, draws its windows and HUD as ordinary HTML on top of the game canvas,
+    and synthesizes all of its sound live with the Web Audio API. This section is the map to read before anything else:
+    what the game is, which tools it is built with and why, how to run it and poke at it from the console, where
+    things live in <code>src/</code>, and the order in which to read the rest of these docs.
+  </p>
+
+  <h3 id="overview-premise">What the game is</h3>
+  <p>
+    You play a student at a magic school. Each <dfn>job</dfn> (the MapleStory term for a character class) is a
+    <dfn>school Year</dfn>. Everyone starts in Year 1 as an <strong>Apprentice</strong> and learns the core curriculum.
+    At level 10 you <strong>declare one of five Schools</strong> (Fire, Ice, Lightning, Holy or Shadow) with Headmistress
+    Maelis. Years 3 and 4 deepen that School, and you reach each by passing a <dfn>Year-end Exam</dfn> (a trial quest
+    given by your School's Professor). The story ends with your <strong>Final Thesis</strong>: defeating the Lich
+    Archon (a level 48 boss) in the Arcane Sanctum, the Forbidden Wing, followed by graduation. Levels stop at 50
+    (<code>MAX_LEVEL</code> in <a data-src="src/core/constants.ts#L19">constants.ts:19</a>).
+  </p>
+  <table>
+    <thead><tr><th>Year (tier)</th><th>Level</th><th>Fire</th><th>Ice</th><th>Lightning</th><th>Holy</th><th>Shadow</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>1</td><td colspan="5">Apprentice (everyone; 10 core spells)</td></tr>
+      <tr><td>2</td><td>10</td><td>Pyromancer</td><td>Cryomancer</td><td>Stormcaller</td><td>Cleric</td><td>Occultist</td></tr>
+      <tr><td>3</td><td>25</td><td>Flamebinder</td><td>Frostbinder</td><td>Stormbinder</td><td>Priest</td><td>Necromancer</td></tr>
+      <tr><td>4</td><td>40</td><td>Inferno Sage</td><td>Glacial Sage</td><td>Tempest Sage</td><td>Hierophant</td><td>Umbral Sage</td></tr>
+    </tbody>
+  </table>
+  <p>
+    The level thresholds are <code>JOB_LEVELS = { 1: 1, 2: 10, 3: 25, 4: 40 }</code>
+    (<a data-src="src/core/constants.ts#L20">constants.ts:20</a>); the jobs themselves are in
+    <a data-src="src/data/jobs.ts#L14">src/data/jobs.ts</a>. Each School has 24 spells, 8 per Year from Year 2 to 4,
+    with two ultimates in Year 4. Skill points come at 3 per level, so nobody can max everything and builds are choices
+    (a Tome of Unlearning lets you respec a Year). The world is eight maps: the campus (Academy Grounds), six field zones
+    from Whisperwood (levels 1–8) to the Arcane Sanctum (45–50), and the Trial Hall wave arena. Five rare
+    <dfn>field bosses</dfn> roam the field zones, one per zone from Whisperwood to Stormspire Peak.
+  </p>
+  <aside class="note">
+    The project started as <em>Arcana Story</em> and was re-themed in Phase 4. Ids were deliberately left alone so old
+    saves keep loading: the town is still <code>mistvale</code>, the Headmistress is <code>elder_maelis</code>, a School
+    is a <code>Branch</code> in the types, the save key is <code>arcana-story-save-v1</code> and the debug global is
+    <code>window.arcana</code>. When the UI says "Assignment", the code says <code>quest</code>; "Year" is a job
+    <code>tier</code>; "Professor" is an NPC.
+  </aside>
+
+  <h3 id="overview-stack">The tech stack, and why</h3>
+  <table>
+    <thead><tr><th>Piece</th><th>What</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Language</td><td>TypeScript 5.8, <code>"strict": true</code>, target ES2022, bundler module resolution (<a data-src="tsconfig.json#L7">tsconfig.json</a>)</td><td>The whole game was built by parallel agents against one contract file; strict types are what made their pieces fit.</td></tr>
+      <tr><td>Engine</td><td>Phaser 3.90 with <dfn>Arcade physics</dfn> (axis-aligned boxes, gravity, static bodies)</td><td>A platformer needs nothing heavier than boxes and one-way platforms. Phaser also supplies the loader, texture manager, animations, cameras, tweens and particles.</td></tr>
+      <tr><td>Build</td><td>Vite 6 (<code>vite</code>, <code>vite build</code>), three HTML entry points</td><td>Instant dev server with hot reload; one build makes the game, the handbook and these docs.</td></tr>
+      <tr><td>UI</td><td>A <dfn>DOM overlay</dfn>: HTML windows and HUD in <code>#ui-root</code>, laid out at 1280×720 and scaled over the canvas</td><td>Text, scrolling lists, drag and drop, tooltips and text input are far easier in HTML/CSS than in canvas. Damage numbers and name tags stay in Phaser because they live in world space.</td></tr>
+      <tr><td>Art</td><td>16-bit pixel art from CC0 / CC-BY / OGA-BY packs (196 PNGs, about 1.5 MB in <code>public/assets/</code>), sliced, palette-swapped and integer-scaled in code; the older procedural painters remain as a fallback</td><td>A coherent SNES-era look without commissioning art. Every pack is credited in <a data-src="CREDITS.md">CREDITS.md</a>.</td></tr>
+      <tr><td>Audio</td><td>Web Audio synthesis: SFX voices and procedural music, no audio files (<a data-src="src/systems/AudioSystem.ts#L1">AudioSystem.ts</a>)</td><td>Zero download weight and no licensing questions.</td></tr>
+      <tr><td>Dependencies</td><td>Runtime: <code>phaser</code> only. Dev: <code>typescript</code>, <code>vite</code> (<a data-src="package.json#L12">package.json</a>)</td><td>Fewer moving parts; nothing to audit or upgrade except Phaser.</td></tr>
+    </tbody>
+  </table>
+  <p>The game canvas and the UI overlay are siblings in one stage element (<a data-src="index.html#L10">index.html:10</a>):</p>
+  <pre><code class="lang-html">    &lt;div id="stage"&gt;
+      &lt;div id="game"&gt;&lt;/div&gt;
+      &lt;div id="ui-root"&gt;&lt;/div&gt;
+    &lt;/div&gt;
+    &lt;script type="module" src="/src/main.ts"&gt;&lt;/script&gt;</code></pre>
+  <p>
+    Phaser creates its canvas inside <code>#game</code> and scales it to fit the window
+    (<code>Scale.FIT</code>; see <a href="#boot">Scenes and boot</a>). <code>UIScaler</code> in
+    <a data-src="src/ui/scaler.ts#L15">src/ui/scaler.ts</a> keeps <code>#ui-root</code> at a logical 1280×720 and
+    scales it to cover the canvas exactly, so UI code can use game-pixel coordinates. The overlay itself has
+    <code>pointer-events: none</code>; only its children take clicks, so the game underneath still receives input
+    (<a data-src="src/style.css#L6">style.css:6</a>).
+  </p>
+  <details class="advanced">
+    <summary>Advanced: consequences of the stack choices</summary>
+    <ul>
+      <li><strong>Two rendering worlds.</strong> Anything in the DOM is drawn after (on top of) the whole canvas, so a
+        window can never sit behind a sprite, and a Phaser object can never sit above a window. World-anchored UI
+        (name tags, boss bars, damage numbers) is therefore Phaser; screen-anchored UI is DOM. Picking the wrong side
+        means fighting the scaler or the depth system.</li>
+      <li><strong>Keyboard ownership is shared.</strong> Phaser captures gameplay keys globally, while DOM windows listen
+        on <code>window</code>. When a text field is focused, the UI calls
+        <code>services().game.setInputBlocked(true)</code>, which disables Phaser's global capture so typing works
+        (see <a href="#input">Input</a>).</li>
+      <li><strong>Pixel art means integer scaling only.</strong> <code>pixelArt: true</code> and
+        <code>roundPixels: true</code> are global, and <code>PIXEL_SCALE = 2</code>
+        (<a data-src="src/core/constants.ts#L37">constants.ts:37</a>) maps each foreground source pixel to 2×2 screen
+        pixels. A non-integer <code>setScale</code> on pixel art produces uneven pixels; see <a href="#art">Art</a>.</li>
+      <li><strong>Synthesized audio needs a user gesture.</strong> Browsers keep an <code>AudioContext</code> suspended
+        until the first pointer or key press, so SFX before that are no-ops and the last requested music starts on
+        unlock (<a data-src="src/systems/AudioSystem.ts#L3">AudioSystem.ts:3</a>; see <a href="#audio">Audio</a>).</li>
+      <li><strong>Function-valued data.</strong> Skill and status specs hold functions of the skill level
+        (<code>damagePct: (lv) =&gt; number</code>), so content files are TypeScript, not JSON. That keeps balance
+        formulas next to the data, at the cost of not being able to load content from a server or diff it as data.</li>
+    </ul>
+  </details>
+
+  <h3 id="overview-run">Running it</h3>
+  <p>Node 18 or newer. From the repo root:</p>
+  <pre><code class="lang-bash">npm install
+npm run dev          # Vite dev server on http://localhost:5199
+npm run typecheck    # tsc --noEmit (same as npx tsc --noEmit)
+npm run build        # tsc --noEmit &amp;&amp; vite build  -&gt; dist/
+npm run preview      # serve dist/ locally</code></pre>
+  <p>
+    The port comes from <code>server: { port: 5199 }</code> in <a data-src="vite.config.ts#L53">vite.config.ts</a>.
+    The handbook is at <code>/guide.html</code> and these docs at <code>/devdocs.html</code>. Add
+    <code>?debug=1</code> to the game URL to draw Arcade physics bodies and velocity vectors
+    (<a data-src="src/main.ts#L20">main.ts:20</a>).
+  </p>
+  <p>
+    Once a character is in the world, <code>GameScene</code> puts a small cheat API on <code>window.arcana</code>
+    (<a data-src="src/scenes/GameScene.ts#L360">GameScene.ts:360</a>). It is the fastest way to test anything that
+    would otherwise take an hour of play:
+  </p>
+  <pre><code class="lang-ts">    const api = {
+      s,
+      levelTo: (n: number) =&gt; { while (s.progression.state.level &lt; n) s.progression.gainExp(expToNext(s.progression.state.level) - s.progression.state.exp); },
+      give: (itemId: string, qty = 1) =&gt; s.progression.addItem(itemId, qty),
+      mesos: (n: number) =&gt; s.progression.addMesos(n),
+      warp: (mapId: string, portalId?: string) =&gt; this.changeMap(mapId, portalId),
+      job: (job: JobId) =&gt; s.progression.advanceJob(job),
+      heal: () =&gt; s.progression.heal(99999, 99999),
+      maps: () =&gt; Registry.maps().map(m =&gt; m.id),
+      pet: (on?: boolean) =&gt; { const p = this.pet; if (!p) return false; p.setEnabled(on ?? !p.isEnabled()); return p.isEnabled(); },
+      depth: DEPTH,
+    };
+    (window as unknown as { arcana: typeof api }).arcana = api;</code></pre>
+  <table>
+    <thead><tr><th>Call</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td><code>arcana.levelTo(30)</code></td><td>Feeds exactly enough EXP to reach level 30, one level at a time, so every level-up event, SP/AP grant and quest refresh runs as in play.</td></tr>
+      <tr><td><code>arcana.job('pyromancer')</code></td><td><code>advanceJob</code>: only succeeds if the job's parent is your current job and your level is high enough (so <code>apprentice</code> → <code>pyromancer</code> → <code>flamebinder</code>…, one step per call).</td></tr>
+      <tr><td><code>arcana.give('red_potion', 10)</code></td><td>Adds items (returns <code>false</code> if the bag is full).</td></tr>
+      <tr><td><code>arcana.mesos(5000)</code>, <code>arcana.heal()</code></td><td>Money; full HP and MP.</td></tr>
+      <tr><td><code>arcana.warp('cinder_caverns')</code></td><td>A normal faded map change, optionally to a portal id (<code>'west'</code>, <code>'east'</code>…).</td></tr>
+      <tr><td><code>arcana.maps()</code></td><td>Every map id.</td></tr>
+      <tr><td><code>arcana.pet()</code></td><td>Toggles Pip the owl familiar.</td></tr>
+      <tr><td><code>arcana.s</code></td><td>The whole <code>GameServices</code> object (see <a href="#architecture">Architecture</a>): <code>arcana.s.progression.state</code> is the live save.</td></tr>
+      <tr><td><code>arcana.depth</code></td><td>The <code>DEPTH</code> layer constants.</td></tr>
+    </tbody>
+  </table>
+  <aside class="tip">
+    A typical test of a Year 4 spell: <code>arcana.levelTo(40)</code>, then <code>arcana.job('cryomancer')</code>,
+    <code>arcana.job('frostbinder')</code>, <code>arcana.job('glacial_sage')</code>, learn the spell in the Spellbook
+    (<kbd>K</kbd>), drag it to the hotbar and <code>arcana.warp('stormspire_peak')</code>. <code>main.ts</code> also
+    exposes the Phaser game itself as <code>window.game</code>.
+  </aside>
+  <details class="advanced">
+    <summary>Advanced: debug hooks in production, and their sharp edges</summary>
+    <ul>
+      <li><strong>Not gated.</strong> <code>exposeDebug()</code> runs in every <code>GameScene.create()</code>, including
+        the published build, and <code>?debug</code> is read with <code>URLSearchParams.has</code>, so
+        <code>?debug=0</code> also turns physics debug on. Both are deliberate conveniences for a single-player game,
+        not security boundaries.</li>
+      <li><strong><code>arcana</code> is rebuilt per run.</strong> It closes over the current services object. After
+        Quit to Title the old object is torn down (<code>setServices(null)</code>), so an <code>arcana</code> reference
+        kept from a previous run points at destroyed systems. Re-read <code>window.arcana</code> after starting a new
+        run.</li>
+      <li><strong><code>levelTo</code> loops on <code>gainExp</code> until the level is reached.</strong> At
+        <code>MAX_LEVEL</code> (50) <code>gainExp</code> returns without levelling, so <code>arcana.levelTo(51)</code>
+        or higher never exits and hangs the tab. Pass 50 or less. A level-up while dead does not revive you either
+        (Progression skips the HP/MP refill when dead).</li>
+      <li><strong>Timings.</strong> Texture generation is measured with <code>performance.measure</code>; in the console,
+        <code>performance.getEntriesByType('measure').filter(m =&gt; m.name.startsWith('gen:'))</code> lists what was
+        built and how long it took (see <a href="#boot-lazy">lazy art generation</a>).</li>
+    </ul>
+  </details>
+
+  <h3 id="overview-repo">Repository map</h3>
+  <p>
+    Everything that ships is under <code>src/</code> (TypeScript) and <code>public/assets/</code> (art). Each
+    top-level folder of <code>src/</code> is one area of the game; the original owner of each is listed in
+    <a href="#architecture-ownership">the ownership model</a>.
+  </p>
+  <table>
+    <thead><tr><th>Folder</th><th>What lives there</th><th>Start with</th></tr></thead>
+    <tbody>
+      <tr><td><code>src/main.ts</code></td><td>Entry point: the <code>Phaser.Game</code> config and scene list, the canvas <code>getContext</code> patch, the gamepad bridge.</td><td><a data-src="src/main.ts">main.ts</a></td></tr>
+      <tr><td><code>src/core/</code></td><td>The shared contracts and plumbing: <code>types.ts</code> (every interface), <code>services.ts</code> (service locator), <code>registry.ts</code> (data lookup), <code>events.ts</code> (event bus), <code>vfx.ts</code> (VFX registry), <code>constants.ts</code>, <code>balance.ts</code> (reference curves), <code>bindings.ts</code> and <code>settings.ts</code>.</td><td><a data-src="src/core/types.ts">types.ts</a></td></tr>
+      <tr><td><code>src/scenes/</code></td><td>The three Phaser scenes: <code>BootScene</code> (preload + boot-time generation), <code>TitleScene</code> (backdrop + DOM title menu), <code>GameScene</code> (builds the services, owns map changes and gameplay keys).</td><td><a data-src="src/scenes/GameScene.ts">GameScene.ts</a></td></tr>
+      <tr><td><code>src/entities/</code></td><td><code>Player</code> (movement, ropes, blink, hit reaction) with <code>player/</code> tuning and name tag; <code>Monster</code> (AI, statuses, death) with <code>monsters/</code> field bosses and the Lich Archon.</td><td><a data-src="src/entities/Player.ts">Player.ts</a></td></tr>
+      <tr><td><code>src/systems/</code></td><td>The services: <code>SkillSystem</code> + <code>skill/AttackRunner</code>, <code>CombatSystem</code>, <code>Progression</code> (stats, EXP, items, quests), <code>MonsterManager</code>, <code>DropManager</code>, <code>NpcManager</code>, <code>SaveSystem</code>, <code>AudioSystem</code> + <code>audio/</code>, <code>PetSystem</code>, <code>ArenaSystem</code>, <code>GamepadBridge</code>.</td><td><a data-src="src/systems/SkillSystem.ts">SkillSystem.ts</a></td></tr>
+      <tr><td><code>src/skills/</code></td><td>Every spell as data (<code>apprentice.ts</code>, <code>fire.ts</code>, <code>ice.ts</code>, <code>lightning.ts</code>, <code>holy.ts</code>, <code>shadow.ts</code>), each School's VFX (<code>fireVfx.ts</code>…) and a per-School folder of textures and effect helpers; <code>index.ts</code> aggregates them.</td><td><a data-src="src/skills/index.ts">skills/index.ts</a></td></tr>
+      <tr><td><code>src/data/</code></td><td>Content tables: maps, monsters, items, jobs, NPCs, quests, the story questline, NPC dialogue scripts, key-hint text.</td><td><a data-src="src/data/maps.ts">maps.ts</a></td></tr>
+      <tr><td><code>src/world/</code></td><td><code>MapLoader</code> (turns a <code>MapDef</code> into physics bodies, backdrops and decor), portals, themes, ambient weather.</td><td><a data-src="src/world/MapLoader.ts">MapLoader.ts</a></td></tr>
+      <tr><td><code>src/art/</code></td><td>Asset manifests and the loader, lazy generation (<code>lazy.ts</code>, <code>perf.ts</code>), player/NPC rig (<code>char/</code>), monster art, world art (<code>world/</code>), icons, shared particles and pixel VFX sheets.</td><td><a data-src="src/art/assets.ts">assets.ts</a></td></tr>
+      <tr><td><code>src/ui/</code></td><td>The DOM overlay: <code>UIRoot</code>, HUD and hotbar, every window, dialogs and shop, minimap, chat log, banners, title menu, controls window, credits roll, <code>ui.css</code>.</td><td><a data-src="src/ui/UIRoot.ts">UIRoot.ts</a></td></tr>
+      <tr><td><code>src/guide/</code></td><td>The Student Handbook page (<code>guide.html</code>), built in the browser from the game's own data.</td><td><a data-src="src/guide/main.ts">guide/main.ts</a></td></tr>
+      <tr><td><code>src/devdocs/</code></td><td>This page: the shell, the fragment checker and the section fragments.</td><td><a data-src="src/devdocs/CONTRACT.md">CONTRACT.md</a></td></tr>
+    </tbody>
+  </table>
+  <p>Outside <code>src/</code>:</p>
+  <table>
+    <thead><tr><th>Path</th><th>What</th></tr></thead>
+    <tbody>
+      <tr><td><code>public/assets/&lt;domain&gt;/</code></td><td>Pixel art packs (characters, monsters, world, vfx, ui), each with its license text and a <code>CREDITS.md</code>.</td></tr>
+      <tr><td><a data-src="ARCHITECTURE.md">ARCHITECTURE.md</a></td><td>The design record: contracts, ownership, frame flow, conventions, and every later phase (art pivot, Holy/Shadow, The Academy, input, lazy art).</td></tr>
+      <tr><td><a data-src="ROADMAP.md">ROADMAP.md</a></td><td>The phases to "finished" and the resume protocol for the lead session.</td></tr>
+      <tr><td><a data-src="CREDITS.md">CREDITS.md</a></td><td>Every art pack: author, source, license, use.</td></tr>
+      <tr><td><a data-src="vite.config.ts">vite.config.ts</a></td><td>Three page inputs, relative base, Phaser chunk, the devdocs plugin.</td></tr>
+      <tr><td><a data-src=".github/workflows/pages.yml">.github/workflows/pages.yml</a></td><td>Build and deploy to GitHub Pages on every push to <code>main</code>.</td></tr>
+      <tr><td><a data-src="scripts/make-publish-page.mjs">scripts/make-publish-page.mjs</a></td><td>Makes the single-page playable Artifact build (see <a href="#build">Build and deploy</a>).</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="overview-counts">The game in numbers</h3>
+  <p>
+    At the time of writing the Registry holds 130 spells (10 Year 1 + 5 Schools × 24), 21 monster types (6 of them
+    bosses: five field bosses and the Lich Archon), 8 maps, 67 items, 39 quests (13 of them the <code>story_</code>
+    questline), 9 NPCs and 16 jobs. About 38,000 lines of TypeScript sit outside <code>src/devdocs/</code>; the
+    largest folders are <code>skills/</code> (about 9,600 lines, mostly VFX) and <code>art/</code> (about 8,800).
+  </p>
+  <figure data-chart="content-counts"><figcaption>Content counts from the Registry, and source lines per src/ folder. Notice that skills/ and art/ together outweigh every gameplay system: most of the code is visual effects and art processing, not rules.</figcaption></figure>
+
+  <h3 id="overview-pages">The three pages</h3>
+  <p>
+    One Vite build produces three independent pages. Each has its own entry module, so the handbook and the docs
+    never load the game, and the game never ships the docs.
+  </p>
+  <table>
+    <thead><tr><th>Page</th><th>Entry</th><th>What it is</th></tr></thead>
+    <tbody>
+      <tr><td><code>index.html</code></td><td><a data-src="src/main.ts">src/main.ts</a></td><td>The game.</td></tr>
+      <tr><td><code>guide.html</code></td><td><a data-src="src/guide/main.ts">src/guide/main.ts</a></td><td>The Official Student Handbook for players: Schools, spells, zones, monsters, items, rendered from the same data modules the game uses.</td></tr>
+      <tr><td><code>devdocs.html</code></td><td><a data-src="src/devdocs/main.ts">src/devdocs/main.ts</a></td><td>These developer docs: HTML fragments from <code>src/devdocs/sections/</code>, with diagrams and charts drawn from the game's modules.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    The three inputs are listed in <code>build.rollupOptions.input</code>
+    (<a data-src="vite.config.ts#L58">vite.config.ts:58</a>). <code>base: './'</code> makes every asset URL relative,
+    so the same <code>dist/</code> works at <code>https://minormending.github.io/the-academy/</code> or from any folder,
+    and Phaser goes into its own chunk so a game update does not invalidate the browser's cached copy of the engine.
+    Every push to <code>main</code> typechecks, builds and deploys all three (see <a href="#build">Build and deploy</a>).
+  </p>
+  <details class="advanced">
+    <summary>Advanced: reading ARCHITECTURE.md without being misled</summary>
+    <p>
+      <code>ARCHITECTURE.md</code> is append-only history: its first half describes Phase 1 and was never rewritten.
+      Some of its statements have since been superseded, and the later phases (further down the same file) win:
+    </p>
+    <ul>
+      <li>"No external assets — all art is procedural" was replaced by the pixel-art pivot: art now comes from the packs
+        in <code>public/assets/</code>, with the procedural painters kept only as a fallback.</li>
+      <li>"Specialise at level 10 into one of three trees" became five Schools in Phase 3 (Holy, Shadow) and the
+        Year framing in Phase 4.</li>
+      <li>The <code>create</code> and <code>update</code> orders listed under "Frame flow" predate the familiar and the
+        Trial Hall; the real orders (with <code>PetSystem</code> and <code>ArenaSystem</code>) are in
+        <a href="#architecture-frame">the frame flow</a>.</li>
+      <li>"Boot generates every procedural texture" (also the header comment of <code>BootScene.ts</code>) predates lazy
+        generation; boot now builds only what the Title screen and a new Apprentice need
+        (<a href="#boot-lazy">lazy art generation</a>).</li>
+    </ul>
+  </details>
+
+  <h3 id="overview-reading">Reading order</h3>
+  <ol>
+    <li><a href="#architecture">Architecture</a>: the service locator, the contracts, the event bus and the frame
+      flow. Everything else assumes these.</li>
+    <li><a href="#boot">Scenes and boot</a>: how a page load becomes a running game, and why textures appear lazily.</li>
+    <li>The gameplay core, in the order a frame runs it: <a href="#input">Input</a>, <a href="#physics">Player
+      physics</a>, <a href="#skills">Skills and combat</a>, <a href="#progression">Progression</a>.</li>
+    <li>The content systems: <a href="#world">World and maps</a>, <a href="#monsters">Monsters</a>,
+      <a href="#story">Story and quests</a>.</li>
+    <li>Presentation and persistence: <a href="#ui">UI</a>, <a href="#art">Art</a>, <a href="#audio">Audio</a>,
+      <a href="#saves">Saves</a>.</li>
+    <li><a href="#build">Build and deploy</a>, then <a href="#history">How it was built</a> for the agent-team story.</li>
+    <li>When you are ready to change something: <a href="#recipes">Recipes</a> (add a spell, a monster, a map, a School).</li>
+  </ol>
+</section>

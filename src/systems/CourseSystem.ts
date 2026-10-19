@@ -125,6 +125,11 @@ export class CourseSystem implements ICourses {
       && c.missions.every(m => this.state.quests[m]?.status === 'turned_in');
   }
 
+  /**
+   * Missions in progress (accepted, or ready to hand in) first; then, for this Year's classes the student has
+   * started (and the core class), the next mission waiting to be picked up from its giver, so the HUD can say
+   * "See <teacher>".
+   */
   activeMissions(): { course: CourseDef; mission: QuestDef }[] {
     const out: { course: CourseDef; mission: QuestDef }[] = [];
     for (const course of Registry.courses()) {
@@ -134,6 +139,14 @@ export class CourseSystem implements ICourses {
         const mission = Registry.quest(id);
         if (mission) out.push({ course, mission });
       }
+    }
+    const busy = new Set(out.map(x => x.course.id));
+    for (const course of this.catalogue()) {
+      if (busy.has(course.id)) continue;
+      const st = this.status(course.id);
+      if (st !== 'enrolled' && !(st === 'open' && course.kind === 'core')) continue;
+      const next = this.currentMission(course.id);
+      if (next && !this.state.quests[next.id] && this.services.progression.canAcceptQuest(next.id)) out.push({ course, mission: next });
     }
     return out;
   }

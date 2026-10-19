@@ -4,11 +4,12 @@
 
 ![The zones of The Academy](docs/screenshots/pixel-maps.png)
 
-A MapleStory-style 2D side-scroller where every student is a mage. Enrol as a Year 1 Apprentice, declare one of
-five Schools of magic at level 10, pass your Year-end Exams, and graduate by defeating the Lich Archon in your
-Final Thesis. Then stay on for the **Year 5 Fellowship**: at level 55 each School's Professor sets a Fellowship
-Exam that makes you an Archon (tier 5), the level cap is 70, and three endgame maps lead to the raid boss
-**The Unwritten**.
+A story-driven, MapleStory-style 2D side-scroller where every student is a mage. Each Year is a term of
+**classes**: a teacher gives you a short chain of missions (travel to a map, find someone, defeat monsters, bring back
+loot), and passing the class earns its rewards and a **badge**. Earn enough badges and Headmistress Maelis promotes
+you to the next Year. Year 1 lets you sample all five Schools; at its end you **declare your major**, which is your
+skill tree. The story runs from a violet glow under the Forbidden Wing, through the Lich Archon as your Final Thesis,
+to the Year 5 Fellowship and **The Unwritten** (level cap 70).
 
 - **Five Schools, 214 spells** — Fire, Ice, Lightning, Holy and Shadow, 40 spells each across Years 2–5 (the
   Year 5 Archon adds a further 8 per School), plus a 14-spell Year 1 core curriculum. Beyond bolts and blasts there are traps and wards
@@ -21,6 +22,7 @@ Exam that makes you an Archon (tier 5), the level cap is 70, and three endgame m
   endgame maps (the Astral Observatory, the Void Rift and the Archon Spire), with five rare field bosses, Field
   Bounties, the Lich Archon and the level-70 raid boss The Unwritten.
 - **Design your own mage** — pick skin, hair and accent colours (or Randomize) in the character creator when you enrol; the look is saved with the character and carries through every School robe and Year.
+- **41 classes, about 130 missions:** each Year has a core story class, five majors (one per School, you take yours) and electives with the faculty and staff. A Classes window (J) shows your report card and badge case, a HUD tracker shows your next step, and a gold arrow over the right portal leads you to the next map.
 - **Main questline**, orientation for new students, side assignments and Year-end Exams.
 - **Trial Hall** wave arena with Academy Merits and a Merit Exchange.
 - **Academy Honors** — 60 achievements in six categories that pay Merits and unlock titles for your name tag.

@@ -669,6 +669,8 @@ export interface IProgression {
   buy(itemId: string, price: number, qty: number): boolean;
   sell(uid: string, qty: number): boolean;
   setHotbar(slot: number, entry: string | null): void;
+  /** Level, School and (story mode) class order allow accepting this quest now. */
+  canAcceptQuest(questId: string): boolean;
   acceptQuest(questId: string): void;
   turnInQuest(questId: string): boolean;
   addMerits(amount: number): void;

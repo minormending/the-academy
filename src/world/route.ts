@@ -39,6 +39,8 @@ function bestSpawnMap(monsterIds: Set<string>): string | null {
  */
 export function missionTargetMap(mission: QuestDef): string | null {
   const prog = maybeServices()?.progression;
+  // Not picked up yet: go and see whoever gives it.
+  if (prog?.state?.quests && !prog.state.quests[mission.id]) return npcMap(mission.giver);
   const counts = prog?.state?.quests?.[mission.id]?.counts ?? [];
   const bag = (itemId: string) => { try { return prog?.countItem(itemId) ?? 0; } catch { return 0; } };
   for (let i = 0; i < mission.objectives.length; i++) {

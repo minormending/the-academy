@@ -99,10 +99,10 @@ The user: "switch this to story based. Each year there are goals or missions to 
 give you rewards and a badge for passing the class. When you pass enough classes, you move to the next year. At the
 end of the 1st year, you choose your major." Contract and rules: `src/data/courses/README.md`; types `CourseDef`,
 `YearPlan`, `ICourses` in src/core/types.ts; data in `src/data/courses/year{1..5}.ts` + `year{2..5}majors.ts`.
-- [ ] Course data: Year 1 (core + 5 School samplers + Field Practicum), Years 2–4 (core + major ×5 + electives), Year 5 Fellowship
-- [ ] CourseSystem (src/systems/CourseSystem.ts): pass class → badge + rewards; Year progress; declareMajor; promote; old-save credit; visit/talk objectives
-- [ ] Teacher dialogs (src/data/npcScripts.ts): class missions per teacher, badge ceremony, Maelis report card / declare major / promotion
-- [ ] UI: Classes window (report card, badge case, assignments tab), HUD mission tracker, badge banner
-- [ ] Guidance: route to the mission's map (portal arrow, minimap marker); pixel badge art
-- [ ] Tests (tests/courses.test.ts, courseSystem.test.ts, route.test.ts); integrate, tsc/test/build, play Year 1 in the browser (desktop + phone), push
+- [x] Course data: Year 1 (core + 5 School samplers + Field Practicum), Years 2–4 (core + major ×5 + electives), Year 5 Fellowship
+- [x] CourseSystem (src/systems/CourseSystem.ts): pass class → badge + rewards; Year progress; declareMajor; promote; old-save credit; visit/talk objectives
+- [x] Teacher dialogs (src/data/npcScripts.ts): class missions per teacher, badge ceremony, Maelis report card / declare major / promotion
+- [x] UI: Classes window (report card, badge case, assignments tab), HUD mission tracker, badge banner
+- [x] Guidance: route to the mission's map (portal arrow, minimap marker); pixel badge art
+- [x] Tests (tests/courses.test.ts, courseSystem.test.ts, route.test.ts); integrate, tsc/test/build, play Year 1 in the browser (desktop + phone), push
 - [ ] Docs: handbook walkthrough by Year/classes, README, ARCHITECTURE

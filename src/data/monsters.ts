@@ -259,7 +259,7 @@ export const MONSTERS: MonsterDef[] = [
   mk({ id: 'thorn_shroom', name: 'Thorn Shroom', level: 9, behavior: 'walker', speed: 64, size: { w: 44, h: 52 },
     hpMul: 0.95, expMul: 1.05, touchMul: 1.15, etc: 'thorn_spore' }),
   mk({ id: 'stump_golem', name: 'Stump Golem', level: 13, behavior: 'walker', speed: 44, size: { w: 50, h: 62 },
-    hpMul: 1.05, expMul: 1.2, touchMul: 1.1, defMul: 1.2, weak: ['shadow'], resist: ['holy'], etc: 'stump_bark', etcChance: 0.4 }),
+    hpMul: 1.05, expMul: 1.2, touchMul: 1.1, defMul: 1.2, weak: ['shadow'], etc: 'stump_bark', etcChance: 0.4 }),
   // ── frostfang_cliffs ──
   mk({ id: 'frost_bat', name: 'Frost Bat', level: 16, behavior: 'flyer', speed: 95, size: { w: 40, h: 30 },
     hpMul: 0.82, expMul: 0.95, touchMul: 0.9, weak: ['fire', 'lightning'], etc: 'bat_wing' }),

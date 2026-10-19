@@ -148,7 +148,7 @@ const frostfang_cliffs: MapDef = (() => {
     ],
     portals: [portal('west', 70, G, 'shroom_hollow', 'east'), portal('east', 3730, G, 'cinder_caverns', 'west')],
     spawns: [
-      span('snow_yeti', 200, 860, G, 2), span('snow_yeti', 1600, 2560, G, 3), span('snow_yeti', 2950, 3600, G, 2),
+      span('snow_yeti', 950, 1230, 1300, 2), span('snow_yeti', 1600, 2560, G, 3), span('snow_yeti', 2950, 3600, G, 2),
       on('frost_bat', A, 1), on('frost_bat', D, 1), on('frost_bat', Gp, 2), on('frost_bat', K, 1), on('frost_bat', B, 1),
       on('ice_wisp', I, 1), on('ice_wisp', J, 1), on('ice_wisp', L, 1), on('ice_wisp', N, 1), on('ice_wisp', O, 1), on('ice_wisp', P, 1), on('ice_wisp', S, 1),
       span('frostfang_alpha', 1580, 2560, G, 1, FIELD_BOSS_RESPAWN),

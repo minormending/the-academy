@@ -114,7 +114,7 @@ export class FieldBoss extends Monster {
   constructor(scene: Phaser.Scene, services: GameServices, def: MonsterDef, x: number, y: number, map: IMapInstance,
     opts: MonsterSpawnOptions, cfg: FieldBossConfig) {
     super(scene, services, def, x, y, map, opts);
-    this.cfg = { engageRange: 520, keepDist: 90, actionGap: [1300, 2200], maxAdds: 3, ...cfg };
+    this.cfg = { engageRange: 340, keepDist: 90, actionGap: [1300, 2200], maxAdds: 3, ...cfg };
     this.arena = FieldBoss.arenaAround(map, x, opts.band?.y ?? y, opts.band);
     // Field bosses live on their arena floor: drop the one-way platform collider so jumps / dives / big bodies
     // never snag on the jump-through ledges above (solid ground + walls still collide).

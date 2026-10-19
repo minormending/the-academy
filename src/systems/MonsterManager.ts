@@ -183,6 +183,11 @@ export class MonsterManager implements IMonsterManager {
     const timer = this.scene.time.delayedCall(ms, () => {
       this.timers = this.timers.filter(x => x !== timer);
       if (gen !== this.gen || !this.map) return;
+      // Don't ambush students far below the boss: wait until they're within a level of it.
+      const sp = this.map.def.spawns?.[i];
+      const bossLv = sp ? Registry.monster(sp.monsterId)?.level ?? 0 : 0;
+      const pl = this.services.progression?.state.level ?? 99;
+      if (pl < bossLv - 1) { this.armFieldBossTimer(i, 60000); return; }
       this.spawnFieldBoss(i);
     });
     this.timers.push(timer);

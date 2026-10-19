@@ -460,6 +460,8 @@ body.ax-dragging, body.ax-dragging * { cursor: grabbing !important; }
 .ax-book-sp { display: flex; align-items: baseline; gap: 4px; padding: 2px 8px 3px; background: var(--ax-k); box-shadow: inset 0 0 0 2px var(--ax-gold-dim); color: var(--ax-ink-dim); }
 .ax-book-sp b { font-family: var(--ax-head); font-size: 16px; color: var(--ax-gold); }
 .ax-book-sp.ax-glow { box-shadow: inset 0 0 0 2px var(--ax-gold); animation: ax-sp-pulse 1.2s steps(2) infinite; }
+.ax-book-respec { display: flex; align-items: center; gap: 8px; padding: 6px 0 0; }
+.ax-book-respec > button:disabled { pointer-events: none; }
 @keyframes ax-sp-pulse { 50% { box-shadow: inset 0 0 0 2px var(--ax-gold-2); } }
 .ax-book-tools { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 0; }
 .ax-chips { display: flex; gap: 3px; flex-wrap: wrap; }

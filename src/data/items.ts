@@ -6,8 +6,8 @@ function consumable(id: string, name: string, description: string, icon: IconSpe
   return { id, name, type: 'consumable', description, icon, price, sellPrice: Math.max(1, Math.floor(price * 0.25)), maxStack, consumable: effect };
 }
 
-function etc(id: string, name: string, description: string, icon: IconSpec, sellPrice: number, maxStack = 200): ItemDef {
-  return { id, name, type: 'etc', description, icon, price: 0, sellPrice, maxStack };
+function etc(id: string, name: string, description: string, icon: IconSpec, sellPrice: number, maxStack = 200, price = 0): ItemDef {
+  return { id, name, type: 'etc', description, icon, price, sellPrice, maxStack };
 }
 
 function equip(id: string, name: string, description: string, icon: IconSpec, slot: EquipSlot, reqLevel: number,
@@ -31,7 +31,8 @@ export const ITEMS: ItemDef[] = [
   consumable('power_elixir', 'Power Elixir', 'Liquid sunrise in a bottle. Fully restores HP and MP.', { glyph: 'potion', color: 0xffd447, color2: 0xfff6c8 }, 2400, { hpPct: 1, mpPct: 1, cooldownMs: 1500 }),
   consumable('return_scroll', 'Return Scroll', 'Read aloud to be whisked back to the Academy campus. Late for class? Never again.', { glyph: 'scroll', color: 0xf0dca0, color2: 0x4a5bd4 }, 150, { returnToTown: true, cooldownMs: 1000 }, 50),
 
-  // ───────────── Etc (monster drops) ─────────────
+  // ───────────── Etc ─────────────
+  etc('tome_of_unlearning', 'Tome of Unlearning', 'A violet-bound library tome that lets a student forget one Year of spells, reclaim their SP, and learn them anew. The librarian calls it revision.', { glyph: 'book', color: 0x8f6bd8, color2: 0xffd447 }, 500, 10, 2500),
   etc('snail_shell', 'Snail Shell', 'A mossy spiral shell. Prefect Finn collects these for some reason.', { glyph: 'shell', color: 0x9ccf6a, color2: 0x6b8f3e }, 2),
   etc('slime_jelly', 'Slime Jelly', 'Wobbly, sticky, faintly glowing. Do not eat.', { glyph: 'jelly', color: 0x7fd6ff, color2: 0xd8f6ff }, 4),
   etc('shroom_cap', 'Shroom Cap', 'A springy orange mushroom cap.', { glyph: 'mushroom', color: 0xff8a3d, color2: 0xfff1d6 }, 6),

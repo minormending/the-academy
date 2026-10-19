@@ -417,7 +417,7 @@ function professor(c: Ctx) {
 
 // ─────────────────────────── Campus staff ───────────────────────────
 
-const POTION_SHOP = ['red_potion', 'orange_potion', 'white_potion', 'blue_potion', 'mana_elixir', 'elixir', 'return_scroll'];
+const POTION_SHOP = ['red_potion', 'orange_potion', 'white_potion', 'blue_potion', 'mana_elixir', 'elixir', 'return_scroll', 'tome_of_unlearning'];
 
 function shopEntries(ids: string[]) {
   return ids.map(id => Registry.item(id)).filter((d): d is NonNullable<typeof d> => !!d && d.price > 0)

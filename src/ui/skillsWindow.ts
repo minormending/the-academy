@@ -40,6 +40,7 @@ export class SkillsWindow extends UIWindow {
   private tab = '';
   private filter: Filter = 'all';
   private sort: Sort = 'book';
+  private confirmRespec = '';
   /** Keep the list's scroll position across re-renders (learning a spell re-renders the window). */
   private scrollTop = 0;
   private scrollKey = '';
@@ -51,6 +52,14 @@ export class SkillsWindow extends UIWindow {
   }
 
   private allJobs(): JobDef[] { return safe(() => Registry.jobs(), [] as JobDef[]).filter(Boolean); }
+
+  protected onClose() { this.confirmRespec = ''; }
+
+  private refundableSp(skills: SkillDef[]): number {
+    // Match respecTier: the starting Arcane Bolt level was free and stays learned.
+    return skills.reduce((n, d) => n + Math.max(0,
+      (this.ctx.s.progression.state.skills[d.id] ?? 0) - (d.id === 'app_arcane_bolt' ? 1 : 0)), 0);
+  }
 
   private descendants(id: JobId): JobDef[] {
     const out: JobDef[] = [];
@@ -93,7 +102,8 @@ export class SkillsWindow extends UIWindow {
     const p = this.ctx.s.progression;
     const st = p.state;
     const learnable = Registry.skills().filter(s => safe(() => p.canLearn(s.id), false)).map(s => s.id).join(',');
-    return JSON.stringify([this.tab, this.filter, this.sort, st.job, st.level, st.sp, st.skills, learnable, st.hotbar]);
+    return JSON.stringify([this.tab, this.filter, this.sort, st.job, st.level, st.sp, st.skills, learnable, st.hotbar,
+      p.countItem('tome_of_unlearning'), this.confirmRespec]);
   }
 
   protected render() {
@@ -120,7 +130,7 @@ export class SkillsWindow extends UIWindow {
       class: `ax-tab ax-year-tab${t.id === this.tab ? ' ax-active' : ''}${t.locked ? ' ax-locked' : ''}`,
       style: `--accent:${t.color}`,
       title: t.locked ? `${t.year} · ${t.label} — ${t.note ?? ''}` : `${t.year} · ${t.label}`,
-      onclick: () => { if (t.id !== this.tab) { this.tab = t.id; this.invalidate(); this.ctx.sfx('ui_click'); } },
+      onclick: () => { if (t.id !== this.tab) { this.tab = t.id; this.confirmRespec = ''; this.invalidate(); this.ctx.sfx('ui_click'); } },
     },
     h('span', { class: 'ax-year-tab-year' }, t.locked ? h('span', { class: 'ax-lock' }) : null, t.year),
     h('span', { class: 'ax-tab-label' }, t.label))));
@@ -142,6 +152,49 @@ export class SkillsWindow extends UIWindow {
         h('span', null, 'Invested ', h('b', null, `${invested}`), ` / ${capacity}`),
         learnableHere ? h('span', { class: 'ax-book-ready' }, `${learnableHere} can level`) : null),
       h('div', { class: `ax-book-sp${st.sp > 0 ? ' ax-glow' : ''}` }, h('span', null, 'SP'), h('b', null, String(st.sp))));
+
+    // ── per-Year unlearning: second click confirms the refund and consumes one tome.
+    const tomes = p.countItem('tome_of_unlearning');
+    const refund = tab.locked ? 0 : this.refundableSp(all);
+    const reason = tab.locked ? 'This Year is locked. Pass its Year-end Exam first.'
+      : refund === 0 ? 'No learned spells to unlearn in this Year. The free starting Arcane Bolt level is kept.'
+      : tomes === 0 ? 'Requires a Tome of Unlearning. Buy one from Quartermaster Bram for 2,500 mesos.' : '';
+    const respecKey = JSON.stringify([st.job, tab.id, refund]);
+    if (reason || this.confirmRespec !== respecKey) this.confirmRespec = '';
+    const confirming = this.confirmRespec === respecKey;
+    const hint = reason || `Spend 1 Tome of Unlearning to unlearn ${tab.year} spells and refund ${refund} SP. The free starting Arcane Bolt level is kept.${confirming ? ' Click again to confirm.' : ''}`;
+    const unlearn = h('div', { class: 'ax-book-respec' },
+      h('button', {
+        class: `ax-btn ax-btn-small ${confirming ? 'ax-btn-danger' : 'ax-btn-secondary'}`,
+        disabled: !!reason, title: hint,
+        onclick: () => {
+          // Recheck live state in case inventory or spell levels changed before the next render.
+          const currentRefund = this.refundableSp(all);
+          const inLineage = job && Registry.jobLineage(p.state.job).some(j => j.id === job.id);
+          if (tab.locked || !inLineage || !currentRefund || !p.countItem('tome_of_unlearning')) {
+            this.confirmRespec = ''; this.invalidate(); this.ctx.sfx('ui_error'); return;
+          }
+          if (!confirming || this.confirmRespec !== respecKey || currentRefund !== refund) {
+            this.confirmRespec = JSON.stringify([p.state.job, tab.id, currentRefund]);
+            this.invalidate(); this.ctx.sfx('ui_click'); return;
+          }
+          this.confirmRespec = '';
+          let refunded = 0;
+          if (p.removeItem('tome_of_unlearning', 1)) {
+            refunded = p.respecTier(job.tier);
+            if (refunded === 0) p.addItem('tome_of_unlearning', 1);
+          }
+          this.ctx.sfx(refunded > 0 ? 'ui_click' : 'ui_error');
+          this.invalidate();
+        },
+      }, confirming ? `Unlearn ${refund} SP?` : 'Unlearn Year'),
+      h('span', { class: 'ax-dim' }, `Tomes: ${tomes}`));
+    // A wrapper receives hover events even while the button is disabled.
+    this.ctx.tooltip.attach(unlearn, () => hint);
+    if (confirming) unlearn.appendChild(h('button', {
+      class: 'ax-btn ax-btn-small ax-btn-secondary',
+      onclick: () => { this.confirmRespec = ''; this.invalidate(); this.ctx.sfx('ui_click'); },
+    }, 'Cancel'));
 
     // ── toolbar: kind filter chips (with counts) + sort toggle
     const count = (f: Filter) => all.filter(d => matches(d, f)).length;
@@ -185,7 +238,7 @@ export class SkillsWindow extends UIWindow {
     const footer = h('div', { class: 'ax-win-footer' },
       h('span', { class: 'ax-dim' }, tab.locked ? 'Preview — not yet available' : 'Drag to the hotbar · double-click to auto-place · Shift+ = up to 5 SP'),
       h('span', { class: 'ax-sp' }, 'SP ', h('b', null, String(st.sp))));
-    this.body.replaceChildren(strip, header, chips, list, footer);
+    this.body.replaceChildren(strip, header, unlearn, chips, list, footer);
     if (this.scrollTop) list.scrollTop = this.scrollTop;
   }
 

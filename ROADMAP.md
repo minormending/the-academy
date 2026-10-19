@@ -51,14 +51,26 @@ All phases `[x]`; `npx tsc --noEmit` clean; `npm run build` clean; a new player 
 through Year 1 → graduation (Lich Archon Final Thesis) in any of the five Schools without blockers or console
 errors; every asset credited; playable build published.
 
-## Phase 10: Year 5 — the Fellowship (in progress)
+## Phase 10: Year 5 — the Fellowship (done)
 
 - [x] Contract: tier 5 jobs `pyre_archon`, `winter_archon`, `storm_archon`, `light_archon`, `night_archon` (lv 55), cap 70,
       music keys `astral`/`rift`, registries `src/data/items5.ts` + `src/data/raidBosses.ts`.
-- [ ] 8 Year-5 spells per School (`src/skills/<school>/year5.ts` + `vfx5.ts`).
-- [ ] Jobs polish, five Fellowship Exams, advancement UI, `tests/graduation.test.ts` accepts Year 5 (tests currently red until this lands — don't push before `npm test` is green).
-- [ ] Maps `astral_observatory` (from `arcane_sanctum:observatory`), `void_rift`, `archon_spire`.
-- [ ] Monsters `star_moth`, `astral_sentinel`, `rift_stalker`, `null_wisp`, `shard_horror`, `archon_knight`, `unwritten_page`;
+- [x] 8 Year-5 spells per School (`src/skills/<school>/year5.ts` + `vfx5.ts`).
+- [x] Jobs polish, five Fellowship Exams, advancement UI, `tests/graduation.test.ts` accepts Year 5 (tests currently red until this lands — don't push before `npm test` is green).
+- [x] Maps `astral_observatory` (from `arcane_sanctum:observatory`), `void_rift`, `archon_spire`.
+- [x] Monsters `star_moth`, `astral_sentinel`, `rift_stalker`, `null_wisp`, `shard_horror`, `archon_knight`, `unwritten_page`;
       raid boss `the_unwritten` (`src/entities/monsters/Unwritten.ts`); items in `items5.ts`; music `astral`, `rift`.
-- [ ] Integrate: `npx tsc --noEmit`, `npm test`, `npm run build`, browser smoke (warp to the new maps, cast Year-5 spells),
+- [x] Integrate: `npx tsc --noEmit`, `npm test`, `npm run build`, browser smoke (warp to the new maps, cast Year-5 spells),
       docs sync (README/handbook/devdocs: Year 5, cap 70, new zones), commit, push, verify the Pages deploy.
+
+## Phase 11: mobile redesign (in progress)
+
+The user: "not mobile friendly — text and screens too small, the map too large to see details. Rethink and simplify."
+Shared switch `src/ui/mobile.ts` (`isMobileLayout()`, `MOBILE_UI` 720×405, `MOBILE_CAMERA_ZOOM` 1.8, `html.ax-mobile`).
+- [ ] M1: zoomed camera on phones, `#ui-root` laid out at 720×405, simplified HUD (big bars, 2-line chat, minimap behind a
+      button, one ☰ menu), touch controls re-laid out, readable name tags/damage numbers/boss bars.
+- [ ] M2: every window/dialog/shop as a full-screen mobile sheet, tap-to-detail instead of tooltips, title/character select.
+- [ ] Integrate: tsc, `npm test`, build, phone-size browser check (812×375, 667×375, portrait hint), desktop unchanged,
+      docs mention of the mobile layout, push, verify the Pages deploy on a phone-sized viewport.
+- [ ] Leftovers from Year 5: handbook lists only Year 3/4 exams (`src/guide/context.ts`, `schools.ts`, `walkthrough.ts`);
+      tier-5 character decoration (`src/art/characters.ts:84`); "EXAM PASSED — YEAR 5" banner wording; README/devdocs for Year 5 + cap 70.

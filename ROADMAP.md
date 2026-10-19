@@ -24,9 +24,9 @@ a resumed session (after a usage-limit pause) reads it to pick up exactly where 
 - [~] **5. Systems & feel**
   - [x] Respec (Tome of Unlearning, per-Year Unlearn)
   - [x] Gamepad bridge
-  - [~] Trial Hall wave arena (+ GameScene wiring by lead)
+  - [x] Trial Hall wave arena (+ GameScene wiring by lead)
   - [~] Pacing playthrough QA levels 1–25
-- [ ] **6. Story & structure**
+- [~] **6. Story & structure**
   - Main questline across the four Years (Headmistress narrative: orientation day → declaring a School →
     the Forbidden Wing mystery → the Lich Archon as the Final Thesis → graduation ceremony + credits screen).
   - Year 1 orientation/tutorial assignment chain that teaches movement, casting, hotbar, pickup, NPCs.

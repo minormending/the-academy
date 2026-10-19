@@ -1,5 +1,6 @@
 /** HUD: status bar (Lv/name/job, HP/MP, EXP), hotbar, buff tray, low-HP vignette. */
-import { HOTBAR_LABELS, MAX_LEVEL } from '../core/constants';
+import { MAX_LEVEL } from '../core/constants';
+import { SLOT_ACTIONS, getBinding, keyLabel, onBindingsChanged, type ActionId } from '../core/bindings';
 import { HOTBAR_PAGE_SIZE, HOTBAR_SIZE, type ActiveBuff } from '../core/types';
 import { bus } from '../core/events';
 import { Registry } from '../core/registry';
@@ -67,28 +68,37 @@ export class StatusBar {
   private sig = '';
   /** Unsubscribers for the pixel-icon-sheet ready callbacks (released in destroy). */
   private iconSubs: (() => void)[] = [];
+  private keySyncs: (() => void)[] = [];
+  private offBindings: () => void = () => {};
 
   constructor(private ctx: UICtx) {
     this.lvNum = h('div', { class: 'ax-lv-num' }, '1');
     this.nameEl = h('div', { class: 'ax-id-name' });
     this.jobEl = h('div', { class: 'ax-id-job' });
-    const btn = (label: string, key: string, win: WindowName, title: string) => {
+    const btn = (label: string, action: ActionId, win: WindowName, title: string) => {
       const ico = h('span', { class: `ax-quick-ico ax-qi-${win}` });
       const px = QUICK_ICONS[win];
       if (px) this.iconSubs.push(onPixelIconsReady(() => {
         const url = pixelIconUrl(px, 26);
         if (url) { ico.style.setProperty('--qi', `url("${url}")`); ico.classList.add('ax-qi-px'); }
       }));
-      return h('button', { class: 'ax-quick', title: `${title} (${key})`, onclick: () => { ctx.sfx('ui_click'); ctx.toggleWindow(win); } },
-        ico, h('span', { class: 'ax-quick-label' }, label), h('span', { class: 'ax-quick-key' }, key));
+      const keyEl = h('span', { class: 'ax-quick-key' });
+      const el = h('button', { class: 'ax-quick', onclick: () => { ctx.sfx('ui_click'); ctx.toggleWindow(win); } },
+        ico, h('span', { class: 'ax-quick-label' }, label), keyEl);
+      // Key hints follow the player's bindings (Controls window).
+      const sync = () => { const k = keyLabel(getBinding(action)); setText(keyEl, k); el.title = `${title} (${k})`; };
+      sync();
+      this.keySyncs.push(sync);
+      return el;
     };
     this.el = h('div', { class: 'ax-statusbar' },
       h('div', { class: 'ax-lv' }, h('div', { class: 'ax-lv-tag' }, 'Lv.'), this.lvNum),
       h('div', { class: 'ax-id' }, this.nameEl, this.jobEl),
       h('div', { class: 'ax-gauges' }, this.hp.el, this.mp.el),
       h('div', { class: 'ax-quickbar' },
-        btn('Char', 'P', 'stats', 'Character'), btn('Items', 'I', 'inventory', 'Inventory'), btn('Skills', 'K', 'skills', 'Skills'),
-        btn('Tasks', 'J', 'quests', 'Assignments'), btn('Help', 'H', 'help', 'Controls'), btn('Menu', 'Esc', 'menu', 'Menu')));
+        btn('Char', 'stats', 'stats', 'Character'), btn('Items', 'inventory', 'inventory', 'Inventory'), btn('Skills', 'skills', 'skills', 'Skills'),
+        btn('Tasks', 'quests', 'quests', 'Assignments'), btn('Help', 'help', 'help', 'Controls'), btn('Menu', 'menu', 'menu', 'Menu')));
+    this.offBindings = onBindingsChanged(() => { for (const f of this.keySyncs) f(); });
     this.expEl = h('div', { class: 'ax-expbar' }, this.exp.el);
     ctx.root.appendChild(this.el);
     ctx.root.appendChild(this.expEl);
@@ -120,6 +130,7 @@ export class StatusBar {
 
   destroy() {
     for (const off of this.iconSubs.splice(0)) { try { off(); } catch { /* ignore */ } }
+    try { this.offBindings(); } catch { /* ignore */ }
     this.el.remove(); this.expEl.remove();
   }
 }
@@ -145,6 +156,10 @@ export class Hotbar {
   private dirty = true;
   private page = 0;
   private offPage: () => void;
+  private offBindings: () => void;
+  private slotKeys: HTMLElement[] = [];
+  private pageKey: HTMLElement;
+  private pager: HTMLElement;
 
   constructor(private ctx: UICtx) {
     const grid = h('div', { class: 'ax-hotbar-grid' });
@@ -153,8 +168,10 @@ export class Hotbar {
       const cd = h('div', { class: 'ax-slot-cd' });
       const cdText = h('div', { class: 'ax-slot-cdtext' });
       const badge = h('div', { class: 'ax-slot-badge' });
+      const keyEl = h('div', { class: 'ax-slot-key' });
+      this.slotKeys[i] = keyEl;
       const root = h('div', { class: 'ax-slot ax-empty', 'data-hotbar-slot': String(i) },
-        icon, cd, cdText, badge, h('div', { class: 'ax-slot-key' }, HOTBAR_LABELS[i] ?? ''));
+        icon, cd, cdText, badge, keyEl);
       root.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         const abs = this.abs(i);
@@ -171,10 +188,11 @@ export class Hotbar {
       this.slots[i] = { root, icon, cd, cdText, badge, lastCd: '', lastBadge: '', mpCost: 0 };
     }
     for (const i of HOTBAR_ORDER) grid.appendChild(this.slots[i].root);
-    const pager = h('div', { class: 'ax-hotbar-pager', title: 'Hotbar page (Tab)' });
+    const pager = h('div', { class: 'ax-hotbar-pager' });
+    this.pager = pager;
     for (let pg = 0; pg < PAGES; pg++) {
       const btn = h('button', {
-        class: 'ax-page-btn', title: `Hotbar page ${pg + 1} (Tab flips)`,
+        class: 'ax-page-btn', title: `Hotbar page ${pg + 1}`,
         onclick: () => { this.setPage(pg); ctx.sfx('ui_click'); },
       }, String(pg + 1));
       // Dragging a spell onto the other page: hover its button to flip.
@@ -182,15 +200,26 @@ export class Hotbar {
       this.pageBtns.push(btn);
       pager.appendChild(btn);
     }
-    pager.appendChild(h('div', { class: 'ax-page-key' }, 'Tab'));
+    this.pageKey = h('div', { class: 'ax-page-key' });
+    pager.appendChild(this.pageKey);
     this.el = h('div', { class: 'ax-hotbar' }, pager, grid);
     ctx.root.appendChild(this.el);
     this.page = this.currentPage();
     this.offPage = bus.on('hotbar:page', ({ page }) => this.onPage(page));
+    this.syncKeys();
+    this.offBindings = onBindingsChanged(() => this.syncKeys());
     this.syncPage();
   }
 
   markDirty() { this.dirty = true; }
+
+  /** Slot / page key hints from the current bindings. */
+  private syncKeys() {
+    SLOT_ACTIONS.forEach((a, i) => { if (this.slotKeys[i]) setText(this.slotKeys[i], getBinding(a) ? keyLabel(getBinding(a)) : ''); });
+    const pk = keyLabel(getBinding('hotbarPage'));
+    setText(this.pageKey, pk);
+    this.pager.title = `Hotbar page (${pk})`;
+  }
 
   private currentPage(): number {
     const p = safe(() => this.ctx.s.game.hotbarPage(), 0);
@@ -330,7 +359,7 @@ export class Hotbar {
     }
   }
 
-  destroy() { try { this.offPage(); } catch { /* ignore */ } this.el.remove(); }
+  destroy() { try { this.offPage(); } catch { /* ignore */ } try { this.offBindings(); } catch { /* ignore */ } this.el.remove(); }
 }
 
 // ───────────────────────────── Buff tray ─────────────────────────────

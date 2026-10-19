@@ -2,6 +2,7 @@
 import Phaser from 'phaser';
 import { DEPTH } from '../../core/constants';
 import type { DamageNumberKind } from '../../core/types';
+import { damageNumberScale } from '../../core/settings';
 
 interface Style {
   scale: number;               // integer pixel scale of the bitmap digits
@@ -54,6 +55,8 @@ interface NumObj {
   kind: DamageNumberKind;
   active: boolean;
   seq: number;
+  /** Size multiplier from settings (small/normal/large), captured when shown. */
+  mul: number;
 }
 
 function texKey(kind: DamageNumberKind) { return `dmgnum_${kind}`; }
@@ -233,7 +236,8 @@ export class DamageNumbers {
 
     const o = this.acquire();
     o.style = style; o.kind = kind; o.t = 0; o.active = true; o.seq = ++this.seq;
-    o.x = x; o.y = y - (stackIndex % 12) * STACK_PX;
+    o.mul = damageNumberScale();
+    o.x = x; o.y = y - (stackIndex % 12) * STACK_PX * o.mul;
 
     // Layout glyphs.
     let total = 0;
@@ -265,7 +269,7 @@ export class DamageNumbers {
       }
       if (o.burst) o.burst.setVisible(true).setPosition(-total / 2 - 6, -style.size * 0.45).setScale(0.3).setAlpha(1).setRotation(Math.random() * Math.PI);
     }
-    o.c.setPosition(o.x, o.y).setScale(0.5).setAlpha(1).setVisible(true).setActive(true);
+    o.c.setPosition(o.x, o.y).setScale(0.5 * o.mul).setAlpha(1).setVisible(true).setActive(true);
     o.c.setDepth(DEPTH.DAMAGE_TEXT + (o.seq % 1000) / 1000 + (kind === 'crit' ? 0.5 : 0));
     this.active.push(o);
 
@@ -276,7 +280,7 @@ export class DamageNumbers {
     const o = this.pool.pop();
     if (o && o.c.scene) return o;
     const c = this.scene.add.container(0, 0).setDepth(DEPTH.DAMAGE_TEXT);
-    return { c, imgs: [], burst: null, t: 0, x: 0, y: 0, style: STYLES.monster, kind: 'monster', active: false, seq: 0 };
+    return { c, imgs: [], burst: null, t: 0, x: 0, y: 0, style: STYLES.monster, kind: 'monster', active: false, seq: 0, mul: 1 };
   }
 
   private release(o: NumObj) {
@@ -302,9 +306,9 @@ export class DamageNumbers {
       else if (t < 170) { const p = (t - 80) / 90; sc = s.pop + (1 - s.pop) * p; }
       else sc = 1;
       const lp = t / s.life;
-      const rise = s.rise * (1 - Math.pow(1 - lp, 2));
+      const rise = s.rise * o.mul * (1 - Math.pow(1 - lp, 2));
       const alpha = lp < 0.55 ? 1 : 1 - (lp - 0.55) / 0.45;
-      o.c.setScale(sc).setAlpha(alpha).setPosition(o.x, o.y - rise);
+      o.c.setScale(sc * o.mul).setAlpha(alpha).setPosition(o.x, o.y - rise);
       if (o.burst && o.burst.visible) {
         const bp = Math.min(1, t / 320);
         o.burst.setScale(0.35 + bp * 1.05).setAlpha(1 - bp).rotation += delta * 0.002;

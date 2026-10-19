@@ -280,3 +280,13 @@ several build paths exist inside a Year (2–3 roots per Year, not one long chai
   `grave_robes`, exam drops `yeti_bone`, `seal_fragment`.
 - **Familiar**: Pip the owl (`src/systems/PetSystem.ts`) auto-loots drops near the player; `arcana.pet()` toggles.
 - **VFX hint**: `VfxOptions.groundY` = walkable surface under hits/areas; anchor ground effects on it.
+
+### Input & settings (Phase 7)
+
+Keys are no longer fixed: `src/core/bindings.ts` maps actions (move, jump/jump2, interact, pickup, hotbarPage,
+slot0–slot11, window toggles) → keyCodes, persisted in `academy-bindings-v1`; defaults come from
+`HOTBAR_KEYS`/`CONTROL_KEYS`/`UI_KEYS`. Player, GameScene, UIRoot, HUD labels and GamepadBridge read it and
+re-bind live (`onBindingsChanged`). Never hard-code key letters in new UI text — use `keyLabel(getBinding(a))`.
+`src/core/settings.ts` (`academy-settings-v1`): screen shake on/reduced/off (applied by patching the main
+camera's shake/flash in GameScene), damage-number size, familiar on/off. Saves live in six slots
+(`arcana-story-save-v1:slot0..5` + `:meta`) behind the same SaveSystem API (active slot).

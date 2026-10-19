@@ -28,11 +28,11 @@ interface MonsterSpec {
 function potionDrops(level: number): DropEntry[] {
   if (level < 12) return [
     { itemId: 'red_potion', chance: 0.12, min: 1, max: 2 },
-    { itemId: 'blue_potion', chance: 0.07 },
+    { itemId: 'blue_potion', chance: 0.1 },
   ];
   if (level < 25) return [
     { itemId: 'orange_potion', chance: 0.11, min: 1, max: 2 },
-    { itemId: 'blue_potion', chance: 0.08, min: 1, max: 2 },
+    { itemId: 'blue_potion', chance: 0.1, min: 1, max: 2 },
     { itemId: 'return_scroll', chance: 0.03 },
   ];
   if (level < 40) return [
@@ -74,7 +74,7 @@ function equipDrops(level: number): DropEntry[] {
 }
 
 function mesosFor(level: number): [number, number] {
-  return [Math.round(2 + level * 2.2), Math.round(5 + level * 3.6)];
+  return [Math.round(3 + level * 2.5), Math.round(6 + level * 4)];
 }
 
 function mk(s: MonsterSpec): MonsterDef {
@@ -259,12 +259,12 @@ export const MONSTERS: MonsterDef[] = [
   mk({ id: 'thorn_shroom', name: 'Thorn Shroom', level: 9, behavior: 'walker', speed: 64, size: { w: 44, h: 52 },
     hpMul: 0.95, expMul: 1.05, touchMul: 1.15, etc: 'thorn_spore' }),
   mk({ id: 'stump_golem', name: 'Stump Golem', level: 13, behavior: 'walker', speed: 44, size: { w: 50, h: 62 },
-    hpMul: 1.28, expMul: 1.2, touchMul: 1.1, defMul: 1.5, weak: ['shadow'], resist: ['holy'], etc: 'stump_bark', etcChance: 0.4 }),
+    hpMul: 1.05, expMul: 1.2, touchMul: 1.1, defMul: 1.2, weak: ['shadow'], resist: ['holy'], etc: 'stump_bark', etcChance: 0.4 }),
   // ── frostfang_cliffs ──
   mk({ id: 'frost_bat', name: 'Frost Bat', level: 16, behavior: 'flyer', speed: 95, size: { w: 40, h: 30 },
     hpMul: 0.82, expMul: 0.95, touchMul: 0.9, weak: ['fire', 'lightning'], etc: 'bat_wing' }),
   mk({ id: 'snow_yeti', name: 'Snow Yeti', level: 20, behavior: 'walker', speed: 70, size: { w: 56, h: 72 },
-    hpMul: 1.22, expMul: 1.15, touchMul: 1.15, defMul: 1.2, weak: ['fire', 'shadow'], etc: 'yeti_fur', etcChance: 0.4,
+    hpMul: 1.05, expMul: 1.15, touchMul: 1.0, defMul: 1.2, weak: ['fire', 'shadow'], etc: 'yeti_fur', etcChance: 0.4,
     extraDrops: [{ itemId: 'yeti_bone', chance: 0.35 }] }),
   mk({ id: 'ice_wisp', name: 'Ice Wisp', level: 23, behavior: 'flyer', speed: 78, size: { w: 34, h: 38 },
     hpMul: 0.85, touchMul: 1.05, weak: ['fire', 'holy'], resist: ['ice'], immune: ['freeze'], etc: 'wisp_essence' }),

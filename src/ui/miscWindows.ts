@@ -1,4 +1,4 @@
-/** Esc menu, controls help, Year-end Exam (job advancement) chooser. */
+/** Esc menu (Game + Settings tabs), controls help, Year-end Exam (job advancement) chooser. */
 import { GAME_WIDTH, SCENES } from '../core/constants';
 import type { JobDef, JobId } from '../core/types';
 import { Registry } from '../core/registry';
@@ -6,7 +6,10 @@ import type { UICtx } from './context';
 import { h, loadJson, safe, saveJson } from './dom';
 import { BRANCH_COLORS, BRANCH_NAMES, examinerName, schoolName } from './info';
 import { portraitEl } from './uiIcons';
-import { UIWindow } from './window';
+import { UIWindow, tabStrip } from './window';
+import { SLOT_ACTIONS, getBinding, getBindings, keyLabel, onBindingsChanged, type ActionId } from '../core/bindings';
+import { getSettings, onSettingsChanged, setSetting, type Settings } from '../core/settings';
+import { destroyControls, openControls } from './controlsWindow';
 
 const VOL_KEY = 'arcana-ui-volumes';
 
@@ -19,17 +22,57 @@ export function applySavedVolumes(audio: { setVolumes(s: number, m: number): voi
 
 // ───────────────────────────── Esc menu ─────────────────────────────
 
+type MenuTab = 'game' | 'settings';
+
 export class MenuWindow extends UIWindow {
   private confirmQuit = false;
+  private tab: MenuTab = 'game';
+  private offSettings: () => void;
   constructor(ctx: UICtx) {
-    super(ctx, 'menu', 'Menu', { width: 300, x: 490, y: 170, className: 'ax-menu-win' });
+    super(ctx, 'menu', 'Menu', { width: 320, x: 480, y: 150, className: 'ax-menu-win' });
+    this.offSettings = onSettingsChanged(() => this.invalidate());
   }
 
   protected onOpen() { this.confirmQuit = false; this.invalidate(); }
   /** Only re-render on explicit changes (keeps sliders stable while dragging). */
-  protected signature() { return String(this.confirmQuit); }
+  protected signature() { return JSON.stringify([this.confirmQuit, this.tab, getSettings()]); }
+
+  destroy() {
+    try { this.offSettings(); } catch { /* ignore */ }
+    destroyControls(this.ctx);
+    super.destroy();
+  }
 
   protected render() {
+    const tabs = tabStrip<MenuTab>([{ id: 'game', label: 'Game' }, { id: 'settings', label: 'Settings' }], this.tab, (t) => {
+      this.tab = t; this.confirmQuit = false; this.ctx.sfx('ui_click'); this.invalidate();
+    });
+    this.body.replaceChildren(tabs, ...(this.tab === 'game' ? this.renderGame() : this.renderSettings()));
+  }
+
+  private btn(label: string, fn: () => void, cls = '') {
+    return h('button', { class: `ax-btn ax-menu-btn ${cls}`, onclick: () => { this.ctx.sfx('ui_click'); fn(); } }, label);
+  }
+
+  private renderGame(): HTMLElement[] {
+    const btn = this.btn.bind(this);
+    const quit = this.confirmQuit
+      ? h('div', { class: 'ax-confirm' }, h('div', null, 'Return to the title screen? Your progress will be saved.'),
+        h('div', { class: 'ax-row' }, btn('Quit', () => this.quit(), 'ax-btn-danger'), btn('Cancel', () => { this.confirmQuit = false; this.invalidate(); }, 'ax-btn-secondary')))
+      : btn('Quit to Title', () => { this.confirmQuit = true; this.invalidate(); }, 'ax-btn-secondary');
+    return [
+      btn('Resume', () => this.close()),
+      btn('Controls', () => { this.close(); openControls(this.ctx, 'keyboard'); }, 'ax-btn-secondary'),
+      btn('Settings', () => { this.tab = 'settings'; this.invalidate(); }, 'ax-btn-secondary'),
+      btn('How to Play', () => { this.close(); this.ctx.openWindow('help'); }, 'ax-btn-secondary'),
+      btn('Save Game', () => {
+        try { this.ctx.s.progression.save(); this.ctx.log('Game saved.', '#9fe8a8'); } catch { this.ctx.log('Saving failed.', '#ff9b9b'); }
+      }, 'ax-btn-secondary'),
+      quit,
+    ];
+  }
+
+  private renderSettings(): HTMLElement[] {
     const a = this.ctx.s.audio;
     const vols = safe(() => a.getVolumes(), { sfx: 0.7, music: 0.4 });
     const slider = (label: string, which: 'sfx' | 'music') => {
@@ -47,19 +90,22 @@ export class MenuWindow extends UIWindow {
       input.addEventListener('pointerup', () => input.blur());
       return h('label', { class: 'ax-slider-row' }, h('span', null, label), input, val);
     };
-    const btn = (label: string, fn: () => void, cls = '') => h('button', { class: `ax-btn ax-menu-btn ${cls}`, onclick: () => { this.ctx.sfx('ui_click'); fn(); } }, label);
-    const quit = this.confirmQuit
-      ? h('div', { class: 'ax-confirm' }, h('div', null, 'Return to the title screen? Your progress will be saved.'),
-        h('div', { class: 'ax-row' }, btn('Quit', () => this.quit(), 'ax-btn-danger'), btn('Cancel', () => { this.confirmQuit = false; this.invalidate(); }, 'ax-btn-secondary')))
-      : btn('Quit to Title', () => { this.confirmQuit = true; this.invalidate(); }, 'ax-btn-secondary');
-    this.body.replaceChildren(
-      btn('Resume', () => this.close()),
-      btn('Controls', () => { this.close(); this.ctx.openWindow('help'); }, 'ax-btn-secondary'),
+    const st = getSettings();
+    const seg = <K extends keyof Settings>(label: string, key: K, opts: [Settings[K], string][], title = '') =>
+      h('div', { class: 'ax-set-row', title },
+        h('span', { class: 'ax-set-label' }, label),
+        h('div', { class: 'ax-seg' }, opts.map(([v, text]) => h('button', {
+          class: `ax-seg-btn${st[key] === v ? ' ax-active' : ''}`, 'data-setting': `${key}:${String(v)}`,
+          onclick: () => { this.ctx.sfx('ui_click'); setSetting(key, v); },
+        }, text))));
+    return [
       h('div', { class: 'ax-panel ax-settings' }, h('div', { class: 'ax-panel-head' }, 'Sound'), slider('Effects', 'sfx'), slider('Music', 'music')),
-      btn('Save Game', () => {
-        try { this.ctx.s.progression.save(); this.ctx.log('Game saved.', '#9fe8a8'); } catch { this.ctx.log('Saving failed.', '#ff9b9b'); }
-      }, 'ax-btn-secondary'),
-      quit);
+      h('div', { class: 'ax-panel ax-settings' }, h('div', { class: 'ax-panel-head' }, 'Display'),
+        seg('Shake', 'shake', [['on', 'On'], ['reduced', 'Less'], ['off', 'Off']], 'Camera shake and flashes from big spells and bosses'),
+        seg('Damage #', 'damageSize', [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']], 'Size of floating damage numbers'),
+        seg('Familiar', 'familiar', [[true, 'Show'], [false, 'Hide']], 'Show Pip, your familiar')),
+      this.btn('Back', () => { this.tab = 'game'; this.invalidate(); }, 'ax-btn-secondary'),
+    ];
   }
 
   private quit() {
@@ -71,46 +117,59 @@ export class MenuWindow extends UIWindow {
 // ───────────────────────────── Help ─────────────────────────────
 
 export class HelpWindow extends UIWindow {
+  private offBindings: () => void;
   constructor(ctx: UICtx) {
-    super(ctx, 'help', 'How to Play', { width: 520, x: 380, y: 150, className: 'ax-help-win' });
+    super(ctx, 'help', 'How to Play', { width: 540, x: 370, y: 130, className: 'ax-help-win' });
+    this.offBindings = onBindingsChanged(() => this.invalidate());
   }
-  protected signature() { return 'static'; }
+  protected signature() { return JSON.stringify(getBindings()); }
+  destroy() {
+    try { this.offBindings(); } catch { /* ignore */ }
+    destroyControls(this.ctx);
+    super.destroy();
+  }
   protected render() {
+    const k = (...acts: ActionId[]) => acts.map(a => keyLabel(getBinding(a)));
     const row = (keys: string[], what: string) => h('div', { class: 'ax-help-row' },
-      h('div', { class: 'ax-help-keys' }, keys.map(k => h('kbd', null, k))), h('div', null, what));
+      h('div', { class: 'ax-help-keys' }, keys.map(key => h('kbd', null, key))), h('div', null, what));
     const jobs = safe(() => Registry.jobs(), [] as JobDef[]);
     const schools = jobs.filter(j => j.tier === 2).map(j => BRANCH_NAMES[j.branch] ?? j.name);
     const list = schools.length > 1 ? `${schools.slice(0, -1).join(', ')} or ${schools[schools.length - 1]}` : 'a School';
     const lv2 = jobs.find(j => j.tier === 2)?.requiredLevel ?? 10;
+    const slots = (idx: number[]) => k(...idx.map(i => SLOT_ACTIONS[i]));
     this.body.replaceChildren(
       h('div', { class: 'ax-help-intro' }, `Welcome to The Academy! Every student here is a mage. Study the core curriculum as a Year 1 Apprentice, then pass your Year-end Exam at level ${lv2} and declare your School: ${list}.`),
       h('div', { class: 'ax-help-cols' },
         h('div', null,
           h('div', { class: 'ax-help-head' }, 'Movement'),
-          row(['←', '→'], 'Walk'),
-          row(['Space', 'Alt'], 'Jump'),
-          row(['↓', '+ Jump'], 'Drop through a platform'),
-          row(['↑', '↓'], 'Climb ropes & ladders'),
-          row(['↑'], 'Enter portal / talk to NPC'),
-          row(['Z'], 'Pick up items (hold)'),
+          row(k('left', 'right'), 'Walk'),
+          row(k('jump', 'jump2'), 'Jump'),
+          row([...k('down'), '+ Jump'], 'Drop through a platform'),
+          row(k('up', 'down'), 'Climb ropes & ladders'),
+          row(k('interact'), 'Enter portal / talk to NPC'),
+          row(k('pickup'), 'Pick up items (hold)'),
           h('div', { class: 'ax-help-head' }, 'Combat'),
-          row(['Q', 'W', 'E', 'R', 'T'], 'Hotbar slots'),
-          row(['A', 'S', 'D', 'F', 'G'], 'Hotbar slots'),
-          row(['1', '2'], 'Potions (by default)'),
-          row(['Tab'], 'Flip hotbar page (1 / 2)')),
+          row(slots([0, 1, 2, 3, 4]), 'Hotbar slots'),
+          row(slots([5, 6, 7, 8, 9]), 'Hotbar slots'),
+          row(slots([10, 11]), 'Potions (by default)'),
+          row(k('hotbarPage'), 'Flip hotbar page (1 / 2)')),
         h('div', null,
           h('div', { class: 'ax-help-head' }, 'Windows'),
-          row(['K'], 'Spellbook — spend SP'),
-          row(['I'], 'Inventory'),
-          row(['P'], 'Character — spend AP'),
-          row(['J'], 'Assignments'),
-          row(['M'], 'Minimap'),
-          row(['H'], 'This help'),
+          row(k('skills'), 'Spellbook — spend SP'),
+          row(k('inventory'), 'Inventory'),
+          row(k('stats'), 'Character — spend AP'),
+          row(k('quests'), 'Assignments'),
+          row(k('minimap'), 'Minimap'),
+          row(k('help'), 'This help'),
           row(['Esc'], 'Close window / menu'),
+          h('div', { class: 'ax-help-head' }, 'Gamepad & keys'),
+          h('div', { class: 'ax-help-tip' }, 'Plug in a controller: left stick / D-pad move, A jumps, B picks up, X Y LB RB LT RT and the right stick cast your hotbar, Start opens the menu.'),
+          h('div', { class: 'ax-help-tip' }, 'Every key can be rebound: Esc → Controls (button below).'),
           h('div', { class: 'ax-help-head' }, 'Tips'),
-          h('div', { class: 'ax-help-tip' }, 'Drag spells from your Spellbook (or potions from your Inventory) onto the hotbar. Two pages of 12 slots — Tab flips. Right-click a slot to clear it.'),
-          h('div', { class: 'ax-help-tip' }, 'Hold a skill key to keep casting.'))),
-      h('div', { class: 'ax-row ax-center' }, h('button', { class: 'ax-btn', onclick: () => this.close() }, 'Got it!')));
+          h('div', { class: 'ax-help-tip' }, `Drag spells from your Spellbook (or potions from your Inventory) onto the hotbar. Two pages of 12 slots — ${keyLabel(getBinding('hotbarPage'))} flips. Right-click a slot to clear it. Hold a skill key to keep casting.`))),
+      h('div', { class: 'ax-row ax-center' },
+        h('button', { class: 'ax-btn ax-btn-secondary', onclick: () => { this.ctx.sfx('ui_click'); this.close(); openControls(this.ctx, 'keyboard'); } }, 'Controls & Gamepad'),
+        h('button', { class: 'ax-btn', onclick: () => this.close() }, 'Got it!')));
   }
 }
 

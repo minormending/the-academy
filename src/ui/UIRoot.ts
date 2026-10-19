@@ -7,6 +7,8 @@ import Phaser from 'phaser';
 import type { GameServices, IUI, SfxKey } from '../core/types';
 import { bus, type GameEvents } from '../core/events';
 import { Registry } from '../core/registry';
+import { actionsForKey, eventKeyCode } from '../core/bindings';
+import { controlsClaimKey } from './controlsWindow';
 import { expToNext } from '../core/balance';
 import { Layout, type UICtx, type WindowName } from './context';
 import { fmtNum, isTextInput, safe } from './dom';
@@ -212,6 +214,7 @@ export class UIRoot implements IUI {
 
   private keyDown(e: KeyboardEvent) {
     if (this.destroyed || !this.started) return;
+    if (controlsClaimKey(e)) return; // key capture / Esc owned by the Controls window
     const active = document.activeElement;
     if (isTextInput(active)) {
       if (e.code === 'Escape') (active as HTMLElement).blur();
@@ -224,21 +227,21 @@ export class UIRoot implements IUI {
       return; // other keys do nothing while talking
     }
     if (e.repeat) return;
-    switch (e.code) {
-      case 'KeyK': this.toggleWindow('skills'); break;
-      case 'KeyI': this.toggleWindow('inventory'); break;
-      case 'KeyP': this.toggleWindow('stats'); break;
-      case 'KeyJ': this.toggleWindow('quests'); break;
-      case 'KeyH': this.toggleWindow('help'); break;
-      case 'KeyM': this.minimap.toggle(); break;
-      case 'Escape': {
-        const top = this.topmostOpen();
-        if (top) top.close(); else this.openWindow('menu');
-        e.preventDefault();
-        break;
-      }
-      default: return;
+    // Window toggles follow core/bindings (rebindable); Esc always works as menu / close.
+    const code = eventKeyCode(e);
+    const acts = actionsForKey(code);
+    if (e.code === 'Escape' || code === 27 || acts.includes('menu')) {
+      const top = this.topmostOpen();
+      if (top) top.close(); else this.openWindow('menu');
+      e.preventDefault();
+      return;
     }
+    if (acts.includes('skills')) this.toggleWindow('skills');
+    else if (acts.includes('inventory')) this.toggleWindow('inventory');
+    else if (acts.includes('stats')) this.toggleWindow('stats');
+    else if (acts.includes('quests')) this.toggleWindow('quests');
+    else if (acts.includes('help')) this.toggleWindow('help');
+    else if (acts.includes('minimap')) this.minimap.toggle();
   }
 
   // ─────────────────────────── drag & drop ───────────────────────────

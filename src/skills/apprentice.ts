@@ -31,7 +31,7 @@ export const APPRENTICE_SKILLS: SkillDef[] = [
     kind: 'attack',
     maxLevel: 10,
     icon: { glyph: 'missile', color: VIOLET_LT, color2: CYAN, bg: 0x22104a },
-    mpCost: lv => Math.round(lerp(6, 12, lv, 10)),
+    mpCost: lv => Math.round(lerp(5, 10, lv, 10)),
     castTimeMs: 420,
     sfx: 'cast_arcane',
     attack: {

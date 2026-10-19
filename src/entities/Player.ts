@@ -1,6 +1,7 @@
 // OWNER: A1 (player). MapleStory-feel player controller.
 import Phaser from 'phaser';
 import { DEPTH, PLAYER_HITBOX } from '../core/constants';
+import { actionsForKey, getBinding, onBindingsChanged, type ActionId } from '../core/bindings';
 import type { GameServices, IMapInstance, IPlayer, JobId, RopeDef } from '../core/types';
 import { playerAnimKey, playerTextureKey, type PlayerAnim } from '../art/characters';
 import { ensureFallbackTexture } from './player/fallbackTexture';
@@ -9,13 +10,14 @@ import { PT } from './player/tuning';
 
 type PState = IPlayer['state'];
 
+/** Keys for the current bindings (core/bindings); null = action unbound. Rebuilt live by bindKeys(). */
 interface PlayerKeys {
-  left: Phaser.Input.Keyboard.Key;
-  right: Phaser.Input.Keyboard.Key;
-  up: Phaser.Input.Keyboard.Key;
-  down: Phaser.Input.Keyboard.Key;
-  space: Phaser.Input.Keyboard.Key;
-  alt: Phaser.Input.Keyboard.Key;
+  left: Phaser.Input.Keyboard.Key | null;
+  right: Phaser.Input.Keyboard.Key | null;
+  up: Phaser.Input.Keyboard.Key | null;
+  down: Phaser.Input.Keyboard.Key | null;
+  jump: Phaser.Input.Keyboard.Key | null;
+  jump2: Phaser.Input.Keyboard.Key | null;
 }
 
 interface FrameInput {
@@ -60,6 +62,8 @@ export class Player implements IPlayer {
   private map: IMapInstance | null = null;
   private colliders: Phaser.Physics.Arcade.Collider[] = [];
   private keys: PlayerKeys | null = null;
+  private keyListeners: [Phaser.Input.Keyboard.Key, () => void][] = [];
+  private offBindings: (() => void) | null = null;
   private nameTag: NameTag;
   private dust: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
   private usingFallback = false;
@@ -114,7 +118,10 @@ export class Player implements IPlayer {
   private onJumpKeyDown = () => { this.jumpLatched = true; };
   private onLeftKeyDown = () => { this.tapDirLatched = -1; };
   private onRightKeyDown = () => { this.tapDirLatched = 1; };
-  private onWindowKey = (e: KeyboardEvent) => { if (e.key === 'Alt' && this.controlEnabled) e.preventDefault(); };
+  /** Keep a bound Alt from focusing the browser menu bar. */
+  private onWindowKey = (e: KeyboardEvent) => {
+    if (e.key === 'Alt' && this.controlEnabled && actionsForKey(18).length > 0) e.preventDefault();
+  };
 
   constructor(private scene: Phaser.Scene, private services: GameServices, x: number, y: number, job: JobId) {
     this.job = job;
@@ -130,22 +137,35 @@ export class Player implements IPlayer {
     this.nameTag = new NameTag(scene);
     this.nameTag.follow(x, y);
 
-    const kb = scene.input.keyboard;
-    if (kb) {
-      const K = Phaser.Input.Keyboard.KeyCodes;
-      this.keys = {
-        left: kb.addKey(K.LEFT), right: kb.addKey(K.RIGHT), up: kb.addKey(K.UP), down: kb.addKey(K.DOWN),
-        space: kb.addKey(K.SPACE), alt: kb.addKey(K.ALT),
-      };
-      this.keys.space.on('down', this.onJumpKeyDown);
-      this.keys.alt.on('down', this.onJumpKeyDown);
-      this.keys.left.on('down', this.onLeftKeyDown);
-      this.keys.right.on('down', this.onRightKeyDown);
+    if (scene.input.keyboard) {
+      this.bindKeys();
+      this.offBindings = onBindingsChanged(() => { if (this.scene.input?.keyboard) this.bindKeys(); });
     }
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', this.onWindowKey);
       window.addEventListener('keyup', this.onWindowKey);
     }
+  }
+
+  /** (Re)create movement/jump keys from the current bindings; detaches the previous 'down' latches first. */
+  private bindKeys() {
+    const kb = this.scene.input.keyboard;
+    if (!kb) return;
+    for (const [k, fn] of this.keyListeners) k.off('down', fn);
+    this.keyListeners = [];
+    const add = (action: ActionId, onDown?: () => void) => {
+      const code = getBinding(action);
+      if (!code) return null;
+      const k = kb.addKey(code);
+      if (onDown) { k.on('down', onDown); this.keyListeners.push([k, onDown]); }
+      return k;
+    };
+    this.keys = {
+      left: add('left', this.onLeftKeyDown), right: add('right', this.onRightKeyDown), up: add('up'), down: add('down'),
+      jump: add('jump', this.onJumpKeyDown), jump2: add('jump2', this.onJumpKeyDown),
+    };
+    this.jumpLatched = false;
+    this.tapDirLatched = 0;
   }
 
   // ─────────────────────────── IPlayer: queries ───────────────────────────
@@ -175,8 +195,8 @@ export class Player implements IPlayer {
   getAimDir(): { x: -1 | 0 | 1; y: -1 | 0 | 1 } {
     const k = this.keys;
     if (!k || !this.controlEnabled || this.dead) return { x: 0, y: 0 };
-    const x = (k.right.isDown ? 1 : 0) - (k.left.isDown ? 1 : 0);
-    const y = (k.down.isDown ? 1 : 0) - (k.up.isDown ? 1 : 0);
+    const x = (k.right?.isDown ? 1 : 0) - (k.left?.isDown ? 1 : 0);
+    const y = (k.down?.isDown ? 1 : 0) - (k.up?.isDown ? 1 : 0);
     return { x: x as -1 | 0 | 1, y: y as -1 | 0 | 1 };
   }
 
@@ -866,8 +886,8 @@ export class Player implements IPlayer {
   private readInput(now: number): FrameInput {
     const k = this.keys;
     const raw = {
-      left: !!k?.left.isDown, right: !!k?.right.isDown, up: !!k?.up.isDown, down: !!k?.down.isDown,
-      jump: !!k && (k.space.isDown || k.alt.isDown),
+      left: !!k?.left?.isDown, right: !!k?.right?.isDown, up: !!k?.up?.isDown, down: !!k?.down?.isDown,
+      jump: !!k && (!!k.jump?.isDown || !!k.jump2?.isDown),
     };
     const pressed = (raw.jump && !this.prevJumpDown) || this.jumpLatched;
     this.prevJumpDown = raw.jump;
@@ -913,16 +933,16 @@ export class Player implements IPlayer {
       window.removeEventListener('keydown', this.onWindowKey);
       window.removeEventListener('keyup', this.onWindowKey);
     }
+    this.offBindings?.();
+    this.offBindings = null;
+    for (const [k, fn] of this.keyListeners) k.off('down', fn);
+    this.keyListeners = [];
     const kb = this.scene.input?.keyboard;
-    if (this.keys) {
-      this.keys.space.off('down', this.onJumpKeyDown);
-      this.keys.alt.off('down', this.onJumpKeyDown);
-      this.keys.left.off('down', this.onLeftKeyDown);
-      this.keys.right.off('down', this.onRightKeyDown);
-    }
     if (kb && this.keys) {
       // UP is shared with GameScene (portal/NPC interact), so leave it registered.
-      for (const key of [this.keys.left, this.keys.right, this.keys.down, this.keys.space, this.keys.alt]) {
+      const shared = getBinding('interact');
+      for (const key of [this.keys.left, this.keys.right, this.keys.down, this.keys.jump, this.keys.jump2]) {
+        if (!key || key.keyCode === shared) continue;
         try { kb.removeKey(key, false); } catch { /* ignore */ }
       }
     }

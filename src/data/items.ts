@@ -25,7 +25,7 @@ export const ITEMS: ItemDef[] = [
   consumable('red_potion', 'Red Potion', 'A cherry-sweet tonic. Restores 50 HP.', { glyph: 'potion', color: 0xe8413c, color2: 0xffb3a8 }, 30, { hp: 50, cooldownMs: 300 }),
   consumable('orange_potion', 'Orange Potion', 'Brewed from sunfruit peel. Restores 150 HP.', { glyph: 'potion', color: 0xff9a2e, color2: 0xffe0a8 }, 90, { hp: 150, cooldownMs: 300 }),
   consumable('white_potion', 'White Potion', 'A pearly draught that knits wounds shut. Restores 300 HP.', { glyph: 'potion', color: 0xf4f1ea, color2: 0xc9d6e6 }, 200, { hp: 300, cooldownMs: 300 }),
-  consumable('blue_potion', 'Blue Potion', 'Tastes faintly of starlight. Restores 100 MP.', { glyph: 'potion', color: 0x3c7ee8, color2: 0xa8d0ff }, 50, { mp: 100, cooldownMs: 300 }),
+  consumable('blue_potion', 'Blue Potion', 'Tastes faintly of starlight. Restores 100 MP.', { glyph: 'potion', color: 0x3c7ee8, color2: 0xa8d0ff }, 40, { mp: 100, cooldownMs: 300 }),
   consumable('mana_elixir', 'Mana Elixir', 'Distilled ley-line dew. Restores 300 MP.', { glyph: 'potion', color: 0x2a3fd0, color2: 0x9be7ff }, 180, { mp: 300, cooldownMs: 300 }),
   consumable('elixir', 'Elixir', 'A rare alchemical masterpiece. Restores 50% of max HP and MP.', { glyph: 'potion', color: 0xb35cff, color2: 0xffd6ff }, 900, { hpPct: 0.5, mpPct: 0.5, cooldownMs: 1000 }),
   consumable('power_elixir', 'Power Elixir', 'Liquid sunrise in a bottle. Fully restores HP and MP.', { glyph: 'potion', color: 0xffd447, color2: 0xfff6c8 }, 2400, { hpPct: 1, mpPct: 1, cooldownMs: 1500 }),

@@ -32,7 +32,7 @@ export function baseDerived(state: PlayerState): DerivedStats {
     speed: 200,
     jump: 560,
     hpRegen: 5 + L * 0.6 + str * 0.2,
-    mpRegen: 4 + L * 0.5 + int * 0.08,
+    mpRegen: 6 + L * 0.9 + int * 0.1,
     mpShield: 0,
     dmgAll: 0,
     dmgFire: 0,

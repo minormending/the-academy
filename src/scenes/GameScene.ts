@@ -3,7 +3,9 @@
  * (hotbar, portals/NPC interaction, pickup). Owned by the lead.
  */
 import Phaser from 'phaser';
-import { CONTROL_KEYS, DEPTH, HOTBAR_KEYS, SCENES, START_MAP, TOWN_MAP } from '../core/constants';
+import { DEPTH, SCENES, START_MAP, TOWN_MAP } from '../core/constants';
+import { ACTIONS, SLOT_ACTIONS, getBinding, onBindingsChanged, type ActionId } from '../core/bindings';
+import { flashAlpha, getSettings, onSettingsChanged, shakeScale } from '../core/settings';
 import { bus } from '../core/events';
 import { setServices } from '../core/services';
 import { Registry } from '../core/registry';
@@ -31,10 +33,12 @@ export class GameScene extends Phaser.Scene implements IGameApi {
   private initialState!: PlayerState;
   private inputBlocked = false;
   private transitioning = false;
-  private hotkeys: Phaser.Input.Keyboard.Key[] = [];
-  private keyUp!: Phaser.Input.Keyboard.Key;
-  private keyPickup!: Phaser.Input.Keyboard.Key;
-  private keyPage!: Phaser.Input.Keyboard.Key;
+  /** Phaser keys for the current bindings (null = action unbound); rebuilt live by bindKeys(). */
+  private hotkeys: (Phaser.Input.Keyboard.Key | null)[] = [];
+  private keyUp: Phaser.Input.Keyboard.Key | null = null;
+  private keyPickup: Phaser.Input.Keyboard.Key | null = null;
+  private keyPage: Phaser.Input.Keyboard.Key | null = null;
+  private keyLatchers: [Phaser.Input.Keyboard.Key, () => void][] = [];
   private page = 0;
   private nextPickupAt = 0;
   /** Presses latched from key 'down' events so sub-frame taps are never lost (Phaser clears _justDown on keyup). */
@@ -74,6 +78,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
 
     this.wireEvents();
     this.wireKeys();
+    this.wireSettings();
 
     const startMap = Registry.map(state.mapId) ? state.mapId : START_MAP;
     this.loadMapNow(startMap);
@@ -188,16 +193,74 @@ export class GameScene extends Phaser.Scene implements IGameApi {
   }
 
   private wireKeys() {
+    this.bindKeys();
+    // Re-bind live when the player changes a key in the Controls window.
+    const off = onBindingsChanged(() => { if (this.input?.keyboard) this.bindKeys(); });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, off);
+  }
+
+  /** (Re)create the Phaser keys for the gameplay actions GameScene owns, without leaking 'down' listeners. */
+  private bindKeys() {
     const kb = this.input.keyboard!;
-    this.hotkeys = HOTBAR_KEYS.map(k => kb.addKey(Phaser.Input.Keyboard.KeyCodes[k]));
-    this.keyUp = kb.addKey(Phaser.Input.Keyboard.KeyCodes[CONTROL_KEYS.interact]);
-    this.keyPickup = kb.addKey(Phaser.Input.Keyboard.KeyCodes[CONTROL_KEYS.pickup]);
-    this.keyPage = kb.addKey(Phaser.Input.Keyboard.KeyCodes[CONTROL_KEYS.hotbarPage]);
-    for (const k of [...this.hotkeys, this.keyUp, this.keyPickup, this.keyPage]) k.on('down', () => this.latched.add(k));
+    for (const [k, fn] of this.keyLatchers) k.off('down', fn);
+    this.keyLatchers = [];
+    this.latched.clear();
+    const add = (action: ActionId) => {
+      const code = getBinding(action);
+      if (!code) return null;
+      const k = kb.addKey(code);
+      const fn = () => this.latched.add(k);
+      k.on('down', fn);
+      this.keyLatchers.push([k, fn]);
+      return k;
+    };
+    this.hotkeys = SLOT_ACTIONS.map(a => add(a));
+    this.keyUp = add('interact');
+    this.keyPickup = add('pickup');
+    this.keyPage = add('hotbarPage');
+    // Drop Phaser keys (and their browser capture) for codes no gameplay action uses any more.
+    // Player keys are bound codes too, so this never touches them; UI-only keys are handled by DOM listeners.
+    const ui = new Set<ActionId>(['skills', 'inventory', 'stats', 'quests', 'minimap', 'help', 'menu']);
+    const used = new Set(ACTIONS.filter(a => !ui.has(a.id)).map(a => getBinding(a.id)).filter(Boolean));
+    for (const k of [...kb.keys]) {
+      if (k && !used.has(k.keyCode)) { try { kb.removeKey(k, true); } catch { /* ignore */ } }
+    }
+  }
+
+  /** Accessibility settings: camera shake/flash strength (one patch covers every VFX caller) + familiar toggle. */
+  private wireSettings() {
+    const cam = this.cameras.main as Phaser.Cameras.Scene2D.Camera & { __academyFx?: boolean };
+    if (!cam.__academyFx) {
+      cam.__academyFx = true;
+      const shake = cam.shake.bind(cam);
+      const flash = cam.flash.bind(cam);
+      cam.shake = (duration?: number, intensity?: number | Phaser.Math.Vector2, force?: boolean, callback?: Phaser.Types.Cameras.Scene2D.CameraShakeCallback, context?: unknown) => {
+        const k = shakeScale();
+        if (k <= 0 && !callback) return cam;
+        const base = intensity ?? 0.05;
+        const scaled = typeof base === 'number' ? base * k : new Phaser.Math.Vector2(base.x * k, base.y * k);
+        return shake(duration, scaled, force, callback, context);
+      };
+      cam.flash = (duration?: number, red?: number, green?: number, blue?: number, force?: boolean, callback?: Phaser.Types.Cameras.Scene2D.CameraFlashCallback, context?: unknown) => {
+        const a = flashAlpha();
+        if (a <= 0 && !callback) return cam;
+        if (!force && cam.flashEffect.isRunning) return cam;
+        cam.flashEffect.alpha = a;
+        return flash(duration, red, green, blue, force, callback, context);
+      };
+    }
+    const applyPet = () => { try { this.pet?.setEnabled(getSettings().familiar); } catch { /* ignore */ } };
+    applyPet();
+    const off = onSettingsChanged((_s, key) => {
+      if (key === 'familiar') applyPet();
+      if (key === 'shake' && shakeScale() <= 0) { try { cam.shakeEffect.reset(); cam.flashEffect.reset(); } catch { /* ignore */ } }
+    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, off);
   }
 
   /** True once per physical press, even if the key was released before this frame. */
-  private consumePress(k: Phaser.Input.Keyboard.Key): boolean {
+  private consumePress(k: Phaser.Input.Keyboard.Key | null): boolean {
+    if (!k) return false;
     Phaser.Input.Keyboard.JustDown(k);
     if (!this.latched.has(k)) return false;
     this.latched.delete(k);
@@ -207,7 +270,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
   private handleInput(time: number) {
     const s = this.s;
     if (this.inputBlocked || this.transitioning || s.progression.isDead()) { this.latched.clear(); return; }
-    const JustDown = (k: Phaser.Input.Keyboard.Key) => this.consumePress(k);
+    const JustDown = (k: Phaser.Input.Keyboard.Key | null) => this.consumePress(k);
 
     // Hotbar: skills repeat while held (Maple-style), items fire once per press.
     if (JustDown(this.keyPage)) this.setHotbarPage(this.page + 1);
@@ -222,7 +285,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
         continue;
       }
       const pressed = JustDown(key);
-      if (!key.isDown && !pressed) continue;
+      if (!key?.isDown && !pressed) continue;
       const r = s.skills.tryCast(entry);
       if (pressed && r !== 'ok' && r !== 'busy') {
         const msg = r === 'no_mp' ? 'Not enough MP.' : r === 'cooldown' ? 'That skill is still cooling down.'
@@ -240,8 +303,8 @@ export class GameScene extends Phaser.Scene implements IGameApi {
       if (npc) s.npcs.interact(npc);
     }
 
-    // Z: pick up (repeats while held).
-    if ((this.consumePress(this.keyPickup) || this.keyPickup.isDown) && time >= this.nextPickupAt) {
+    // Pick up (repeats while held).
+    if ((this.consumePress(this.keyPickup) || !!this.keyPickup?.isDown) && time >= this.nextPickupAt) {
       s.drops.tryPickup();
       this.nextPickupAt = time + 110;
     }

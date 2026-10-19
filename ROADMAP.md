@@ -40,7 +40,7 @@ a resumed session (after a usage-limit pause) reads it to pick up exactly where 
   - [ ] Pacing QA levels 25–50 (Years 3–4) per School; boss tuning pass (after the 1–25 pass lands).
 - [ ] **8. Ship**
   - Full regression QA (all five Schools, every map, bosses, arena, saves) + Codex final review.
-  - Performance pass (busy ultimates, load time), production build.
+  - [x] Performance pass (busy ultimates, load time), production build.
   - [x] README (how to play/run, credits); [x] final CREDITS merge.
   - Publish the production build as a playable private Artifact link for the user.
 

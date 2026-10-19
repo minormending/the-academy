@@ -104,6 +104,14 @@ function mk(s: MonsterSpec): MonsterDef {
   };
 }
 
+/** Year 5 endgame extras: high potions on top of potionDrops(), plus the zone's rare equips. */
+function endgameDrops(level: number, rares: DropEntry[]): DropEntry[] {
+  return [
+    { itemId: 'power_elixir', chance: level >= 60 ? 0.025 : 0.015 },
+    ...rares,
+  ];
+}
+
 const BOSS_LV = 48;
 
 const lichArchon: MonsterDef = {
@@ -303,6 +311,41 @@ export const MONSTERS: MonsterDef[] = [
     hpMul: 0.85, expMul: 0.95, weak: ['holy'], resist: ['shadow'], etc: 'void_crystal',
     extraDrops: [{ itemId: 'wisp_essence', chance: 0.15 }, { itemId: 'seal_fragment', chance: 0.12 }] }),
   lichArchon,
+  // ── Year 5 endgame (lv 51–67). Every School has a favourable target here:
+  //    fire → star_moth, shard_horror, unwritten_page · ice → star_moth, archon_knight
+  //    lightning → astral_sentinel, null_wisp, shard_horror · holy → rift_stalker, null_wisp, unwritten_page
+  //    shadow → astral_sentinel, archon_knight
+  // observatory (star_dust)
+  mk({ id: 'star_moth', name: 'Star Moth', level: 51, behavior: 'flyer', speed: 100, size: { w: 46, h: 40 },
+    hpMul: 0.85, expMul: 0.95, touchMul: 1.0, weak: ['fire', 'ice'], resist: ['holy'], etc: 'star_dust', etcChance: 0.5,
+    extraDrops: endgameDrops(51, [{ itemId: 'astral_ring', chance: 0.008 }, { itemId: 'fellow_rod_fire', chance: 0.004 }]) }),
+  mk({ id: 'astral_sentinel', name: 'Astral Sentinel', level: 54, behavior: 'walker', speed: 46, size: { w: 60, h: 86 },
+    hpMul: 1.25, expMul: 1.1, touchMul: 1.15, defMul: 1.5, weak: ['lightning', 'shadow'], resist: ['holy'], immune: ['poison'],
+    etc: 'star_dust', etcChance: 0.4,
+    extraDrops: endgameDrops(54, [{ itemId: 'astral_ring', chance: 0.01 }, { itemId: 'fellow_rod_lightning', chance: 0.004 }]) }),
+  // rift (rift_shard)
+  mk({ id: 'rift_stalker', name: 'Rift Stalker', level: 58, behavior: 'walker', speed: 92, size: { w: 70, h: 44 },
+    hpMul: 1.0, expMul: 1.0, touchMul: 1.15, weak: ['holy'], resist: ['shadow'], etc: 'rift_shard',
+    extraDrops: endgameDrops(58, [{ itemId: 'rift_amulet', chance: 0.008 }, { itemId: 'fellow_rod_holy', chance: 0.004 }]) }),
+  mk({ id: 'null_wisp', name: 'Null Wisp', level: 60, behavior: 'flyer', speed: 88, size: { w: 36, h: 42 },
+    hpMul: 0.85, expMul: 0.95, touchMul: 1.05, weak: ['holy', 'lightning'], resist: ['shadow'], immune: ['burn', 'poison'],
+    etc: 'rift_shard', etcChance: 0.5,
+    extraDrops: endgameDrops(60, [{ itemId: 'rift_amulet', chance: 0.006 }, { itemId: 'fellow_rod_shadow', chance: 0.004 }]) }),
+  mk({ id: 'shard_horror', name: 'Shard Horror', level: 62, behavior: 'hopper', speed: 104, size: { w: 52, h: 48 },
+    hpMul: 1.1, expMul: 1.05, touchMul: 1.1, defMul: 1.3, weak: ['fire', 'lightning'], resist: ['ice'], immune: ['chill', 'freeze'],
+    etc: 'rift_shard', etcChance: 0.4,
+    extraDrops: endgameDrops(62, [{ itemId: 'rift_amulet', chance: 0.01 }, { itemId: 'fellow_rod_ice', chance: 0.004 }]) }),
+  // spire (archon_seal)
+  mk({ id: 'archon_knight', name: 'Archon Knight', level: 65, behavior: 'walker', speed: 52, size: { w: 64, h: 96 },
+    hpMul: 1.3, expMul: 1.15, touchMul: 1.25, defMul: 1.6, weak: ['ice', 'shadow'], resist: ['holy', 'fire'], immune: ['burn'],
+    etc: 'archon_seal', etcChance: 0.35,
+    extraDrops: endgameDrops(65, [{ itemId: 'archon_crown', chance: 0.004 }, { itemId: 'fellow_rod_ice', chance: 0.003 },
+      { itemId: 'fellow_rod_shadow', chance: 0.003 }]) }),
+  mk({ id: 'unwritten_page', name: 'Unwritten Page', level: 67, behavior: 'flyer', speed: 106, size: { w: 40, h: 36 },
+    hpMul: 0.85, expMul: 0.95, touchMul: 1.0, weak: ['fire', 'holy'], resist: ['shadow'], immune: ['poison'],
+    etc: 'archon_seal', etcChance: 0.45,
+    extraDrops: endgameDrops(67, [{ itemId: 'archon_crown', chance: 0.003 }, { itemId: 'fellow_rod_fire', chance: 0.003 },
+      { itemId: 'fellow_rod_lightning', chance: 0.003 }, { itemId: 'fellow_rod_holy', chance: 0.003 }]) }),
   // ── field bosses ──
   ...FIELD_BOSS_DEFS,
 ];

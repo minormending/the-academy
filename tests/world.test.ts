@@ -42,7 +42,7 @@ describe('monsters', () => {
   it('have sane stats', () => {
     const p = problems();
     for (const m of MONSTERS) {
-      p.check(Number.isInteger(m.level) && m.level >= 1 && m.level <= 60, `${m.id} level ${m.level}`);
+      p.check(Number.isInteger(m.level) && m.level >= 1 && m.level <= 70, `${m.id} level ${m.level}`);
       p.check(m.hp > 0 && m.exp > 0, `${m.id} hp/exp ${m.hp}/${m.exp}`);
       p.check(m.mesos[0] >= 0 && m.mesos[0] <= m.mesos[1], `${m.id} mesos ${m.mesos}`);
       p.check(m.touchDamage > 0 && m.def >= 0 && m.speed >= 0, `${m.id} touch/def/speed`);

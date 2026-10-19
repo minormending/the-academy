@@ -2274,7 +2274,7 @@ const DIE_ALPHA = [1, 0.7, 0.4, 0.15, 0, 0];
 
 /** Builds a pixel-art monster sheet from its source pack, or null if a source sheet is missing. */
 export function paintPixelMonsterSheet(scene: Phaser.Scene, id: string): (MonsterSheet & { visual: MonsterVisual }) | null {
-  PIXEL_SPECS ??= buildPixelSpecs();
+  PIXEL_SPECS ??= { ...buildPixelSpecs(), ...buildEndgameSpecs() };
   const spec = PIXEL_SPECS[id];
   if (!spec) return null;
   const S = spec.scale ?? PIXEL_SCALE;
@@ -2606,4 +2606,78 @@ export function ensureMonsterTexture(scene: Phaser.Scene, id: string): boolean {
     console.error(`[monsterArt] ${id} failed`, e);
     return false;
   }
+}
+
+// ───────────────────────────── Year 5 endgame monsters (lv 51–67) ─────────────────────────────
+// Palette swaps of existing sheets, same grids/anchors as the originals so feet stay on the ground.
+function buildEndgameSpecs(): Record<string, PixelSpec> {
+  const batFly = grid(MSRC.batFly, 64, 64, 4, 32, 44);
+  const batHit = grid(MSRC.batHit, 64, 64, 4, 32, 44);
+  const batDie = grid(MSRC.batDeath, 64, 64, 4, 32, 44);
+  const batDieLow = grid(MSRC.batDeath, 64, 64, 4, 32, 48);
+  const golem = grid(MSRC.golem, 64, 72, 6, 41, 72);
+  const lzIdle = grid(MSRC.lizardIdle, 64, 32, 4, 15, 32);
+  const lzWalk = grid(MSRC.lizardWalk, 64, 32, 6, 15, 32);
+  const lzHurt = grid(MSRC.lizardHurt, 64, 32, 3, 15, 32);
+  const slime = grid(MSRC.slime, 24, 24, 3, 12, 20);
+  const wartaur = grid(MSRC.wartaur, 80, 80, 4, 48, 80);
+  const flame = grid(XSRC.brightfire, 18, 26, 12, 9, 25);
+  const icon = grid(XSRC.icons, 34, 34, 12, 17, 30);
+  const bob = (fs: FrameRef[], dys: number[]) => fs.map((f, i) => ({ ...f, dy: dys[i % dys.length] }));
+  const OPEN_BOOK = 10 * 12 + 9, SPELL_BOOK = 4 * 12 + 8;
+
+  const astral = [0x0a0c2e, 0x1c2a78, 0x3a5ad0, 0x8aa8ff, 0xfff0b0];
+  const rift = [0x0a0418, 0x3a0a4a, 0x8a1a8a, 0xe04ab8, 0x7ff8e8];
+
+  return {
+    // ── observatory ──
+    // Star Moth: the bat in midnight-indigo with gold-dust highlights, a tiny star on its brow.
+    star_moth: { recolor: gradientMap(astral), idle: { frames: batFly(0, 1, 2, 3), rate: 8 }, move: { frames: batFly(0, 1, 2, 3), rate: 11 },
+      hit: batHit(1)[0], die: { frames: [...batDie(...range(0, 7)), ...batDieLow(8, 9, 10)], rate: 15 },
+      overlays: [{ at: 'peak', dy: 2, rows: ['..Y..', '.YWY.', '..Y..'], pal: { Y: 0xffd447, W: 0xffffff }, skip: ['die'] }] },
+    // Astral Sentinel: the golem cast in star-iron — deep blue plate, gold seams, a single star eye.
+    astral_sentinel: { flip: true, recolor: gradientMap([0x060818, 0x141c48, 0x2a3c8c, 0x5a7ad8, 0xc8b060, 0xfff4c8]),
+      idle: { frames: golem(0, 0, 2, 2), rate: 2 }, move: { frames: golem(...range(6, 11)), rate: 7 },
+      overlays: [{ at: 'peak', dy: 9, rows: ['.k.', 'kWk', '.k.'], pal: { k: 0xffd447, W: 0xffffff } }] },
+    // ── rift ──
+    // Rift Stalker: the salamander turned rift-born — void purple hide with teal tear-light along the crest.
+    rift_stalker: { recolor: gradientMap(rift), outline: 0x06020c, idle: { frames: lzIdle(0, 1, 2, 3), rate: 5 },
+      move: { frames: lzWalk(...range(0, 5)), rate: 13 }, hit: lzHurt(1)[0] },
+    // Null Wisp: the bright-fire head drained of colour — grey-white with a black core, fading tail, hollow eyes.
+    null_wisp: { recolor: chain(gradientMap([0x0a0a10, 0x3a3a48, 0x8a8a9a, 0xd8d8e4, 0xffffff]), ghostly(216, 26, 220, 9)), outline: 0x050508,
+      idle: { frames: flame(...range(0, 11)), rate: 10 }, move: { frames: flame(...range(0, 11)), rate: 14 },
+      overlays: [{ at: 'anchor', dx: 0, dy: -7, rows: ['kk.kk', 'kk.kk'], pal: { k: 0x7ff8e8 } }] },
+    // Shard Horror: the slime as a lump of rift crystal, magenta-teal, with jagged shards bristling on top.
+    shard_horror: { scale: 4, recolor: gradientMap([0x14061e, 0x4a1260, 0xa02aa8, 0xe878d8, 0xb8fff4]),
+      idle: { frames: slime(0, 1, 2, 1), rate: 6 }, move: { frames: slime(3, 4, 5, 4), rate: 10 }, hit: slime(6)[0],
+      overlays: [{ at: 'peak', dy: 2, rows: [
+        '.k....k...',
+        'kWk..kTk.k',
+        'kTk.kWTkkW',
+        'kTTkkTTkTk',
+      ], pal: { k: 0x14061e, W: 0xffffff, T: 0x7ff8e8 }, skip: ['die'] }] },
+    // ── spire ──
+    // Archon Knight: the wartaur in gilded ivory plate with a crimson plume.
+    archon_knight: { flip: true, recolor: gradientMap([0x1a1208, 0x4a3414, 0x9a7a30, 0xe0c870, 0xfffbe8]),
+      idle: { frames: wartaur(0, 2), rate: 2 }, move: { frames: wartaur(0, 1, 2, 3), rate: 7 },
+      overlays: [{ at: 'peak', dy: 2, rows: [
+        '..rr.',
+        '.rRRr',
+        'rRRr.',
+        '.kk..',
+      ], pal: { r: 0x8a1020, R: 0xe8203a, k: 0x5a3008 } }] },
+    // Unwritten Page: the tome bleached blank — white vellum, faint gold edges, glowing gold eyes.
+    unwritten_page: { recolor: chain(
+        rampMap([0x8a7030, 0xd8b850, 0xfff0a0, 0xffffff], 0.35, 0.9, { hue: [235, 320], minSat: 0.12 }),
+        rampMap([0x7a7468, 0xc8c2b4, 0xf0ece0, 0xffffff], 0.3, 1, { maxSat: 0.42, minLum: 0.28 })),
+      outline: 0x2a2418,
+      idle: { frames: bob(icon(OPEN_BOOK, OPEN_BOOK, OPEN_BOOK, OPEN_BOOK), [0, 1, 2, 1]), rate: 5 },
+      move: { frames: bob(icon(OPEN_BOOK, SPELL_BOOK, OPEN_BOOK, SPELL_BOOK), [0, 2, 1, 3]), rate: 9 },
+      hit: icon(SPELL_BOOK)[0],
+      overlays: [{ at: 'anchor', dx: 1, dy: -11, rows: [
+        '.kk...kk.',
+        '.kYk.kYk.',
+        '..k...k..',
+      ], pal: { k: 0x5a3008, Y: 0xffd447 } }] },
+  };
 }

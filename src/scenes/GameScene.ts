@@ -3,7 +3,7 @@
  * (hotbar, portals/NPC interaction, pickup). Owned by the lead.
  */
 import Phaser from 'phaser';
-import { DEPTH, SCENES, START_MAP, TOWN_MAP } from '../core/constants';
+import { DEPTH, MAX_LEVEL, SCENES, START_MAP, TOWN_MAP } from '../core/constants';
 import { ACTIONS, SLOT_ACTIONS, getBinding, onBindingsChanged, type ActionId } from '../core/bindings';
 import { flashAlpha, getSettings, onSettingsChanged, shakeScale } from '../core/settings';
 import { bus } from '../core/events';
@@ -302,7 +302,8 @@ export class GameScene extends Phaser.Scene implements IGameApi {
       if (pressed && r === 'busy') this.castBuffer = { skillId: entry, until: time + 350 };
       if (pressed && r !== 'ok' && r !== 'busy') {
         const msg = r === 'no_mp' ? 'Not enough MP.' : r === 'cooldown' ? 'That skill is still cooling down.'
-          : r === 'not_learned' ? 'You have not learned that skill.' : r === 'passive' ? 'Passive skills are always active.' : '';
+          : r === 'not_learned' ? 'You have not learned that skill.' : r === 'passive' ? 'Passive skills are always active.'
+          : r === 'failed' ? 'The spell fizzled. (MP refunded)' : '';
         if (msg) { bus.emit('ui:log', { text: msg, color: '#ff9b9b' }); bus.emit('skill:fail', { skillId: entry, reason: r }); s.audio.play('ui_error'); }
       }
     }
@@ -359,7 +360,15 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     const s = this.s;
     const api = {
       s,
-      levelTo: (n: number) => { while (s.progression.state.level < n) s.progression.gainExp(expToNext(s.progression.state.level) - s.progression.state.exp); },
+      levelTo: (n: number) => {
+        // Clamp to MAX_LEVEL and stop if a pass doesn't raise the level (gainExp is a no-op at the cap).
+        const target = Math.min(Math.floor(n), MAX_LEVEL);
+        while (s.progression.state.level < target) {
+          const before = s.progression.state.level;
+          s.progression.gainExp(expToNext(before) - s.progression.state.exp);
+          if (s.progression.state.level <= before) break;
+        }
+      },
       give: (itemId: string, qty = 1) => s.progression.addItem(itemId, qty),
       mesos: (n: number) => s.progression.addMesos(n),
       warp: (mapId: string, portalId?: string) => this.changeMap(mapId, portalId),

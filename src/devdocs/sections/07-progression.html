@@ -166,7 +166,7 @@ export const AP_PER_LEVEL = 5;</code></pre>
     <code>exp</code> scaled by the level difference:</p>
   <pre><code class="lang-ts">/**
  * EXP multiplier for a kill: monsters ≥10 levels below the player give progressively less
- * (down to 10%); monsters above the player give a small bonus (up to +30%).
+ * (down to 10%); monsters above the player give a small bonus (up to +15%).
  */
 export function killExpMultiplier(playerLevel: number, monsterLevel: number): number {
   const diff = playerLevel - monsterLevel;
@@ -174,9 +174,9 @@ export function killExpMultiplier(playerLevel: number, monsterLevel: number): nu
   if (diff &lt; 0) return 1 + Math.min(0.15, -diff * 0.05);
   return 1;
 }</code></pre>
-  <p>(<a data-src="src/systems/Progression.ts#L39">Progression.ts:39</a>.) Note the code caps the above-level
-    bonus at <strong>+15%</strong> (+5% per level, reached three levels up); the doc comment still says +30%, the
-    value before the balance follow-up commit <code>be584c4</code> lowered it.</p>
+  <p>(<a data-src="src/systems/Progression.ts#L39">Progression.ts:39</a>.) Note the above-level bonus is capped
+    at <strong>+15%</strong> (+5% per level, reached three levels up). The balance follow-up commit
+    <code>be584c4</code> lowered it from +30%, and the doc comment now says +15% as well.</p>
   <table>
     <thead><tr><th>Player level − monster level</th><th>EXP multiplier</th></tr></thead>
     <tbody>
@@ -589,7 +589,7 @@ export function yearOfTier(tier: number): number { return Math.max(1, Math.min(4
   }</code></pre>
   <p>(<a data-src="src/systems/Progression.ts#L144">Progression.ts:144</a>.) The shop UI is mesos-only, so the
     exchange is a series of dialog pages that end in <code>buyWithMerits(itemId, costEach, qty)</code>
-    (<a data-src="src/systems/Progression.ts#L782">Progression.ts:782</a>), which checks the balance, adds the
+    (<a data-src="src/systems/Progression.ts#L783">Progression.ts:783</a>), which checks the balance, adds the
     items, deducts Merits and saves.</p>
   <table>
     <thead><tr><th>Merit Exchange page</th><th>Offers (cost)</th></tr></thead>
@@ -670,7 +670,7 @@ export function yearOfTier(tier: number): number { return Math.max(1, Math.min(4
 
   <p><code>Progression.update</code> runs first in every frame. Every 5 s it applies one regen tick of
     <code>hpRegen</code>/<code>mpRegen</code>, tripled on a safe map (the campus), and every 30 s it autosaves
-    (<a data-src="src/systems/Progression.ts#L736">Progression.ts:736</a>).</p>
+    (<a data-src="src/systems/Progression.ts#L737">Progression.ts:737</a>).</p>
 
   <pre><code class="lang-ts">/** Fraction of the current level's EXP requirement lost on death. */
 export const DEATH_EXP_PENALTY = 0.05;

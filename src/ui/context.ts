@@ -21,7 +21,7 @@ export interface UICtx {
   toggleWindow(name: WindowName): void;
 }
 
-const LAYOUT_KEY = 'arcana-ui-layout-v1';
+export const LAYOUT_KEY = 'arcana-ui-layout-v1';
 
 /** Persisted window positions + misc UI prefs. */
 export class Layout {
@@ -36,4 +36,18 @@ export class Layout {
   getFlag(key: string, fallback: boolean): boolean { const v = this.data[`flag:${key}`]; return typeof v === 'boolean' ? v : fallback; }
   setFlag(key: string, v: boolean) { this.data[`flag:${key}`] = v; this.flush(); }
   private flush() { saveJson(LAYOUT_KEY, this.data); }
+}
+
+/**
+ * Remove every persisted flag whose key starts with `prefix` straight from storage (used when a save slot is
+ * deleted, from the title screen where no Layout instance is alive). Never throws.
+ */
+export function clearLayoutFlags(prefix: string): void {
+  try {
+    const data = loadJson<Record<string, unknown>>(LAYOUT_KEY, {});
+    if (!data || typeof data !== 'object') return;
+    let changed = false;
+    for (const k of Object.keys(data)) if (k.startsWith(`flag:${prefix}`)) { delete data[k]; changed = true; }
+    if (changed) saveJson(LAYOUT_KEY, data);
+  } catch { /* ignore */ }
 }

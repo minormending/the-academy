@@ -45,7 +45,7 @@ export const ARENA_TUNING = {
   /** Field boss HP multiplier on the first boss wave, and the increase per later boss wave. */
   bossHpFirst: 0.5,
   bossHpStep: 0.25,
-  /** Elite HP multiplier (elites appear from wave 6, one more every 5 waves; boss-wave fallback ×2). */
+  /** Elite HP multiplier (elites appear from wave 6, one more every 3 waves; boss-wave fallback ×2). */
   eliteHp: 5,
   /** Spawn pacing within a wave. */
   spawnIntervalMs: 120,

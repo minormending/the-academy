@@ -96,12 +96,12 @@ export interface IconSpec {
 // ───────────────────────────── Status effects ─────────────────────────────
 
 export type StatusKind =
-  | 'burn'    // DoT: potency = damage per tick (ticks every 500ms)
+  | 'burn'    // DoT: potency = raw damage per tick (500ms); each tick applies shock/curse amplification and def
   | 'chill'   // slow: potency = fraction of move speed removed (0..0.9)
   | 'freeze'  // cannot move or attack; potency unused
   | 'shock'   // takes extra damage: potency = fraction bonus damage taken
   | 'stun'    // cannot move or attack; potency unused
-  | 'poison'  // DoT like burn (shadow): potency = damage per tick (ticks every 500ms)
+  | 'poison'  // DoT like burn (shadow): same tick rules as burn
   | 'curse';  // weakened: takes extra damage AND deals less: potency = fraction (0..0.6)
 
 export interface StatusSpec {
@@ -115,7 +115,7 @@ export interface StatusSpec {
 export interface StatusInstance {
   kind: StatusKind;
   durationMs: number;   // remaining
-  potency: number;      // concrete value (burn: damage per tick, chill: slow fraction, shock: bonus fraction)
+  potency: number;      // concrete value (burn/poison: raw damage per tick, before amplification and def; chill: slow fraction, shock: bonus fraction)
   element: Element;
 }
 
@@ -188,7 +188,7 @@ export interface SummonSpec {
 }
 
 export interface SkillDef {
-  id: string;               // prefix: app_ / fire_ / ice_ / ltn_
+  id: string;               // prefix: app_ / fire_ / ice_ / ltn_ / holy_ / shd_
   name: string;
   description: string;      // one line; may mention {dmg} etc. — UI shows plain text
   element: Element;
@@ -210,7 +210,9 @@ export interface SkillDef {
   onCast?: (ctx: SkillContext, lv: number) => void;
 }
 
-export type CastResult = 'ok' | 'no_mp' | 'cooldown' | 'busy' | 'not_learned' | 'unknown' | 'passive' | 'dead';
+export type CastResult = 'ok' | 'no_mp' | 'cooldown' | 'busy' | 'not_learned' | 'unknown' | 'passive' | 'dead'
+  /** The spell's own code threw mid-cast; MP and cooldown were refunded. */
+  | 'failed';
 
 export interface ActiveBuff {
   skillId: string;
@@ -570,7 +572,7 @@ export interface IProgression {
   addMerits(amount: number): void;
   /** Unlearn every skill of the job at `tier` in the player's lineage; refunds its SP. Returns SP refunded. */
   respecTier(tier: JobTier): number;
-  save(): void;
+  save(): boolean;
   update(time: number, delta: number): void;   // regen, playtime, autosave
 }
 

@@ -142,6 +142,8 @@ the game uses were copied here. Some PNGs are crops or recolours of the original
 | **496 pixel art icons for medieval/fantasy RPG** (135 of them packed into `icons/rpg_icons_7soul1.png`, 12×12 grid of 34×34 cells) | Henrique Lazarini (7Soul1), submitted to OGA by gnola14 | https://opengameart.org/content/496-pixel-art-icons-for-medievalfantasy-rpg | CC0 1.0 (stated on the page) | Every skill and item icon (`IconGlyph` → icon mapping in `src/art/icons.ts`; some are palette-swapped to the skill's colour) and the quick-menu button icons |
 
 Notes
-- The title-screen backdrop is still the game's own procedural night sky + mage tower, now drawn with stepped
-  colour bands and passed through Phaser's built-in Pixelate post-FX (4×4 pixel grid); no third-party image.
+- The title-screen backdrop is composed from the CC0 world art listed under "World" (Luis Zuno / ansimuz: the
+  Fort of Illusion sanctum sky and mountains, the Grotto ruins, the mage tower, moon and stars), drifting on
+  integer-scaled tile sprites. Only if those textures are missing does it fall back to the game's old procedural
+  night sky (stepped colour bands through Phaser's Pixelate post-FX).
 - Nothing here is NonCommercial or ripped from a commercial game.

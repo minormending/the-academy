@@ -183,7 +183,7 @@ class FrostfangAlpha extends FieldBoss {
   constructor(scene: Phaser.Scene, services: GameServices, def: MonsterDef, x: number, y: number, map: IMapInstance, opts: MonsterSpawnOptions = {}) {
     super(scene, services, def, x, y, map, opts, {
       bar: { border: 0x9fe6ff, fill: 0x3aa8f0, enraged: 0xff5a8a, nameColor: '#eefaff', textColor: '#cfefff' },
-      logColor: '#9fe6ff', keepDist: 70, actionGap: [1300, 2100],
+      logColor: '#9fe6ff', keepDist: 70, actionGap: [1300, 2100], enrageAt: 0.3, enrageTint: 0xff7aa8,
     });
     this.actions = [
       this.roar(),

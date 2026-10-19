@@ -49,7 +49,7 @@
   <h3 id="history-team">The team and its rules</h3>
 
   <p>Phase 1 split the game into ten areas, one per builder agent, and one area for the lead. The split is the
-    Ownership table in <a data-src="ARCHITECTURE.md#L46">ARCHITECTURE.md</a>. Many source files still start with
+    Ownership table in <a data-src="ARCHITECTURE.md#L55">ARCHITECTURE.md</a>. Many source files still start with
     an <code>// OWNER:</code> header naming the agent that wrote them, e.g.
     <code>// OWNER: A3 (fire-tree).</code> at the top of <a data-src="src/skills/fire.ts#L1">fire.ts</a>.</p>
 
@@ -68,7 +68,7 @@
     </tbody>
   </table>
 
-  <p>Every builder brief included the <a data-src="ARCHITECTURE.md#L24">ground rules for builder agents</a>. In
+  <p>Every builder brief included the <a data-src="ARCHITECTURE.md#L33">ground rules for builder agents</a>. In
     short:</p>
   <ol>
     <li><strong>Edit only your files.</strong> New files only inside your own namespace. Never touch the lead's
@@ -282,7 +282,7 @@ export type JobId =
       <code>dmgHoly</code>/<code>dmgShadow</code> in the element bonus in
       <a data-src="src/systems/CombatSystem.ts#L31">CombatSystem.ts:31</a>. Tree agents could then rely on those
       statuses.</li>
-    <li>Wrote the brief into ARCHITECTURE.md (<a data-src="ARCHITECTURE.md#L214">"Phase 3: two more trees"</a>): ids,
+    <li>Wrote the brief into ARCHITECTURE.md (<a data-src="ARCHITECTURE.md#L226">"Phase 3: two more trees"</a>): ids,
       identities ("Holy: sustain, smite, control"; "Shadow: attrition, curses, minions"), the <code>onCast</code>
       recipe for heals and drains, and the VFX rules.</li>
   </ul>
@@ -307,14 +307,14 @@ export type JobId =
 
   <p>Ownership moved as the work changed shape. The art pivot (Phase 2) kept gameplay code fixed and asked new
     agents to load licensed pixel art into the <em>existing</em> texture keys, frame layouts and animation keys
-    (<a data-src="ARCHITECTURE.md#L186">"Art pivot"</a>, rule 1). So A10's character and particle files passed to
+    (<a data-src="ARCHITECTURE.md#L198">"Art pivot"</a>, rule 1). So A10's character and particle files passed to
     PX1 and PX4, and PX5 added a pixel layer to A10's icon painter, A8's title screen ("pixel pass by PX5") and A2's
     damage numbers. Later, A9's save system got slots "by P7a". The <code>OWNER</code> headers record both
     owners, e.g. <a data-src="src/systems/SaveSystem.ts#L1">SaveSystem.ts:1</a>.</p>
 
   <p>The biggest change was the Phase 4 re-theme from "Arcana Story" to <strong>The Academy</strong>. Every player
     is now a student, job tiers are school Years, the town is the campus, and quests are Assignments. The rule in
-    <a data-src="ARCHITECTURE.md#L248">ARCHITECTURE.md</a> was that save keys and all ids stay unchanged, because
+    <a data-src="ARCHITECTURE.md#L260">ARCHITECTURE.md</a> was that save keys and all ids stay unchanged, because
     ids are what a save stores. The code still shows this:</p>
   <ul>
     <li>The campus map is still <code>mistvale</code>, and <a data-src="src/data/maps.ts#L1">maps.ts</a> opens with
@@ -389,7 +389,7 @@ export type JobId =
         skill-% bands). The fire tree and the monster roster were tuned in parallel and still met in the middle.
         See <a href="#progression">Progression</a>.</li>
       <li><strong>"Never assume a texture exists — ensure it."</strong> The Phase 8 lazy-art rule
-        (<a data-src="ARCHITECTURE.md#L294">ARCHITECTURE.md</a>) made texture generation idempotent and on-demand
+        (<a data-src="ARCHITECTURE.md#L306">ARCHITECTURE.md</a>) made texture generation idempotent and on-demand
         (<code>ensureOnce</code>, <code>lazyRegister</code>, <code>ensureMonsterTexture</code>). Load order between
         agents' generators stopped mattering. See <a href="#art">Art</a>.</li>
     </ul>

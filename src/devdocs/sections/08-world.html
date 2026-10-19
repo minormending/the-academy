@@ -19,7 +19,7 @@
   </p>
 
   <h3 id="world-mapdef">MapDef: a map as data</h3>
-  <p>The contract lives in <a data-src="src/core/types.ts#L346">types.ts:346</a>. Coordinates are world pixels, x to
+  <p>The contract lives in <a data-src="src/core/types.ts#L348">types.ts:348</a>. Coordinates are world pixels, x to
     the right and <strong>y downward</strong>, and every <code>y</code> you see in map data is a walking surface or a
     pair of feet, never the top of a sprite.</p>
   <pre><code class="lang-ts">export type MapTheme = 'town' | 'forest' | 'mushroom' | 'snow' | 'volcano' | 'storm' | 'sanctum';
@@ -240,7 +240,7 @@ const span = (monsterId: string, x1: number, x2: number, y: number, count: numbe
   <h3 id="world-queries">Ropes, portals and the query API</h3>
   <p>Ropes and portals have no bodies. They are lines and points in the <code>MapDef</code>, and other systems ask the
     map instance about them through <code>IMapInstance</code>
-    (<a data-src="src/core/types.ts#L373">types.ts:373</a>):</p>
+    (<a data-src="src/core/types.ts#L375">types.ts:375</a>):</p>
   <table>
     <thead><tr><th>Method</th><th>Used by</th><th>Rule</th></tr></thead>
     <tbody>
@@ -264,7 +264,7 @@ const span = (monsterId: string, x1: number, x2: number, y: number, count: numbe
   }</code></pre>
   <p>(<a data-src="src/world/MapLoader.ts#L133">MapLoader.ts:133</a>.) The <code>+ 0.5</code> breaks ties: when a monster's
     feet are exactly between two surfaces, the one under it wins. GameScene checks for a portal before an NPC, and skips
-    both while the player is climbing (<a data-src="src/scenes/GameScene.ts#L310">GameScene.ts:310</a>), so <kbd>Up</kbd> on
+    both while the player is climbing (<a data-src="src/scenes/GameScene.ts#L311">GameScene.ts:311</a>), so <kbd>Up</kbd> on
     a rope next to a portal climbs instead of warping.</p>
   <p>The portal <em>visual</em> is a separate class, <code>PortalVisual</code>
     (<a data-src="src/world/portals.ts#L8">portals.ts:8</a>). With the pixel art loaded it plays the 8-frame

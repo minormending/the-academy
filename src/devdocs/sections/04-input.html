@@ -63,7 +63,7 @@
     existing key when one is already registered for that code. That is why <code>Player.destroy()</code> skips
     removing the key bound to <code>interact</code>. When the player presses <kbd>↑</kbd> next to a rope, the
     Player updates first and grabs the rope; GameScene then sees <code>isClimbing()</code> and skips the
-    portal/NPC check (<a data-src="src/scenes/GameScene.ts#L311">GameScene.ts:311</a>).</p>
+    portal/NPC check (<a data-src="src/scenes/GameScene.ts#L312">GameScene.ts:312</a>).</p>
 
   <!-- ===================================================================== -->
   <h3 id="input-bindings">Bindings: src/core/bindings.ts</h3>
@@ -253,7 +253,7 @@ export function keyText(text: string): string {
   <h3 id="input-hotbar">Hotbar: held skills, one-shot items, two pages</h3>
 
   <p>The hotbar is <code>PlayerState.hotbar</code>, an array of <code>HOTBAR_SIZE = 24</code> entries
-    (<a data-src="src/core/types.ts#L426">types.ts:426</a>). Each entry is a skill id, <code>"item:&lt;itemId&gt;"</code>
+    (<a data-src="src/core/types.ts#L428">types.ts:428</a>). Each entry is a skill id, <code>"item:&lt;itemId&gt;"</code>
     or <code>null</code>. Twelve slot actions address <code>HOTBAR_PAGE_SIZE = 12</code> entries at a time, so there are
     two <dfn>pages</dfn>. The <code>hotbarPage</code> action (default <kbd>Tab</kbd>) moves to the next page, wrapping
     around. <code>setHotbarPage()</code> emits <code>hotbar:page</code>, which the HUD listens to;
@@ -285,10 +285,10 @@ export function keyText(text: string): string {
     <li><strong>Items fire once per press.</strong> Holding <kbd>1</kbd> drinks one potion, not one per frame.</li>
     <li><strong>Empty slots still consume the latch</strong> (<code>JustDown(key)</code>). Otherwise a press on an
       empty slot would wait in the set and fire later, after something was dragged into that slot.</li>
-    <li><strong>Interact</strong> (<a data-src="src/scenes/GameScene.ts#L311">GameScene.ts:311</a>): portal first
+    <li><strong>Interact</strong> (<a data-src="src/scenes/GameScene.ts#L312">GameScene.ts:312</a>): portal first
       (<code>map.getPortalNear</code>), then the nearest NPC. Skipped while climbing.</li>
     <li><strong>Pick up</strong> repeats while held, at most once every 110 ms
-      (<a data-src="src/scenes/GameScene.ts#L320">GameScene.ts:320</a>).</li>
+      (<a data-src="src/scenes/GameScene.ts#L321">GameScene.ts:321</a>).</li>
   </ul>
 
   <!-- ===================================================================== -->
@@ -341,7 +341,7 @@ export function keyText(text: string): string {
   <p>Three accessibility settings are stored next to the bindings, under <code>academy-settings-v1</code>, with the
     same pattern: a module-level object, <code>getSettings()</code>, <code>setSetting(key, value)</code> (persists,
     then notifies) and <code>onSettingsChanged(cb)</code>. The controls are in the Esc menu's Settings tab
-    (<a data-src="src/ui/miscWindows.ts#L94">miscWindows.ts:94</a>). Volumes are not here; the audio system keeps
+    (<a data-src="src/ui/miscWindows.ts#L97">miscWindows.ts:97</a>). Volumes are not here; the audio system keeps
     them.</p>
   <table>
     <thead><tr><th>Setting</th><th>Values (default first)</th><th>Effect</th><th>Applied by</th></tr></thead>
@@ -418,10 +418,10 @@ export function keyText(text: string): string {
     });
     window.dispatchEvent(event);
   }</code></pre>
-  <p>Source: <a data-src="src/systems/GamepadBridge.ts#L82">GamepadBridge.ts:82</a></p>
+  <p>Source: <a data-src="src/systems/GamepadBridge.ts#L94">GamepadBridge.ts:94</a></p>
 
   <h4 id="input-padmap">Button and stick map</h4>
-  <p><code>GAMEPAD_MAP</code> (<a data-src="src/systems/GamepadBridge.ts#L23">GamepadBridge.ts:23</a>) maps
+  <p><code>GAMEPAD_MAP</code> (<a data-src="src/systems/GamepadBridge.ts#L29">GamepadBridge.ts:29</a>) maps
     standard button and axis indices to actions. The Controls window renders the same array on its Gamepad tab.</p>
   <table>
     <thead><tr><th>Input</th><th>Index</th><th>Action(s)</th><th>Default key</th></tr></thead>
@@ -432,7 +432,8 @@ export function keyText(text: string): string {
       <tr><td>LB / L1, RB / R1</td><td>buttons 4, 5</td><td>slot2, slot3</td><td><kbd>E</kbd>, <kbd>R</kbd></td></tr>
       <tr><td>LT / L2, RT / R2</td><td>buttons 6, 7</td><td>slot5, slot6</td><td><kbd>A</kbd>, <kbd>S</kbd></td></tr>
       <tr><td>Right stick ← / → / ↓ / ↑</td><td>axis 2 −/+, axis 3 +/−</td><td>slot4, slot7, slot8, slot9</td><td><kbd>T</kbd>, <kbd>D</kbd>, <kbd>F</kbd>, <kbd>G</kbd></td></tr>
-      <tr><td>Back / Select</td><td>button 8</td><td>hotbarPage</td><td><kbd>Tab</kbd></td></tr>
+      <tr><td>Back / Select (tap)</td><td>button 8</td><td>hotbarPage</td><td><kbd>Tab</kbd></td></tr>
+      <tr><td>Back + X / Square, Back + Y / Triangle</td><td>chord on buttons 2, 3</td><td>slot10, slot11</td><td><kbd>1</kbd>, <kbd>2</kbd></td></tr>
       <tr><td>Start / Options</td><td>button 9</td><td>menu</td><td><kbd>Esc</kbd></td></tr>
       <tr><td>L3, R3 (press stick)</td><td>buttons 10, 11</td><td>skills, inventory</td><td><kbd>K</kbd>, <kbd>I</kbd></td></tr>
       <tr><td>D-pad ↑ / left stick ↑</td><td>button 12 / axis 1 −</td><td>up + interact</td><td><kbd>↑</kbd></td></tr>
@@ -445,9 +446,15 @@ export function keyText(text: string): string {
     actions that share <kbd>↑</kbd>) collapse into one held key: releasing the D-pad while the stick is still
     pushed does not send a <code>keyup</code>.</p>
 
-  <aside class="warn">The pad has no input for <code>slot10</code>/<code>slot11</code> (keys <kbd>1</kbd> and
-    <kbd>2</kbd>), where new characters keep their potions. A pad-only player has to drag potions onto a slot the
-    pad can reach, or use the inventory.</aside>
+  <p><strong>Chords: the potion slots.</strong> The 12 slot actions outnumber the free pad buttons, so
+    <code>slot10</code> and <code>slot11</code> (keys <kbd>1</kbd> and <kbd>2</kbd>, where new characters keep their
+    potions) are reached with a <dfn>chord</dfn>: hold Back / Select and press X or Y. A <code>PadMapping</code> with
+    a <code>chord</code> field only fires while that modifier button is held, and it replaces the plain mapping of the
+    same button while the modifier is down, so Back + X drinks the potion instead of also casting <code>slot0</code>.
+    The modifier's own action is deferred to a <em>tap</em>: Back flips the hotbar page when it is released without a
+    chord having been used, so holding it for a potion never flips the page. The deferred press is sent as a
+    one-poll pulse (a <code>keydown</code> now, the <code>keyup</code> on the next poll), which the latched-press
+    machinery above turns into exactly one page flip.</p>
 
   <h4 id="input-padwhy">Why a bridge and not a second input path</h4>
   <p>Every input feature already works on key events: latched presses, held-key repeats, the cast buffer, window
@@ -460,7 +467,7 @@ export function keyText(text: string): string {
     <ul>
       <li><strong>Polling cadence.</strong> Polling rides <code>requestAnimationFrame</code>. A 16 ms
         <code>setInterval</code> acts as a watchdog and polls whenever no animation frame has run for 32 ms or more,
-        for example when the browser throttles rAF (<a data-src="src/systems/GamepadBridge.ts#L186">GamepadBridge.ts:186</a>).</li>
+        for example when the browser throttles rAF (<a data-src="src/systems/GamepadBridge.ts#L234">GamepadBridge.ts:234</a>).</li>
       <li><strong>No stuck keys.</strong> When the pad disconnects, a different pad becomes the first standard one,
         or the bridge stops, <code>releaseAll()</code> sends a <code>keyup</code> for everything it holds.</li>
       <li><strong>Typing.</strong> While an <code>INPUT</code> or <code>TEXTAREA</code> has focus the bridge sends

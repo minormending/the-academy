@@ -110,12 +110,20 @@ npm run preview      # serve dist/ locally</code></pre>
   </p>
   <p>
     Once a character is in the world, <code>GameScene</code> puts a small cheat API on <code>window.arcana</code>
-    (<a data-src="src/scenes/GameScene.ts#L360">GameScene.ts:360</a>). It is the fastest way to test anything that
+    (<a data-src="src/scenes/GameScene.ts#L361">GameScene.ts:361</a>). It is the fastest way to test anything that
     would otherwise take an hour of play:
   </p>
   <pre><code class="lang-ts">    const api = {
       s,
-      levelTo: (n: number) =&gt; { while (s.progression.state.level &lt; n) s.progression.gainExp(expToNext(s.progression.state.level) - s.progression.state.exp); },
+      levelTo: (n: number) =&gt; {
+        // Clamp to MAX_LEVEL and stop if a pass doesn't raise the level (gainExp is a no-op at the cap).
+        const target = Math.min(Math.floor(n), MAX_LEVEL);
+        while (s.progression.state.level &lt; target) {
+          const before = s.progression.state.level;
+          s.progression.gainExp(expToNext(before) - s.progression.state.exp);
+          if (s.progression.state.level &lt;= before) break;
+        }
+      },
       give: (itemId: string, qty = 1) =&gt; s.progression.addItem(itemId, qty),
       mesos: (n: number) =&gt; s.progression.addMesos(n),
       warp: (mapId: string, portalId?: string) =&gt; this.changeMap(mapId, portalId),
@@ -157,9 +165,10 @@ npm run preview      # serve dist/ locally</code></pre>
         Quit to Title the old object is torn down (<code>setServices(null)</code>), so an <code>arcana</code> reference
         kept from a previous run points at destroyed systems. Re-read <code>window.arcana</code> after starting a new
         run.</li>
-      <li><strong><code>levelTo</code> loops on <code>gainExp</code> until the level is reached.</strong> At
-        <code>MAX_LEVEL</code> (50) <code>gainExp</code> returns without levelling, so <code>arcana.levelTo(51)</code>
-        or higher never exits and hangs the tab. Pass 50 or less. A level-up while dead does not revive you either
+      <li><strong><code>levelTo</code> is clamped to <code>MAX_LEVEL</code>.</strong> It feeds
+        <code>gainExp</code> one level at a time, caps the target at <code>MAX_LEVEL</code> (50) and stops as soon as a
+        pass does not raise the level, so <code>arcana.levelTo(51)</code> or any larger number simply stops at 50
+        instead of hanging the tab. It still only goes up. A level-up while dead does not revive you either
         (Progression skips the HP/MP refill when dead).</li>
       <li><strong>Timings.</strong> Texture generation is measured with <code>performance.measure</code>; in the console,
         <code>performance.getEntriesByType('measure').filter(m =&gt; m.name.startsWith('gen:'))</code> lists what was
@@ -236,16 +245,17 @@ npm run preview      # serve dist/ locally</code></pre>
   <details class="advanced">
     <summary>Advanced: reading ARCHITECTURE.md without being misled</summary>
     <p>
-      <code>ARCHITECTURE.md</code> is append-only history: its first half describes Phase 1 and was never rewritten.
-      Some of its statements have since been superseded, and the later phases (further down the same file) win:
+      <code>ARCHITECTURE.md</code> is mostly append-only history: its first half describes Phase 1 and was not
+      rewritten. A short "Current state" note at the top now flags the statements that have since been superseded, and
+      the later phases (further down the same file) win:
     </p>
     <ul>
       <li>"No external assets — all art is procedural" was replaced by the pixel-art pivot: art now comes from the packs
         in <code>public/assets/</code>, with the procedural painters kept only as a fallback.</li>
       <li>"Specialise at level 10 into one of three trees" became five Schools in Phase 3 (Holy, Shadow) and the
         Year framing in Phase 4.</li>
-      <li>The <code>create</code> and <code>update</code> orders listed under "Frame flow" predate the familiar and the
-        Trial Hall; the real orders (with <code>PetSystem</code> and <code>ArenaSystem</code>) are in
+      <li>The <code>create</code> and <code>update</code> orders listed under "Frame flow" once predated the familiar and
+        the Trial Hall; they now include <code>PetSystem</code> and <code>ArenaSystem</code>, matching
         <a href="#architecture-frame">the frame flow</a>.</li>
       <li>"Boot generates every procedural texture" (also the header comment of <code>BootScene.ts</code>) predates lazy
         generation; boot now builds only what the Title screen and a new Apprentice need

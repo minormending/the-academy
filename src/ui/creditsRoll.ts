@@ -7,7 +7,7 @@
  * Time is driven by `frame(delta)` (called from UIRoot.update), not CSS animations, so it follows the game loop.
  * Esc / Enter / the jump binding (and so gamepad A) skip to the end screen, then close it.
  */
-import type { UICtx } from './context';
+import { clearLayoutFlags, type UICtx } from './context';
 import { eventKeyCode, getBinding, keyLabel } from '../core/bindings';
 import { Registry } from '../core/registry';
 import { GRADUATION_QUEST_ID } from '../data/storyQuests';
@@ -147,6 +147,11 @@ function starShadow(seed: number, n: number, colors: string[]): string {
 interface Card { el: HTMLElement; hold: number }
 type Phase = 'in' | 'cards' | 'roll' | 'end';
 
+const creditsFlagPrefix = (slot: number) => `creditsSeen:${slot}:`;
+
+/** Forget that anyone in `slot` has seen the credits (call when the slot is deleted or overwritten). */
+export function forgetCreditsSeen(slot: number): void { clearLayoutFlags(creditsFlagPrefix(slot)); }
+
 export class CreditsRoll {
   isOpen = false;
   private pending = false;
@@ -195,7 +200,7 @@ export class CreditsRoll {
   private flagKey(): string {
     let slot = 0;
     try { slot = getActiveSlot(); } catch { /* ignore */ }
-    return `creditsSeen:${slot}:${this.ctx.s.progression.state.name}`;
+    return `${creditsFlagPrefix(slot)}${this.ctx.s.progression.state.name}`;
   }
 
   /** Has this character already seen the roll? (persisted per save slot + character name) */

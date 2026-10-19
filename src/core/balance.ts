@@ -33,7 +33,7 @@ export function refHit(level: number): number {
   return (refMatk(level) * refSkillPct(level)) / 100;
 }
 
-/** Normal monster HP: ~3-4 primary-skill casts. Bosses ~ 250x. */
+/** Normal monster HP: ~3-4 primary-skill casts. Bosses: the Lich Archon is ×200; field bosses use ×28–65 (hpMul in FIELD_BOSSES). */
 export function refMonsterHp(level: number): number {
   return Math.round(refHit(level) * 3.5);
 }

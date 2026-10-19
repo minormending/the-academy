@@ -369,7 +369,7 @@
   <h3 id="ui-title">Title screen and Character Select</h3>
 
   <p>The Title screen is two layers. <a data-src="src/scenes/TitleScene.ts#L37">TitleScene.create()</a> draws the
-    backdrop in Phaser and plays the <code>title</code> music; <a data-src="src/ui/titleMenu.ts#L68">TitleMenu</a>
+    backdrop in Phaser and plays the <code>title</code> music; <a data-src="src/ui/titleMenu.ts#L69">TitleMenu</a>
     builds the DOM menu in the same <code>#ui-root</code> with its own <code>UIScaler</code>.</p>
 
   <p><strong>The backdrop</strong> is composed from world art that BootScene already loaded: the sanctum sky, far
@@ -388,7 +388,7 @@
     <kbd>Del</kbd> delete, Esc back. Names must be 2–12 characters of letters, digits, space,
     <code>- _ '</code>. Starting a game calls <code>markReturnToSelect()</code>, so Quit to Title comes back to the
     slot just played. While the name field is focused, the menu disables Phaser's keyboard capture
-    (<a data-src="src/ui/titleMenu.ts#L536">titleMenu.ts:536</a>). The file also starts loading both pixel fonts at
+    (<a data-src="src/ui/titleMenu.ts#L538">titleMenu.ts:538</a>). The file also starts loading both pixel fonts at
     import time, because Phaser name tags and damage digits rasterise text into canvases and need the real font before
     BootScene's <code>document.fonts.ready</code> resolves.</p>
 

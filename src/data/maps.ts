@@ -1,4 +1,4 @@
-// OWNER: A7 (world). The seven maps of The Academy (map ids are save data — never rename them).
+// OWNER: A7 (world). The eight maps of The Academy (seven chained world maps + the Trial Hall) (map ids are save data — never rename them).
 //
 // Conventions (see ARCHITECTURE.md "Coordinates & conventions"):
 //  - platform `y` is the walking surface; the ground floor is a oneWay=false platform spanning the map

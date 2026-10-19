@@ -45,8 +45,8 @@ npm run build
 |---|---|---|
 | Move / climb | Arrow keys | D-pad / left stick |
 | Jump (Down + Jump drops through platforms) | Space or Alt | A |
-| Cast hotbar spells | Q W E R T · A S D F G · 1 2 | X Y LB RB LT RT, right stick |
-| Flip hotbar page | Tab | Back |
+| Cast hotbar spells | Q W E R T · A S D F G · 1 2 | X Y LB RB LT RT, right stick · Back+X / Back+Y for 1 / 2 |
+| Flip hotbar page | Tab | Back (tap) |
 | Pick up loot | Z (hold) | B |
 | Talk / use portal | Up | D-pad up |
 | Spellbook · Inventory · Character · Assignments · Minimap · Help | K · I · P · J · M · H | L3 / R3 for Spellbook / Inventory |

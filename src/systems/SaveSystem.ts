@@ -317,11 +317,14 @@ export function loadSave(): PlayerState | null {
   return loadSlot(getActiveSlot());
 }
 
-/** Persist into the active slot (Progression autosave / manual save / map change all land here). */
-export function writeSave(state: PlayerState): void {
+/**
+ * Persist into the active slot (Progression autosave / manual save / map change all land here).
+ * Returns false when nothing was written (storage unavailable, quota exceeded, …).
+ */
+export function writeSave(state: PlayerState): boolean {
   ensureInit();
   const st = storage();
-  if (!st) return;
+  if (!st) return false;
   const slot = activeSlot;
   const savedAt = Date.now();
   try {
@@ -335,8 +338,10 @@ export function writeSave(state: PlayerState): void {
       meta.legacyPending = false;
     }
     writeMeta(meta);
+    return true;
   } catch (e) {
     console.warn('[save] write failed', e);
+    return false;
   }
 }
 

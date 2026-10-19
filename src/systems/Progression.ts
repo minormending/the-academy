@@ -34,7 +34,7 @@ const LOG = {
 
 /**
  * EXP multiplier for a kill: monsters ≥10 levels below the player give progressively less
- * (down to 10%); monsters above the player give a small bonus (up to +30%).
+ * (down to 10%); monsters above the player give a small bonus (up to +15%).
  */
 export function killExpMultiplier(playerLevel: number, monsterLevel: number): number {
   const diff = playerLevel - monsterLevel;
@@ -729,8 +729,9 @@ export class Progression implements IProgression {
 
   // ─────────────────────────── Persistence / tick ───────────────────────────
 
-  save() {
-    writeSave(this.state);
+  /** Write the character to the active slot; false when the write failed. */
+  save(): boolean {
+    return writeSave(this.state);
   }
 
   update(time: number, delta: number) {

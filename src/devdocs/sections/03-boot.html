@@ -71,7 +71,7 @@ startGamepadBridge();</code></pre>
     warnings. Callers that pass their own options still win, because the spread comes after the default.
   </p>
   <p>
-    <code>startGamepadBridge()</code> (<a data-src="src/systems/GamepadBridge.ts#L71">GamepadBridge.ts:71</a>) polls the
+    <code>startGamepadBridge()</code> (<a data-src="src/systems/GamepadBridge.ts#L83">GamepadBridge.ts:83</a>) polls the
     Gamepad API every animation frame (with a 16 ms <code>setInterval</code> watchdog for when
     <code>requestAnimationFrame</code> is throttled) and turns buttons into synthetic <code>keydown</code> /
     <code>keyup</code> events for whatever keys the actions are bound to. It starts before any scene and runs for the
@@ -366,8 +366,8 @@ const registerVfx = lazyRegister('fire', buildFire);</code></pre>
     <code>window.arcana</code> and registers <code>teardown</code> for <code>SHUTDOWN</code>; it is reproduced in
     <a href="#architecture-frame">Architecture: the frame flow</a>. The only way back to the title is Esc → Quit to
     Title, which saves and calls <code>scene.start(SCENES.TITLE)</code>
-    (<a data-src="src/ui/miscWindows.ts#L112">miscWindows.ts:112</a>). That shuts the Game scene down and runs
-    <a data-src="src/scenes/GameScene.ts#L343">teardown()</a>:
+    (<a data-src="src/ui/miscWindows.ts#L115">miscWindows.ts:115</a>). That shuts the Game scene down and runs
+    <a data-src="src/scenes/GameScene.ts#L344">teardown()</a>:
   </p>
   <pre><code class="lang-ts">  private teardown() {
     const s = this.s;

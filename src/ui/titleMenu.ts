@@ -15,6 +15,7 @@ import { ensurePlayerTexture, jobPreviewDataUrl, playerAnimKey, playerTextureKey
 import { getAudio } from '../systems/AudioSystem';
 import { append, h, isTextInput, safe } from './dom';
 import { UIScaler, uiRootEl } from './scaler';
+import { forgetCreditsSeen } from './creditsRoll';
 import { consumeReturnToSelect, markNewCharacter, markReturnToSelect } from './session';
 
 type View = 'main' | 'select' | 'new' | 'confirm';
@@ -402,7 +403,7 @@ export class TitleMenu {
     const c = this.confirm;
     if (!c) return;
     if (c.kind === 'delete') {
-      try { deleteSlot(c.slot); } catch (e) { console.warn('[title] delete failed', e); }
+      try { deleteSlot(c.slot); forgetCreditsSeen(c.slot); } catch (e) { console.warn('[title] delete failed', e); }
       this.sfx('ui_close');
       this.refresh();
       this.confirm = null;
@@ -470,6 +471,7 @@ export class TitleMenu {
     let state: PlayerState;
     try { state = newPlayerState(name); } catch (e) { console.error('[title] newPlayerState failed', e); this.sfx('ui_error'); return; }
     if (this.newReplace) { try { deleteSlot(slot); } catch { /* ignore */ } }
+    forgetCreditsSeen(slot); // a fresh character must not inherit a stale 'seen the credits' flag
     setActiveSlot(slot);
     try { writeSave(state); } catch { /* the game saves again on its first map load */ }
     markNewCharacter();

@@ -67,7 +67,10 @@ export class MenuWindow extends UIWindow {
       btn('Settings', () => { this.tab = 'settings'; this.invalidate(); }, 'ax-btn-secondary'),
       btn('How to Play', () => { this.close(); this.ctx.openWindow('help'); }, 'ax-btn-secondary'),
       btn('Save Game', () => {
-        try { this.ctx.s.progression.save(); this.ctx.log('Game saved.', '#9fe8a8'); } catch { this.ctx.log('Saving failed.', '#ff9b9b'); }
+        let ok = false;
+        try { ok = this.ctx.s.progression.save() !== false; } catch { ok = false; }
+        if (ok) this.ctx.log('Game saved.', '#9fe8a8');
+        else this.ctx.log('Saving failed. Browser storage may be full or blocked.', '#ff9b9b');
       }, 'ax-btn-secondary'),
       quit,
     ];
@@ -164,7 +167,7 @@ export class HelpWindow extends UIWindow {
           row(k('help'), 'This help'),
           row(['Esc'], 'Close window / menu'),
           h('div', { class: 'ax-help-head' }, 'Gamepad & keys'),
-          h('div', { class: 'ax-help-tip' }, 'Plug in a controller: left stick / D-pad move, A jumps, B picks up, X Y LB RB LT RT and the right stick cast your hotbar, Start opens the menu.'),
+          h('div', { class: 'ax-help-tip' }, 'Plug in a controller: left stick / D-pad move, A jumps, B picks up, X Y LB RB LT RT and the right stick cast your hotbar, hold Back and press X / Y for the potion slots, tap Back to flip the hotbar page, Start opens the menu.'),
           h('div', { class: 'ax-help-tip' }, 'Every key can be rebound: Esc → Controls (button below).'),
           h('div', { class: 'ax-help-head' }, 'Tips'),
           h('div', { class: 'ax-help-tip' }, `Drag spells from your Spellbook (or potions from your Inventory) onto the hotbar. Two pages of 12 slots — ${keyLabel(getBinding('hotbarPage'))} flips. Right-click a slot to clear it. Hold a skill key to keep casting.`))),

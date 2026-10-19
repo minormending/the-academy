@@ -43,6 +43,7 @@ export class SkillSystem implements ISkillSystem {
   private summons = new Map<string, SummonState>();
   private sched = new Scheduler();
   private runner: AttackRunner;
+  private failedCasts = new Set<string>();
 
   constructor(private scene: Phaser.Scene, private services: GameServices) {
     this.runner = new AttackRunner(scene, () => this.services, this.sched);
@@ -75,7 +76,19 @@ export class SkillSystem implements ISkillSystem {
     safe(() => s.player.playCast(lock));
     if (def.sfx) safe(() => s.audio.play(def.sfx!));
     bus.emit('skill:cast', { skillId });
-    safe(() => this.execute(def, lv));
+    try {
+      this.execute(def, lv);
+    } catch (e) {
+      // A throwing spell must not cost the player anything: refund the MP and cooldown and report the failure.
+      // Logged once per skill: a held key retries every frame and would otherwise flood the console.
+      if (!this.failedCasts.has(skillId)) {
+        this.failedCasts.add(skillId);
+        console.error(`[skills] ${skillId} threw while casting; MP and cooldown refunded`, e);
+      }
+      this.cooldowns.delete(skillId);
+      if (cost > 0) safe(() => s.progression.heal(0, cost));
+      return 'failed';
+    }
     return 'ok';
   }
 

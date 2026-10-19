@@ -1,7 +1,8 @@
 # The Academy (formerly "Arcana Story") — Architecture & Team Contract
 
 A MapleStory-style 2D side-scroller where every character is a mage. Start as an **Apprentice**,
-then specialise at level 10 into one of three trees, with 3rd and 4th advancements at 25 and 40:
+then specialise at level 10 into one of three trees (the original three; Holy and Shadow were added in Phase 3,
+see below), with 3rd and 4th advancements at 25 and 40:
 
 | Tier | Level | Fire | Ice | Lightning |
 |---|---|---|---|---|
@@ -10,8 +11,16 @@ then specialise at level 10 into one of three trees, with 3rd and 4th advancemen
 | 3 | 25 | Flamebinder | Frostbinder | Stormbinder |
 | 4 | 40 | Inferno Sage | Glacial Sage | Tempest Sage |
 
-Stack: **TypeScript + Phaser 3.90 (Arcade physics) + Vite**. No external assets — all art is
-procedural (Canvas 2D / Phaser Graphics → textures) and all audio is synthesized (WebAudio).
+> **Current state (read this first).** This file is the original team contract and still describes how the code is
+> laid out, but several of its opening statements are history. Today: there are **five Schools** (Fire, Ice,
+> Lightning, **Holy, Shadow**; see "Phase 3" and "Phase 4" below) with ten Apprentice-line skills plus 24 per
+> School; there are **eight maps** (the seven chained world maps plus `trial_hall`, the Trial Hall arena); the
+> art is **mostly external CC0 / CC-BY pixel packs** (see "Art pivot" and `CREDITS.md`), with the procedural
+> generators kept as fallbacks; audio is still fully synthesized (WebAudio). The frame order, ids and ownership
+> rules below were updated where they changed; the Phase 3 / Phase 4 sections are the authority on newer content.
+
+Stack: **TypeScript + Phaser 3.90 (Arcade physics) + Vite**. The original contract said "no external assets —
+all art is procedural" (Canvas 2D / Phaser Graphics → textures); that held until the art pivot below. All audio is synthesized (WebAudio).
 Game UI windows/HUD are **DOM** (in `#ui-root`, overlaid on the canvas). Damage numbers and
 world-space name tags are Phaser objects.
 
@@ -54,7 +63,7 @@ Debug console: `arcana.levelTo(30)`, `arcana.job('pyromancer')`, `arcana.give('r
 | A4 ice-tree | ice skills + ice VFX | `src/skills/ice.ts`, `src/skills/iceVfx.ts`, `src/skills/ice/*` |
 | A5 lightning-tree | lightning skills + lightning VFX | `src/skills/lightning.ts`, `src/skills/lightningVfx.ts`, `src/skills/lightning/*` |
 | A6 monsters | monster defs, art, AI, status visuals, contact damage, spawning/respawn, boss, drops & pickup | `src/data/monsters.ts`, `src/art/monsterArt.ts`, `src/entities/Monster.ts`, `src/entities/monsters/*`, `src/systems/MonsterManager.ts`, `src/systems/DropManager.ts` |
-| A7 world | 7 maps, map loader, terrain/parallax/decor art, ropes, portals visuals, ambient weather | `src/data/maps.ts`, `src/world/*`, `src/art/tileArt.ts`, `src/art/world/*` |
+| A7 world | 8 maps (7 chained + `trial_hall`), map loader, terrain/parallax/decor art, ropes, portals visuals, ambient weather | `src/data/maps.ts`, `src/world/*`, `src/art/tileArt.ts`, `src/art/world/*` |
 | A8 ui | title screen, HUD, hotbar, all windows, dialog/shop, minimap, log, banners, death prompt, settings | `src/ui/*`, `src/scenes/TitleScene.ts` |
 | A9 progression | player state, derived stats, leveling, AP/SP, jobs, items, inventory/equipment, shops, NPCs, quests, job advancement, save/load | `src/systems/Progression.ts`, `src/systems/SaveSystem.ts`, `src/systems/NpcManager.ts`, `src/systems/progression/*`, `src/data/items.ts`, `src/data/jobs.ts`, `src/data/npcs.ts`, `src/data/quests.ts`, `src/data/npcScripts.ts` |
 | A10 art-audio | player/NPC character art + anims, portraits, icon painter, shared particle textures, common VFX, synthesized SFX & music | `src/art/characters.ts`, `src/art/icons.ts`, `src/art/particles.ts`, `src/art/char/*`, `src/systems/AudioSystem.ts`, `src/systems/audio/*` |
@@ -70,8 +79,11 @@ Debug console: `arcana.levelTo(30)`, `arcana.job('pyromancer')`, `arcana.give('r
 
 ## Frame flow (GameScene, lead)
 
-`create`: builds services in this order → progression, combat, skills, monsters, drops, npcs, player, ui.
-`update` order: progression → player → monsters → skills → combat → drops → npcs → map → input → ui.
+`create`: builds services in this order → progression, combat, skills, monsters, drops, **arena (ArenaSystem)**, npcs,
+player, **pet (PetSystem)**, ui.
+`update` order: progression → player → monsters → skills → combat → drops → **pet (PetSystem)** →
+**arena (ArenaSystem)** → npcs → map → input → ui. (PetSystem and ArenaSystem are GameScene-owned helpers, not
+entries on the services object.)
 
 **Input owned by GameScene**: hotbar keys (`HOTBAR_KEYS`: Q W E R T A S D F G 1 2) — skills fire
 repeatedly while held via `skills.tryCast`, `item:<id>` entries call `progression.useItem` once per press;
@@ -111,13 +123,13 @@ Progression (EXP + quest kill counts), DropManager (`dropFromMonster`), MonsterM
 - One-way platforms are static bodies with `checkCollision.down/left/right = false` (only the top collides).
 - Depths: use `DEPTH` from constants.
 - Colors as `0xRRGGBB` numbers in data; CSS strings only in the DOM UI.
-- Ids are `snake_case`. Skill ids prefixed `app_`, `fire_`, `ice_`, `ltn_`. VFX keys use the same prefixes.
+- Ids are `snake_case`. Skill ids prefixed `app_`, `fire_`, `ice_`, `ltn_`, `holy_`, `shd_`. VFX keys use the same prefixes.
 
 ## Balance
 
 All content is tuned against `src/core/balance.ts` (EXP curve, reference matk, monster HP/EXP/damage, skill %
 guidance). A9 must make derived `matk` ≈ `refMatk(level)` (±15%) for an INT-focused build with on-level gear.
-A6 sets monster HP/EXP/touch from the ref curves (×0.8–1.3 variety; bosses: HP ×250, EXP ×40).
+A6 sets monster HP/EXP/touch from the ref curves (×0.8–1.3 variety; the Lich Archon: HP ×200, EXP ×40; the five field bosses use HP ×28–65, EXP ×18).
 
 Damage (A2): `hit = matk × pct/100 × rand(mastery..1) × (1 + dmgAll + dmgElem) × elemMult × critMult × target.incomingDamageMult() − target.def.def`, min 1.
 `elemMult` = 1.5 if element ∈ weak, 0.5 if ∈ resist. Bosses: freeze/stun durations halved.
@@ -151,7 +163,7 @@ Damage (A2): `hit = matk × pct/100 × rand(mastery..1) × (1 + dmgAll + dmgElem
 
 **Maps (A7)** — chained by portals `east` ↔ `west` (portal ids are literally `west`/`east`, plus extras as needed):
 `mistvale` (town, safe, lv —) → `whisperwood` (1–8) → `shroom_hollow` (8–15) → `frostfang_cliffs` (15–25) →
-`cinder_caverns` (25–35) → `stormspire_peak` (35–45) → `arcane_sanctum` (45–50, boss).
+`cinder_caverns` (25–35) → `stormspire_peak` (35–45) → `arcane_sanctum` (45–50, boss). A side map, `trial_hall` (the Trial Hall wave arena, entered from `mistvale`), was added later.
 
 **Monsters (A6)** — id (level, map, notes):
 - whisperwood: `moss_snail` (1), `puff_slime` (3, hopper), `cap_shroom` (6)
@@ -286,7 +298,7 @@ several build paths exist inside a Year (2–3 roots per Year, not one long chai
 Keys are no longer fixed: `src/core/bindings.ts` maps actions (move, jump/jump2, interact, pickup, hotbarPage,
 slot0–slot11, window toggles) → keyCodes, persisted in `academy-bindings-v1`; defaults come from
 `HOTBAR_KEYS`/`CONTROL_KEYS`/`UI_KEYS`. Player, GameScene, UIRoot, HUD labels and GamepadBridge read it and
-re-bind live (`onBindingsChanged`). Never hard-code key letters in new UI text — use `keyLabel(getBinding(a))`.
+re-bind live (`onBindingsChanged`). The gamepad bridge (`src/systems/GamepadBridge.ts`, table `GAMEPAD_MAP`) presses those *actions*; Back / Select is a chord modifier (tap = flip hotbar page; hold + X / Y = hotbar slots 10 / 11, the potion keys). Never hard-code key letters in new UI text — use `keyLabel(getBinding(a))`.
 `src/core/settings.ts` (`academy-settings-v1`): screen shake on/reduced/off (applied by patching the main
 camera's shake/flash in GameScene), damage-number size, familiar on/off. Saves live in six slots
 (`arcana-story-save-v1:slot0..5` + `:meta`) behind the same SaveSystem API (active slot).

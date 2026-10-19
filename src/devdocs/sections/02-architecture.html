@@ -50,7 +50,7 @@ export function services(): GameServices {
   return current;
 }
 export function maybeServices(): GameServices | null { return current; }</code></pre>
-  <p>The object itself is declared at the end of the contracts (<a data-src="src/core/types.ts#L610">types.ts:610</a>):</p>
+  <p>The object itself is declared at the end of the contracts (<a data-src="src/core/types.ts#L612">types.ts:612</a>):</p>
   <pre><code class="lang-ts">export interface GameServices {
   scene: Phaser.Scene;   // the GameScene
   game: IGameApi;
@@ -127,19 +127,19 @@ export function maybeServices(): GameServices | null { return current; }</code><
       <tr><td><a data-src="src/core/types.ts#L48">Stats</a></td><td><code>BaseStats</code> (STR/DEX/INT/LUK), <code>DerivedStats</code> (matk, crit, speed, element bonuses, cdr…), <code>StatModifier</code></td><td>Progression</td></tr>
       <tr><td><a data-src="src/core/types.ts#L98">Status effects</a></td><td><code>StatusKind</code> (burn, chill, freeze, shock, stun, poison, curse), <code>StatusSpec</code>, <code>StatusInstance</code></td><td>skills</td></tr>
       <tr><td><a data-src="src/core/types.ts#L124">Skills</a></td><td><code>SkillDef</code>, <code>AttackSpec</code> and its seven <code>AttackPattern</code>s, <code>BuffSpec</code>, <code>SummonSpec</code>, <code>MovementSpec</code>, <code>SkillContext</code></td><td><code>skills/*.ts</code></td></tr>
-      <tr><td><a data-src="src/core/types.ts#L234">VFX</a></td><td><code>VfxOptions</code>, <code>VfxFn</code></td><td><code>skills/*Vfx.ts</code>, <code>art/particles.ts</code></td></tr>
-      <tr><td><a data-src="src/core/types.ts#L259">Audio</a></td><td><code>SfxKey</code>, <code>MusicKey</code></td><td><code>systems/audio/</code></td></tr>
-      <tr><td><a data-src="src/core/types.ts#L270">Items</a></td><td><code>ItemDef</code>, <code>ItemStack</code>, <code>DropEntry</code>, <code>EquipSlot</code></td><td><code>data/items.ts</code></td></tr>
-      <tr><td><a data-src="src/core/types.ts#L301">Monsters</a></td><td><code>MonsterDef</code>, <code>IMonster</code></td><td><code>data/monsters.ts</code></td></tr>
-      <tr><td><a data-src="src/core/types.ts#L346">Maps</a></td><td><code>MapDef</code> with platforms, walls, ropes, portals, spawns, NPC placements; <code>IMapInstance</code></td><td><code>data/maps.ts</code></td></tr>
-      <tr><td><a data-src="src/core/types.ts#L394">NPCs, dialog, quests</a></td><td><code>NpcDef</code>, <code>DialogSpec</code>, <code>ShopSpec</code>, <code>QuestDef</code>, <code>QuestProgress</code></td><td><code>data/npcs.ts</code>, <code>data/quests.ts</code>, <code>data/storyQuests.ts</code></td></tr>
-      <tr><td><a data-src="src/core/types.ts#L429">Player state</a></td><td><code>PlayerState</code> (the save), <code>HOTBAR_SIZE</code> = 24, <code>HOTBAR_PAGE_SIZE</code> = 12</td><td><code>SaveSystem.newPlayerState</code></td></tr>
-      <tr><td><a data-src="src/core/types.ts#L456">Service interfaces</a></td><td><code>IPlayer</code>, <code>IMonsterManager</code>, <code>IDropManager</code>, <code>ISkillSystem</code>, <code>ICombatSystem</code>, <code>IProgression</code>, <code>INpcManager</code>, <code>IAudio</code>, <code>IGameApi</code>, <code>IUI</code>, <code>GameServices</code></td><td>systems, entities, UI</td></tr>
+      <tr><td><a data-src="src/core/types.ts#L236">VFX</a></td><td><code>VfxOptions</code>, <code>VfxFn</code></td><td><code>skills/*Vfx.ts</code>, <code>art/particles.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L261">Audio</a></td><td><code>SfxKey</code>, <code>MusicKey</code></td><td><code>systems/audio/</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L272">Items</a></td><td><code>ItemDef</code>, <code>ItemStack</code>, <code>DropEntry</code>, <code>EquipSlot</code></td><td><code>data/items.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L303">Monsters</a></td><td><code>MonsterDef</code>, <code>IMonster</code></td><td><code>data/monsters.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L348">Maps</a></td><td><code>MapDef</code> with platforms, walls, ropes, portals, spawns, NPC placements; <code>IMapInstance</code></td><td><code>data/maps.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L396">NPCs, dialog, quests</a></td><td><code>NpcDef</code>, <code>DialogSpec</code>, <code>ShopSpec</code>, <code>QuestDef</code>, <code>QuestProgress</code></td><td><code>data/npcs.ts</code>, <code>data/quests.ts</code>, <code>data/storyQuests.ts</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L431">Player state</a></td><td><code>PlayerState</code> (the save), <code>HOTBAR_SIZE</code> = 24, <code>HOTBAR_PAGE_SIZE</code> = 12</td><td><code>SaveSystem.newPlayerState</code></td></tr>
+      <tr><td><a data-src="src/core/types.ts#L458">Service interfaces</a></td><td><code>IPlayer</code>, <code>IMonsterManager</code>, <code>IDropManager</code>, <code>ISkillSystem</code>, <code>ICombatSystem</code>, <code>IProgression</code>, <code>INpcManager</code>, <code>IAudio</code>, <code>IGameApi</code>, <code>IUI</code>, <code>GameServices</code></td><td>systems, entities, UI</td></tr>
     </tbody>
   </table>
   <p>
     A service interface is deliberately narrow. The skill engine, for example, exposes only what other systems need
-    (<a data-src="src/core/types.ts#L512">types.ts:512</a>):
+    (<a data-src="src/core/types.ts#L514">types.ts:514</a>):
   </p>
   <pre><code class="lang-ts">export interface ISkillSystem {
   tryCast(skillId: string): CastResult;
@@ -297,10 +297,26 @@ export const Registry = {
 
 class Bus {
   private ee = new Phaser.Events.EventEmitter();
-  on&lt;K extends keyof GameEvents&gt;(ev: K, fn: Handler&lt;GameEvents[K]&gt;, ctx?: unknown) { this.ee.on(ev, fn, ctx); return () =&gt; this.ee.off(ev, fn, ctx); }
+  // … `wrapped`: original handler → its guarded wrapper, so `off` can find it
+
+  /** One throwing listener must not stop the remaining listeners of the same event: log it and carry on. */
+  private guard&lt;K extends keyof GameEvents&gt;(ev: K, fn: Handler&lt;GameEvents[K]&gt;, ctx: unknown, once = false) {
+    const wrapper: Handler&lt;GameEvents[K]&gt; = (payload) =&gt; {
+      if (once) this.unguard(ev, fn, ctx);
+      try { fn.call(ctx, payload); } catch (err) { console.error(`[bus] listener for '${ev}' threw`, err); }
+    };
+    // … remember the wrapper
+    return wrapper;
+  }
+
+  on&lt;K extends keyof GameEvents&gt;(ev: K, fn: Handler&lt;GameEvents[K]&gt;, ctx?: unknown) {
+    const w = this.guard(ev, fn, ctx);
+    this.ee.on(ev, w);
+    return () =&gt; this.off(ev, fn, ctx);
+  }
   // … once, off
   emit&lt;K extends keyof GameEvents&gt;(ev: K, payload: GameEvents[K]) { this.ee.emit(ev, payload); }
-  removeAll() { this.ee.removeAllListeners(); }
+  removeAll() { this.ee.removeAllListeners(); this.wrapped.clear(); }
 }
 
 export const bus = new Bus();</code></pre>
@@ -340,9 +356,14 @@ export const bus = new Bus();</code></pre>
         a monster's own <code>update</code> (a boss hazard tick). <code>ArenaSystem</code> documents this and only sets
         a flag, ending the run on its next <code>update</code>: "despawning that monster under its own feet breaks
         it." Follow that pattern whenever a handler would destroy objects.</li>
-      <li><strong>A throwing handler propagates to the emitter.</strong> <code>Monster.die()</code> wraps its emit in
-        <code>try/catch</code> so one broken subscriber cannot leave a half-dead monster; Progression wraps its own
-        <code>monster:killed</code> handler the same way. Do the same in new handlers.</li>
+      <li><strong>A throwing handler is logged and skipped.</strong> <code>bus.on</code> and <code>bus.once</code>
+        register a guarded wrapper, so when one listener throws, <code>bus.emit</code> logs
+        <code>[bus] listener for '&lt;event&gt;' threw</code> and still calls the listeners after it, and the exception
+        never reaches the emitter. (Originally the underlying emitter stopped at the first throw, which let one broken
+        subscriber starve drops and respawns.) <code>Monster.die()</code> still wraps its emit in <code>try/catch</code>,
+        and Progression and <code>MonsterManager.onKilled</code> guard their own <code>monster:killed</code> work, so a
+        bad handler costs one log line rather than a half-finished death. Still catch errors in new handlers: the guard
+        keeps the game running, but the failed handler's own work is lost.</li>
       <li><strong>Subscription order is construction order.</strong> For <code>monster:killed</code>, Progression
         (built first) gets EXP before DropManager spawns loot. Nothing depends on that today; do not start depending
         on it.</li>
@@ -422,7 +443,7 @@ export function playVfx(scene: Phaser.Scene, key: string | undefined, o: VfxOpti
     this.exposeDebug();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =&gt; this.teardown());
   }</code></pre>
-  <p>Every frame, Phaser calls <code>update(time, delta)</code>, which runs each system once, in this order (<a data-src="src/scenes/GameScene.ts#L326">GameScene.ts:326</a>):</p>
+  <p>Every frame, Phaser calls <code>update(time, delta)</code>, which runs each system once, in this order (<a data-src="src/scenes/GameScene.ts#L327">GameScene.ts:327</a>):</p>
   <pre class="mermaid">flowchart LR
   a["progression<br>regen, autosave"] --> b["player<br>move, physics"]
   b --> c["monsters<br>AI, contact dmg"]

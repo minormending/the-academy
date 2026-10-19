@@ -141,9 +141,9 @@ export interface SummonSpec {
   <p><small>Source: <a data-src="src/core/types.ts#L167-L188">types.ts:167</a></small></p>
 
   <p><code>tryCast</code> returns a <code>CastResult</code>:
-    <code>'ok' | 'no_mp' | 'cooldown' | 'busy' | 'not_learned' | 'unknown' | 'passive' | 'dead'</code>
+    <code>'ok' | 'no_mp' | 'cooldown' | 'busy' | 'not_learned' | 'unknown' | 'passive' | 'dead' | 'failed'</code>
     (<a data-src="src/core/types.ts#L213">types.ts:213</a>). GameScene turns the failures into a log line and an error
-    sound. It turns <code>'busy'</code> into a buffered cast instead (see <a href="#input">Input</a>).</p>
+    sound. (<code>'failed'</code> means the spell's own code threw mid-cast; MP and cooldown were refunded.) It turns <code>'busy'</code> into a buffered cast instead (see <a href="#input">Input</a>).</p>
 
   <h4 id="skills-examples">One spell of each kind</h4>
   <p><strong>Attack.</strong> Arcane Bolt, the first spell every student has: one projectile, one line, one target.</p>
@@ -284,10 +284,18 @@ export function castHeal(ctx: SkillContext, pct: number, matkShare: number, atta
     safe(() =&gt; s.player.playCast(lock));
     if (def.sfx) safe(() =&gt; s.audio.play(def.sfx!));
     bus.emit('skill:cast', { skillId });
-    safe(() =&gt; this.execute(def, lv));
+    try {
+      this.execute(def, lv);
+    } catch (e) {
+      // A throwing spell must not cost the player anything: refund the MP and cooldown and report the failure.
+      // … logged once per skill, so a held key doesn't flood the console
+      this.cooldowns.delete(skillId);
+      if (cost &gt; 0) safe(() =&gt; s.progression.heal(0, cost));
+      return 'failed';
+    }
     return 'ok';
   }</code></pre>
-  <p><small>Source: <a data-src="src/systems/SkillSystem.ts#L54-L80">SkillSystem.ts:54</a></small></p>
+  <p><small>Source: <a data-src="src/systems/SkillSystem.ts#L55-L93">SkillSystem.ts:55</a></small></p>
 
   <ul>
     <li><strong>Busy</strong> means the player is dead, on a rope or ladder, in a cast lock, or in hit-stun
@@ -348,11 +356,14 @@ export function castHeal(ctx: SkillContext, pct: number, matkShare: number, atta
 
   <details class="advanced"><summary>Advanced: order-of-operations invariants in tryCast</summary>
     <ul>
-      <li><strong>Pay before you act.</strong> MP is spent and the cooldown started <em>before</em>
-        <code>execute</code>. <code>execute</code> is wrapped in <code>safe()</code>, so a spell that throws still
-        returns <code>'ok'</code> and the MP is gone. The error is logged as <code>[skills]</code>. This trade-off is
-        deliberate: a broken spell must never crash the frame loop (ARCHITECTURE rule 8, "never throw in
-        <code>update</code>").</li>
+      <li><strong>Pay first, refund on failure.</strong> MP is spent and the cooldown started <em>before</em>
+        <code>execute</code>, because the spell needs them to run. <code>execute</code> is wrapped in a
+        <code>try/catch</code>: a spell that throws never crashes the frame loop (ARCHITECTURE rule 8, "never throw in
+        <code>update</code>"), and <code>tryCast</code> then deletes the cooldown, gives the MP back through
+        <code>progression.heal(0, cost)</code>, and returns <code>'failed'</code> instead of <code>'ok'</code>
+        (GameScene shows "The spell fizzled."). The error is logged once per skill as <code>[skills]</code>, because a
+        held key retries every frame. Effects the spell had already produced before it threw (a projectile, a
+        sound) are not undone, and the cast lock and <code>skill:cast</code> event have already happened.</li>
       <li><strong>The level is clamped once</strong>, to <code>1..maxLevel</code>. Every level function receives a value
         in range, even for a save that holds a level above the current <code>maxLevel</code> after a rebalance.</li>
       <li><strong>Checks are cheap first, then stateful.</strong> Nothing changes state until <code>spendMp</code>
@@ -529,7 +540,7 @@ export function castHeal(ctx: SkillContext, pct: number, matkShare: number, atta
         summons such as Wall of Fire. They only attacked when a monster was within <code>w/2</code> of their centre, a
         circle smaller than their rectangle. Now the wake-up reach is the rectangle's half-diagonal,
         <code>hypot(w/2, h/2)</code>, and the vertical tolerance is <code>max(160, h/2 + 20)</code>
-        (<a data-src="src/systems/SkillSystem.ts#L220-L223">SkillSystem.ts:220</a>).</li>
+        (<a data-src="src/systems/SkillSystem.ts#L233-L236">SkillSystem.ts:233</a>).</li>
     </ul>
   </details>
 
@@ -706,7 +717,7 @@ const HIT_VFX_PER_WINDOW = 14;</code></pre>
         sm.faceLockMs = 600;
         this.runner.run(atk, { x: sm.x, y: sm.y, facing: sm.facing, groundY: target.y, aimAt: c }, sm.lv, sm.def.element, sm.def.id);
       }</code></pre>
-  <p><small>Source: <a data-src="src/systems/SkillSystem.ts#L219-L229">SkillSystem.ts:219</a></small></p>
+  <p><small>Source: <a data-src="src/systems/SkillSystem.ts#L232-L242">SkillSystem.ts:232</a></small></p>
   <p>If no monster is in reach the summon skips that tick and tries again one interval later. Summon damage goes through
     the same <code>strike</code> and the same combat math as the player's own spells, using the player's current
     <code>matk</code>.</p>
@@ -722,7 +733,7 @@ const HIT_VFX_PER_WINDOW = 14;</code></pre>
 
   <h4 id="skills-oncast">onCast: heals, drains and fields</h4>
   <p><code>onCast(ctx, lv)</code> receives a <code>SkillContext</code>: the scene, all services, the def, the level, and
-    <code>runAttack(spec, origin)</code> (<a data-src="src/systems/SkillSystem.ts#L87">SkillSystem.ts:87</a>).
+    <code>runAttack(spec, origin)</code> (<a data-src="src/systems/SkillSystem.ts#L100">SkillSystem.ts:100</a>).
     <code>runAttack</code> is the same <code>AttackRunner.run</code> the engine uses, with <code>groundY</code> set to
     the player's feet and <code>centerX</code> set to <code>origin.x</code>. Custom spells therefore get every pattern,
     stacked numbers, statuses and VFX conventions for free, and only write the part that is really custom:</p>
@@ -823,7 +834,7 @@ const HIT_VFX_PER_WINDOW = 14;</code></pre>
   <p>Every source of player damage goes through <code>combat.hitPlayer(raw, fromX)</code>: contact damage from
     MonsterManager, and the Lich Archon's and field bosses' attacks. The caller applies the monster's curse first by
     multiplying with <code>outgoingDamageMult()</code>, i.e. <code>× (1 − curse)</code> (<a
-    data-src="src/systems/MonsterManager.ts#L276-L277">MonsterManager.ts:276</a>). Then:</p>
+    data-src="src/systems/MonsterManager.ts#L288-L289">MonsterManager.ts:288</a>). Then:</p>
   <pre><code class="lang-ts">    if (s.progression.isDead() || p.state === 'dead' || p.isInvulnerable()) return;
     const d = this.derived();
     const def = Math.max(0, num(d?.def, 0));
@@ -833,7 +844,7 @@ const HIT_VFX_PER_WINDOW = 14;</code></pre>
     let mpPaid = 0;
     if (shield &gt; 0) mpPaid = Math.min(Math.round(total * shield), Math.max(0, Math.floor(s.progression.state.mp)));
     const hpLoss = Math.max(0, total - mpPaid);</code></pre>
-  <p><small>Source: <a data-src="src/systems/CombatSystem.ts#L104-L112">CombatSystem.ts:104</a></small></p>
+  <p><small>Source: <a data-src="src/systems/CombatSystem.ts#L112-L120">CombatSystem.ts:112</a></small></p>
   <ul>
     <li><strong>Player defence uses diminishing returns</strong>, not flat subtraction: damage × <code>(1 − def/(def + 120))</code>
       (<code>DEF_K</code>, <a data-src="src/systems/CombatSystem.ts#L8">CombatSystem.ts:8</a>). 120 def halves damage, and
@@ -870,7 +881,14 @@ const HIT_VFX_PER_WINDOW = 14;</code></pre>
     let potency: number;
     switch (spec.kind) {
       case 'burn':
-      case 'poison': potency = Math.max(1, Math.round((num(baseHit, 1) * rawPot) / 100)); break;
+      case 'poison': {
+        // baseHit is the final hit (already ×incomingDamageMult, −def): store a raw per-tick amount instead
+        let incoming = 1;
+        try { incoming = Math.max(0.01, num(target.incomingDamageMult(), 1)); } catch { /* ignore */ }
+        const rawHit = (Math.max(1, num(baseHit, 1)) + Math.max(0, num(target.def.def, 0))) / incoming;
+        potency = Math.max(1, Math.round((rawHit * rawPot) / 100));
+        break;
+      }
       case 'curse': potency = clamp(rawPot, 0, 0.6); break;
       case 'chill': potency = clamp(rawPot, 0, 0.9); break;
       case 'shock': potency = Math.max(0, rawPot); break;
@@ -878,16 +896,16 @@ const HIT_VFX_PER_WINDOW = 14;</code></pre>
     }
     // … build the StatusInstance and call target.applyStatus(inst)
   }</code></pre>
-  <p><small>Source: <a data-src="src/systems/CombatSystem.ts#L77-L98">CombatSystem.ts:77</a></small></p>
+  <p><small>Source: <a data-src="src/systems/CombatSystem.ts#L77-L106">CombatSystem.ts:77</a></small></p>
 
   <table>
     <thead><tr><th>Status</th><th>Spec potency means</th><th>Becomes</th><th>Effect on the monster
       (<a data-src="src/entities/Monster.ts">Monster.ts</a>)</th><th>School</th></tr></thead>
     <tbody>
-      <tr><td><code>burn</code></td><td>% of the hit per tick (e.g. 20 = 20%)</td><td>Damage per tick, at least 1</td>
+      <tr><td><code>burn</code></td><td>% of the hit per tick (e.g. 20 = 20%)</td><td>Raw damage per tick; each tick applies shock/curse and subtracts <code>def</code>, at least 1</td>
         <td>Every 500 ms, <code>damageMonster(…, { kind: 'dot' })</code>: small orange numbers, no sound. Flickering
           orange tint, ember motes.</td><td>Fire</td></tr>
-      <tr><td><code>poison</code></td><td>% of the hit per tick</td><td>Damage per tick, at least 1</td><td>Same as burn on its
+      <tr><td><code>poison</code></td><td>% of the hit per tick</td><td>Raw damage per tick, ticked like burn</td><td>Same as burn on its
           own 500 ms clock. Green tint, puffs.</td><td>Shadow</td></tr>
       <tr><td><code>chill</code></td><td>Fraction of speed removed</td><td>Clamped 0..0.9</td><td>AI speed ×
           <code>clamp(1 − p, 0.1, 1)</code> (<a data-src="src/entities/Monster.ts#L310">Monster.ts:310</a>). Blue
@@ -945,11 +963,15 @@ const HIT_VFX_PER_WINDOW = 14;</code></pre>
         Bosses also skip hit-stun and knockback in <code>takeDamage</code>.</li>
       <li><strong>Immunity is checked twice</strong>, in CombatSystem and again in <code>Monster.applyStatus</code>. The
         second check keeps the monster safe even if a caller skips CombatSystem.</li>
-      <li><strong>DoT ticks skip the damage formula.</strong> Burn and poison ticks call <code>damageMonster</code> with
-        the stored potency, so shock, curse, weakness, crits and the monster's flat <code>def</code> do <em>not</em>
-        change a tick. Those multipliers only matter once, through line 0's damage when the DoT is applied.</li>
+      <li><strong>DoT ticks go through shock, curse and <code>def</code>, but never roll crits.</strong>
+        <code>tryApplyStatus</code> stores the tick as a <em>raw</em> amount: the line-0 hit with the monster's
+        <code>incomingDamageMult()</code> divided out and its <code>def</code> added back, times the potency percentage.
+        Each 500 ms tick then computes <code>max(1, round(potency × incomingDamageMult() − def))</code>
+        (<code>Monster.dotDamage</code>, same shape as <code>rollSkillDamage</code>), so a shock or curse applied
+        <em>after</em> the burn started amplifies the remaining ticks, and neither factor is counted twice. A crit or
+        elemental weakness on the original hit stays baked into the stored amount; ticks never roll their own.</li>
       <li><strong>Ticks are accumulator-based</strong> (<code>burnAcc</code>, <code>poisonAcc</code>,
-        <a data-src="src/entities/Monster.ts#L472">Monster.ts:472</a>). The monster's <code>update</code> clamps
+        <a data-src="src/entities/Monster.ts#L477">Monster.ts:477</a>). The monster's <code>update</code> clamps
         <code>delta</code> to 50 ms, and a <code>while</code> loop catches up any missed 500 ms ticks, so a slow frame
         never loses DoT damage. Each accumulator resets only when the status is newly applied, not when it is refreshed.</li>
       <li><strong>Locked monsters still tick.</strong> <code>tickStatuses</code> runs before the lock check, so a frozen

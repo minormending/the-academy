@@ -14,6 +14,9 @@ const BOSS_RESPAWN_MS = 300000;
 /** Field boss respawn after death when its spawn entry has no respawnMs; jittered ±20% (→ ~8–12 min). */
 const FIELD_BOSS_RESPAWN_MS = 600000;
 
+/** Boss ids already warned about (no FieldBoss class) so a respawning boss logs once. */
+const warnedBossFallback = new Set<string>();
+
 /** Per-map field boss timer (session-scoped: survives map changes, not saves). */
 interface FieldBossTimer { nextAt: number; alive: boolean }
 
@@ -133,9 +136,13 @@ export class MonsterManager implements IMonsterManager {
       const FB = FIELD_BOSS_CLASSES[def.id];
       const m = FB
         ? new FB(this.scene, this.services, def, x, y, this.map, opts)
-        : def.behavior === 'boss' || def.id === 'lich_archon'
+        : def.id === 'lich_archon'
           ? new LichArchon(this.scene, this.services, def, x, y, this.map, opts)
           : new Monster(this.scene, this.services, def, x, y, this.map, opts);
+      if (!FB && def.behavior === 'boss' && def.id !== 'lich_archon' && !warnedBossFallback.has(def.id)) {
+        warnedBossFallback.add(def.id);
+        console.warn(`[monsters] '${def.id}' is a boss with no FieldBoss class; spawning it as a regular Monster`);
+      }
       this.list.push(m);
       return m;
     } catch (e) {
@@ -247,6 +254,11 @@ export class MonsterManager implements IMonsterManager {
   }
 
   private onKilled(monster: IMonster) {
+    // One bad spawn entry / missing map must not break the remaining 'monster:killed' work (bus also guards listeners).
+    try { this.handleKilled(monster); } catch (e) { console.error(`[monsters] onKilled failed for ${monster?.def?.id}`, e); }
+  }
+
+  private handleKilled(monster: IMonster) {
     const fb = this.fieldBossUid.get(monster.uid);
     if (fb !== undefined) { this.fieldBossUid.delete(monster.uid); this.onFieldBossKilled(fb); return; }
     const group = this.groupOf.get(monster.uid);

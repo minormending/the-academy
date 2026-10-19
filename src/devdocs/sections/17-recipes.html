@@ -34,13 +34,21 @@
   <p>Run <code>npm run dev</code> and open <code>http://localhost:5199</code> (add <code>?debug=1</code> to draw
     physics bodies). Start or load a character. <code>GameScene</code> puts a small API on
     <code>window.arcana</code> when the game scene starts
-    (<a data-src="src/scenes/GameScene.ts#L358">GameScene.ts:358</a>):</p>
+    (<a data-src="src/scenes/GameScene.ts#L359">GameScene.ts:359</a>):</p>
 
   <pre><code class="lang-ts">  private exposeDebug() {
     const s = this.s;
     const api = {
       s,
-      levelTo: (n: number) =&gt; { while (s.progression.state.level &lt; n) s.progression.gainExp(expToNext(s.progression.state.level) - s.progression.state.exp); },
+      levelTo: (n: number) =&gt; {
+        // Clamp to MAX_LEVEL and stop if a pass doesn't raise the level (gainExp is a no-op at the cap).
+        const target = Math.min(Math.floor(n), MAX_LEVEL);
+        while (s.progression.state.level &lt; target) {
+          const before = s.progression.state.level;
+          s.progression.gainExp(expToNext(before) - s.progression.state.exp);
+          if (s.progression.state.level &lt;= before) break;
+        }
+      },
       give: (itemId: string, qty = 1) =&gt; s.progression.addItem(itemId, qty),
       mesos: (n: number) =&gt; s.progression.addMesos(n),
       warp: (mapId: string, portalId?: string) =&gt; this.changeMap(mapId, portalId),
@@ -54,7 +62,7 @@
   <table>
     <thead><tr><th>Command</th><th>What it does</th><th>Watch out for</th></tr></thead>
     <tbody>
-      <tr><td><code>arcana.levelTo(25)</code></td><td>Grants exactly enough EXP for each level, so you get the normal SP and AP for every level-up.</td><td>Only goes up.</td></tr>
+      <tr><td><code>arcana.levelTo(25)</code></td><td>Grants exactly enough EXP for each level, so you get the normal SP and AP for every level-up.</td><td>Only goes up; anything above 50 stops at the level cap.</td></tr>
       <tr><td><code>arcana.job('pyromancer')</code></td><td>Calls <code>advanceJob</code> (<a data-src="src/systems/Progression.ts#L342">Progression.ts:342</a>).</td><td>Returns <code>false</code> unless the job's <code>parent</code> is your current job and you meet its level (10/25/40). Advance one Year at a time. It skips the Exam quest.</td></tr>
       <tr><td><code>arcana.s.progression.learnSkill('fire_orb')</code></td><td>Spends 1 SP on a skill (<a data-src="src/systems/Progression.ts#L290">Progression.ts:290</a>). A newly learned castable skill goes into the first free hotbar slot.</td><td>Fails silently (<code>false</code>) without SP, if the skill's job is not in your lineage, or if a <code>requires</code> entry isn't met.</td></tr>
       <tr><td><code>arcana.warp('whisperwood', 'east')</code></td><td>Same fade-and-load as a portal.</td><td>Without a portal id you land at the map's default spawn: its <code>MAP_EXTRAS</code> spawn, else the <code>west</code> portal, else the first portal.</td></tr>
@@ -80,7 +88,7 @@
       <code>job</code> decides the Year: e.g. <code>pyromancer</code> is Fire Year 2, <code>flamebinder</code> Year 3,
       <code>inferno_sage</code> Year 4. Each School has 8 spells per Year now. The Phase 4 targets (3–4 attacks
       with different roles, 1–2 buffs or utility, 1–2 passives, a summon or field from Year 3, two ultimates in
-      Year 4) are in <a data-src="ARCHITECTURE.md#L248">ARCHITECTURE.md</a>.</li>
+      Year 4) are in <a data-src="ARCHITECTURE.md#L260">ARCHITECTURE.md</a>.</li>
     <li><strong>Set <code>kind</code></strong> to one of <code>attack</code>, <code>buff</code>,
       <code>passive</code>, <code>movement</code> or <code>summon</code>, and fill in the matching field
       (<code>attack</code>, <code>buff</code>, <code>passive</code>, <code>movement</code>, <code>summon</code>).
@@ -196,7 +204,7 @@ arcana.warp('whisperwood');</code></pre>
   <!-- ===================================================================== -->
   <h3 id="recipes-monster">Add a monster</h3>
 
-  <p>A monster is a <code>MonsterDef</code> (<a data-src="src/core/types.ts#L303">types.ts:303</a>). Normal
+  <p>A monster is a <code>MonsterDef</code> (<a data-src="src/core/types.ts#L305">types.ts:305</a>). Normal
     monsters are built with <code>mk()</code> in <a data-src="src/data/monsters.ts#L80">monsters.ts:80</a>.
     <code>mk()</code> turns a short <code>MonsterSpec</code> (level, behaviour, size, multipliers) into full stats
     from the reference curves, so a monster's numbers follow the game's balance automatically. AI, statuses and
@@ -304,7 +312,7 @@ arcana.s.monsters</code></pre>
   <!-- ===================================================================== -->
   <h3 id="recipes-map">Add a map</h3>
 
-  <p>A map is a <code>MapDef</code> (<a data-src="src/core/types.ts#L355">types.ts:355</a>) in
+  <p>A map is a <code>MapDef</code> (<a data-src="src/core/types.ts#L357">types.ts:357</a>) in
     <a data-src="src/data/maps.ts#L1">src/data/maps.ts</a>: size, platforms, walls, ropes, portals, spawns, NPC
     placements, a <code>theme</code> (art set) and <code>music</code>. <code>MapLoader</code> turns it into physics
     bodies and layered visuals (see <a href="#world">World</a>). The file has no runtime imports, so you can sanity
@@ -363,7 +371,7 @@ const span = (monsterId: string, x1: number, x2: number, y: number, count: numbe
     <li><strong>Id and look.</strong> A new <code>snake_case</code> id. The id is save data: never rename it once
       shipped. Set <code>theme</code> to one of the existing <code>MapTheme</code>s (<code>town</code>,
       <code>forest</code>, <code>mushroom</code>, <code>snow</code>, <code>volcano</code>, <code>storm</code>,
-      <code>sanctum</code>; <a data-src="src/core/types.ts#L346">types.ts:346</a>) and <code>music</code> to a
+      <code>sanctum</code>; <a data-src="src/core/types.ts#L348">types.ts:348</a>) and <code>music</code> to a
       <code>MusicKey</code>. A new theme means new terrain, parallax and decor art plus a
       <code>THEME_RUNTIME</code> entry (<a data-src="src/world/themes.ts#L39">themes.ts:39</a>).</li>
     <li><strong>Geometry, following the design rules.</strong> The jump apex is about 105 px and a horizontal jump
@@ -408,7 +416,7 @@ arcana.warp('whisperwood', 'east')  // and walk through the connecting portal bo
     and a hall on campus. Unlike the recipes above, it changes contracts. Holy and Shadow were added exactly this
     way: first the lead's contract commit <code>7e70b18</code> ("Phase 3 contract: Holy and Shadow branches, jobs,
     poison/curse statuses, new glyphs/sfx, tree stubs"; see
-    <a data-src="ARCHITECTURE.md#L214">ARCHITECTURE.md "Phase 3"</a>), then the trees
+    <a data-src="ARCHITECTURE.md#L226">ARCHITECTURE.md "Phase 3"</a>), then the trees
     (<code>fdd90e1</code>, <code>76abe50</code>), the data re-theme with professors and exams
     (<code>3c91190</code>), and the campus halls (<code>ccf1505</code>). Plan on the same order.</p>
 
@@ -426,7 +434,7 @@ arcana.warp('whisperwood', 'east')  // and walk through the connecting portal bo
   <p>In <a data-src="src/core/types.ts#L11">types.ts</a>, add the School to <code>Element</code> and
     <code>Branch</code>, its three jobs to <code>JobId</code>, a <code>dmgX</code> field to
     <code>DerivedStats</code> (<a data-src="src/core/types.ts#L51">line 51</a>), a <code>cast_x</code> sound to
-    <code>SfxKey</code> (<a data-src="src/core/types.ts#L259">line 259</a>), and any new
+    <code>SfxKey</code> (<a data-src="src/core/types.ts#L261">line 259</a>), and any new
     <code>IconGlyph</code>s or <code>StatusKind</code>s the School needs. Phase 3 added glyphs (<code>halo</code>,
     <code>skull</code>, <code>scythe</code>…), two statuses (<code>poison</code>, <code>curse</code>) and three
     sounds.</p>
@@ -452,7 +460,7 @@ export const HOLY_SKILLS: SkillDef[] = [];</code></pre>
       <tr><td>icon painters <code>P</code> and <code>PIXEL_ICONS</code></td><td><a data-src="src/art/icons.ts#L125">art/icons.ts</a></td><td>IconGlyph (only if you add glyphs)</td></tr>
       <tr><td><code>BRANCH_ROOT_JOB</code>, <code>SCHOOL_NAME</code>, <code>SCHOOL_PROFESSOR</code></td><td><a data-src="src/data/jobs.ts#L110">data/jobs.ts</a></td><td>School</td></tr>
       <tr><td>professor reactions, office hours, Forbidden Wing chat, School info, professor lines</td><td><a data-src="src/data/npcScripts.ts#L155">data/npcScripts.ts</a></td><td>School</td></tr>
-      <tr><td><code>SCHOOL_COLOR</code>; handbook exams</td><td><a data-src="src/ui/titleMenu.ts#L37">ui/titleMenu.ts</a>; <a data-src="src/guide/context.ts#L52">guide/context.ts</a></td><td>School</td></tr>
+      <tr><td><code>SCHOOL_COLOR</code>; handbook exams</td><td><a data-src="src/ui/titleMenu.ts#L38">ui/titleMenu.ts</a>; <a data-src="src/guide/context.ts#L52">guide/context.ts</a></td><td>School</td></tr>
     </tbody>
   </table>
   <p>The <code>School</code> type is its own union in <a data-src="src/data/jobs.ts#L106">jobs.ts:106</a>, so
@@ -487,7 +495,7 @@ export const BRANCH_ROOT_JOB: Record&lt;School, JobId&gt; = {
       player picks a job, <code>warmSchoolSoon</code> looks the School up by branch to pre-build its textures.</li>
     <li><strong>Professor.</strong> An <code>NpcDef</code> in <a data-src="src/data/npcs.ts#L5">npcs.ts</a>, a
       <code>SCHOOL_PROFESSOR</code> entry, <code>professor</code> as its script in <code>SCRIPTS</code>
-      (<a data-src="src/data/npcScripts.ts#L1007">npcScripts.ts:1007</a>), and a placement in the campus map's
+      (<a data-src="src/data/npcScripts.ts#L1026">npcScripts.ts:1026</a>), and a placement in the campus map's
       <code>npcs</code> in front of its hall.</li>
     <li><strong>Exams.</strong> Year 3 and Year 4 Exam quests (<code>q_job_&lt;job&gt;</code>, given by the
       Professor with <code>requiredJobBranch</code>) and their entries in <code>JOB_ADVANCEMENT_QUESTS</code>
@@ -521,7 +529,7 @@ arcana.levelTo(40); arcana.job('&lt;year4job&gt;');</code></pre>
   <details class="advanced"><summary>Advanced: pitfalls and how the code reacts</summary>
     <ul>
       <li><strong>Renaming an id breaks saves.</strong> Saves store ids. When a save loads,
-        <a data-src="src/systems/SaveSystem.ts#L394">SaveSystem.ts</a> refunds the SP of unknown skill ids and clears
+        <a data-src="src/systems/SaveSystem.ts#L399">SaveSystem.ts</a> refunds the SP of unknown skill ids and clears
         their hotbar slots, resets an unknown job to <code>apprentice</code>, and sends an unknown map to the start
         map. Players lose progress silently. Rename the display name and keep the id: the Academy re-theme kept
         every id, and <code>q_maelis_archon</code> changed only its <code>name</code>. Lowering a skill's

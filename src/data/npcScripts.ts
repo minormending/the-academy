@@ -575,7 +575,7 @@ function elderMaelis(c: Ctx) {
   const home = () => elderMaelis(c);
   const schools = () => explainSchools(c, home);
 
-  const quests = [...storyOptions(c, home), ...questOptions(c, home)];
+  const quests = [...storyOptions(c, home), ...questOptions(c, home), ...archonRenewOptions(c, home)];
 
   if (job.tier === 1) {
     if (lv < 10) {
@@ -958,29 +958,48 @@ const FINN_TIPS = [
   'Every practicum zone has one big troublemaker that shows up now and then. When the ground starts flashing red, MOVE — then make it pay. I post Field Bounties for each of them.',
 ];
 
-/** Field Bounties Finn will re-post once you've handed the last one in (they are repeatable). */
-function bountyRenewOptions(c: Ctx, back: () => void): DialogOption[] {
+/**
+ * Re-post handed-in repeatable quests (`turned_in` → acceptable again). `label` builds the dialog button text;
+ * `eligible` adds extra gating on top of "handed in once and level-qualified".
+ */
+function renewOptions(
+  c: Ctx, back: () => void, qids: readonly string[],
+  label: (q: QuestDef) => string, eligible: () => boolean = () => true,
+): DialogOption[] {
   const out: DialogOption[] = [];
-  for (const qid of FIELD_BOUNTY_QUEST_IDS) {
+  if (!eligible()) return out;
+  for (const qid of qids) {
     const q = Registry.quest(qid);
     if (!q || c.p.questStatus(qid) !== 'turned_in' || c.p.state.level < q.minLevel) continue;
-    out.push(go(`[Field Bounty] ${q.name.replace(/^Field Bounty: /, '')} (again)`, () => {
-      // Objectives as a fresh bounty would show them (without the old turned-in counts).
+    out.push(go(label(q), () => {
+      // Objectives as a fresh quest would show them (without the old turned-in counts).
       const old = c.p.state.quests[qid];
       delete c.p.state.quests[qid];
       const objectives = objectivesText(c.p, q);
       if (old) c.p.state.quests[qid] = old;
       say(c, `${pick(['Back for more? It\'s been seen again.', 'The board never stays empty for long.', 'Same beast, fresh bounty. Ready?'])}\n\n${q.description}\n\n${objectives}\n${rewardsText(q)}`, [
         go('Accept', () => {
-          delete c.p.state.quests[qid]; // re-post: the bounty becomes acceptable again
+          delete c.p.state.quests[qid]; // re-post: the quest becomes acceptable again
           c.p.acceptQuest(qid);
-          say(c, 'Bounty posted in your name. Bring back the trophy!', [bye('On it.')]);
+          say(c, 'Bounty posted in your name. Bring back the proof!', [bye('On it.')]);
         }),
         go('Not right now.', () => { back(); }),
       ]);
     }));
   }
   return out;
+}
+
+/** Field Bounties Finn will re-post once you've handed the last one in (they are repeatable). */
+function bountyRenewOptions(c: Ctx, back: () => void): DialogOption[] {
+  return renewOptions(c, back, FIELD_BOUNTY_QUEST_IDS, q => `[Field Bounty] ${q.name.replace(/^Field Bounty: /, '')} (again)`);
+}
+
+/** The Headmistress's Lich Archon bounty is repeatable once the main line's Final Thesis is handed in. */
+function archonRenewOptions(c: Ctx, back: () => void): DialogOption[] {
+  return renewOptions(c, back, [SIDE_ARCHON_QUEST],
+    q => `[Repeat] ${q.name.replace(/^Bounty: /, '').replace(/ \(Repeat\)$/, '')} (again)`,
+    () => c.p.state.quests.story_final_thesis?.status === 'turned_in');
 }
 let lastFinnTip = -1;
 

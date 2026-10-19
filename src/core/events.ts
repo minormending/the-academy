@@ -37,11 +37,43 @@ type Handler<T> = (payload: T) => void;
 
 class Bus {
   private ee = new Phaser.Events.EventEmitter();
-  on<K extends keyof GameEvents>(ev: K, fn: Handler<GameEvents[K]>, ctx?: unknown) { this.ee.on(ev, fn, ctx); return () => this.ee.off(ev, fn, ctx); }
-  once<K extends keyof GameEvents>(ev: K, fn: Handler<GameEvents[K]>, ctx?: unknown) { this.ee.once(ev, fn, ctx); }
-  off<K extends keyof GameEvents>(ev: K, fn: Handler<GameEvents[K]>, ctx?: unknown) { this.ee.off(ev, fn, ctx); }
+  /** Original handler → the guarded wrapper(s) actually registered, so `off` can find them. */
+  private wrapped = new Map<Handler<never>, { ev: string; ctx: unknown; wrapper: Handler<never> }[]>();
+
+  /** One throwing listener must not stop the remaining listeners of the same event: log it and carry on. */
+  private guard<K extends keyof GameEvents>(ev: K, fn: Handler<GameEvents[K]>, ctx: unknown, once = false): Handler<GameEvents[K]> {
+    const wrapper: Handler<GameEvents[K]> = (payload) => {
+      if (once) this.unguard(ev, fn, ctx);
+      try { fn.call(ctx, payload); } catch (err) { console.error(`[bus] listener for '${ev}' threw`, err); }
+    };
+    const list = this.wrapped.get(fn as Handler<never>) ?? [];
+    list.push({ ev, ctx, wrapper: wrapper as Handler<never> });
+    this.wrapped.set(fn as Handler<never>, list);
+    return wrapper;
+  }
+  private unguard<K extends keyof GameEvents>(ev: K, fn: Handler<GameEvents[K]>, ctx: unknown): Handler<GameEvents[K]> | undefined {
+    const list = this.wrapped.get(fn as Handler<never>);
+    const i = list?.findIndex(w => w.ev === ev && w.ctx === ctx) ?? -1;
+    if (!list || i < 0) return undefined;
+    const [w] = list.splice(i, 1);
+    if (!list.length) this.wrapped.delete(fn as Handler<never>);
+    return w.wrapper as Handler<GameEvents[K]>;
+  }
+
+  on<K extends keyof GameEvents>(ev: K, fn: Handler<GameEvents[K]>, ctx?: unknown) {
+    const w = this.guard(ev, fn, ctx);
+    this.ee.on(ev, w);
+    return () => this.off(ev, fn, ctx);
+  }
+  once<K extends keyof GameEvents>(ev: K, fn: Handler<GameEvents[K]>, ctx?: unknown) {
+    this.ee.once(ev, this.guard(ev, fn, ctx, true));
+  }
+  off<K extends keyof GameEvents>(ev: K, fn: Handler<GameEvents[K]>, ctx?: unknown) {
+    const w = this.unguard(ev, fn, ctx);
+    if (w) this.ee.off(ev, w);
+  }
   emit<K extends keyof GameEvents>(ev: K, payload: GameEvents[K]) { this.ee.emit(ev, payload); }
-  removeAll() { this.ee.removeAllListeners(); }
+  removeAll() { this.ee.removeAllListeners(); this.wrapped.clear(); }
 }
 
 export const bus = new Bus();

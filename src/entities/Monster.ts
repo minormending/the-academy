@@ -469,6 +469,11 @@ export class Monster implements IMonster {
 
   // ─────────────────────────── statuses ───────────────────────────
 
+  /** One burn/poison tick: stored raw potency × live shock/curse amplification − def, min 1 (same shape as CombatSystem). */
+  protected dotDamage(potency: number): number {
+    return Math.max(1, Math.round(potency * this.incomingDamageMult() - (this.def.def || 0)));
+  }
+
   protected tickStatuses(delta: number) {
     if (this.statuses.size === 0) return;
     let expired: StatusKind[] | null = null;
@@ -478,7 +483,7 @@ export class Monster implements IMonster {
         this.burnAcc += delta;
         while (this.burnAcc >= 500 && this._alive) {
           this.burnAcc -= 500;
-          const dmg = Math.max(1, Math.round(st.potency));
+          const dmg = this.dotDamage(st.potency);
           try {
             this.services.combat.damageMonster(this, dmg, { kind: 'dot', element: st.element });
           } catch {
@@ -491,7 +496,7 @@ export class Monster implements IMonster {
         this.poisonAcc += delta;
         while (this.poisonAcc >= 500 && this._alive) {
           this.poisonAcc -= 500;
-          const dmg = Math.max(1, Math.round(st.potency));
+          const dmg = this.dotDamage(st.potency);
           try {
             this.services.combat.damageMonster(this, dmg, { kind: 'dot', element: st.element });
           } catch {

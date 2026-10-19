@@ -21,7 +21,7 @@
   </p>
 
   <h3 id="monsters-def">MonsterDef and where the numbers come from</h3>
-  <p>The contract (<a data-src="src/core/types.ts#L301">types.ts:301</a>):</p>
+  <p>The contract (<a data-src="src/core/types.ts#L303">types.ts:303</a>):</p>
   <pre><code class="lang-ts">export type MonsterBehavior = 'walker' | 'hopper' | 'flyer' | 'stationary' | 'boss';
 
 export interface MonsterDef {
@@ -256,7 +256,7 @@ export interface MonsterDef {
   <table>
     <thead><tr><th>Status</th><th>Effect on the monster</th><th>Visual</th></tr></thead>
     <tbody>
-      <tr><td>burn, poison</td><td><code>potency</code> damage every 500 ms through <code>combat.damageMonster</code> (shown as DoT numbers)</td><td>orange/green flicker tint; rising embers or green puffs</td></tr>
+      <tr><td>burn, poison</td><td><code>potency</code> × <code>incomingDamageMult()</code> − <code>def</code> (min 1) every 500 ms through <code>combat.damageMonster</code> (shown as DoT numbers)</td><td>orange/green flicker tint; rising embers or green puffs</td></tr>
       <tr><td>chill</td><td>move speed × (1 − potency)</td><td>blue tint, falling snow motes</td></tr>
       <tr><td>freeze</td><td>no movement, AI or contact damage; animation paused</td><td>ice crystal shell (sized in whole multiples of its 32×36 art), shatters into 7 shards when it ends</td></tr>
       <tr><td>stun</td><td>no movement, AI or contact damage</td><td>three stars orbiting the head</td></tr>
@@ -285,7 +285,7 @@ export interface MonsterDef {
     Archon attacks multiply by it, so a curse on a boss makes its telegraphed slams hurt less too.</p>
 
   <h4 id="monsters-death">Death, exactly once</h4>
-  <p><code>die()</code> (<a data-src="src/entities/Monster.ts#L655">Monster.ts:655</a>) is the only place
+  <p><code>die()</code> (<a data-src="src/entities/Monster.ts#L660">Monster.ts:660</a>) is the only place
     <code>monster:killed</code> is emitted, and it is guarded so that happens once per monster:</p>
   <pre><code class="lang-ts">  protected die() {
     if (!this._alive) return;
@@ -311,12 +311,13 @@ export interface MonsterDef {
         explosion) can call <code>takeDamage</code> on the dying monster; the <code>!this.alive</code> guard turns it into a
         no-op, so EXP and drops can't be granted twice. Burn/poison loops check <code>_alive</code> each tick for the same
         reason.</li>
-      <li><strong>Listeners must not throw.</strong> The bus is an event emitter that stops calling listeners after one
-        throws, and they run in registration order: <code>Progression</code>, <code>MonsterManager</code>,
-        <code>DropManager</code> (the order GameScene constructs them), then any boss. <code>Progression</code> and
-        <code>DropManager</code> wrap their handlers in <code>try</code>; the emit itself is wrapped too, so even a throwing
-        listener can't stop the corpse from fading. A new listener should catch its own errors, or the ones after it
-        (drops, respawns) silently stop working.</li>
+      <li><strong>Listeners should not throw, but a throw is contained.</strong> Listeners run in registration order:
+        <code>Progression</code>, <code>MonsterManager</code>, <code>DropManager</code> (the order GameScene constructs
+        them), then any boss. The bus calls each one inside its own <code>try/catch</code> and logs the error, so a
+        throwing listener no longer stops the ones after it. <code>Progression</code>, <code>DropManager</code> and
+        <code>MonsterManager.onKilled</code> also guard their own handlers, and the emit in <code>die()</code> is wrapped
+        too, so a throwing listener can't stop the corpse from fading. A new listener should still catch its own errors:
+        the guard keeps the other listeners alive, but the failed one's work (a drop, a respawn timer) is lost.</li>
       <li><strong><code>destroy()</code> is idempotent</strong> and removes colliders, overlays, the HP bar, the death timer
         and tweens. <code>MonsterManager.clear()</code> calls it on map change for monsters that are mid-death, which is why
         the fade's <code>onComplete</code> and the timer both go through <code>finish()</code> and check
@@ -332,7 +333,7 @@ export interface MonsterDef {
 
   <h3 id="monsters-manager">MonsterManager: spawning, respawns and contact</h3>
   <p><code>MonsterManager</code> (<a data-src="src/systems/MonsterManager.ts">MonsterManager.ts</a>) owns the list of live
-    monsters for the current map. <code>bindMap()</code> (<a data-src="src/systems/MonsterManager.ts#L74">:74</a>) runs on
+    monsters for the current map. <code>bindMap()</code> (<a data-src="src/systems/MonsterManager.ts#L77">:77</a>) runs on
     every map load:</p>
   <pre><code class="lang-ts">  bindMap(map: IMapInstance) {
     this.clear();
@@ -354,8 +355,9 @@ export interface MonsterDef {
       <code>sp.respawnMs</code> (7 s for ordinary spawns; 3 min for the Lich Archon's Sanctum entry). When it fires, it tops
       the group back up to <code>count</code> with a 600 ms fade-in during which the monster deals no contact damage.</li>
     <li><strong>Choosing the class.</strong> <code>create()</code> instantiates the field boss class from
-      <code>FIELD_BOSS_CLASSES</code> if there is one, <code>LichArchon</code> for any other <code>behavior: 'boss'</code>, and
-      plain <code>Monster</code> otherwise.</li>
+      <code>FIELD_BOSS_CLASSES</code> if there is one, <code>LichArchon</code> only for the id <code>lich_archon</code>, and
+      plain <code>Monster</code> otherwise (a <code>behavior: 'boss'</code> monster with no class logs a one-time warning
+      and spawns as a regular <code>Monster</code>).</li>
     <li><strong>Contact damage.</strong> After updating every monster, <code>contactDamage()</code> checks living monsters
       that can touch (not fading in, not frozen or stunned, not mid-telegraphed-attack) against the player's bounds and
       calls <code>combat.hitPlayer(touchDamage × outgoingDamageMult(), monster.x)</code>. It stops after the first hit
@@ -376,7 +378,7 @@ export interface MonsterDef {
       }
     }
   }</code></pre>
-  <p>(<a data-src="src/systems/MonsterManager.ts#L267">MonsterManager.ts:267</a>.) The queries other systems use:</p>
+  <p>(<a data-src="src/systems/MonsterManager.ts#L279">MonsterManager.ts:279</a>.) The queries other systems use:</p>
   <table>
     <thead><tr><th>Method</th><th>Returns</th></tr></thead>
     <tbody>
@@ -406,9 +408,12 @@ export interface MonsterDef {
         <code>count</code>. Monsters made with <code>spawn()</code> (debug, boss adds, Trial waves) belong to no group and never
         respawn.</li>
       <li><strong>Safe maps return early</strong>, so the campus never builds monster sheets.</li>
-      <li><strong>The boss fallback is a trap.</strong> Any new <code>behavior: 'boss'</code> monster without an entry in
-        <code>FIELD_BOSS_CLASSES</code> becomes a <code>LichArchon</code> (teleports, void-wisp summons and all). Give a new
-        boss its own class, or use <code>boss: true</code> with another behaviour.</li>
+      <li><strong>The boss fallback is a warning, not a Lich.</strong> A new <code>behavior: 'boss'</code> monster without
+        an entry in <code>FIELD_BOSS_CLASSES</code> used to be turned into a <code>LichArchon</code> (teleports,
+        void-wisp summons and all). Now only <code>lich_archon</code> gets that class; anything else spawns as a plain
+        <code>Monster</code> with a <code>[monsters] '&lt;id&gt;' is a boss with no FieldBoss class</code> warning (once per
+        id). It will stand still and only deal contact damage, so give a new boss its own class in
+        <code>fieldBosses.ts</code>.</li>
     </ul>
   </details>
 
@@ -460,7 +465,7 @@ export interface MonsterDef {
       again every 60 s instead of spawning, so new students aren't ambushed.</li>
   </ul>
   <p>On spawn, the boss appears in the middle 30–70% of its span (away from the portals at the ends) with a fade-in, and
-    <code>announceFieldBoss</code> (<a data-src="src/systems/MonsterManager.ts#L230">MonsterManager.ts:230</a>) shows a
+    <code>announceFieldBoss</code> (<a data-src="src/systems/MonsterManager.ts#L237">MonsterManager.ts:237</a>) shows a
     banner ("A Frostfang Alpha has appeared!" over "Lv.24 field boss"), logs where, plays a roar and shakes the camera.</p>
 
   <h4 id="monsters-boss-loop">The fight loop</h4>
@@ -514,7 +519,7 @@ export interface MonsterDef {
     <tbody>
       <tr><td>Mossback Matriarch</td><td>8, Whisperwood</td><td>Shell Spin charge (900 ms lane, 480 px/s, ×1.25); Slime Spit: 2–3 globs on 850 ms ground zones (×0.8), each leaving a 5.2 s puddle (×0.15 per 0.5 s)</td><td>Calls 2–3 Moss Snails (max 4)</td></tr>
       <tr><td>Shroom Monarch</td><td>14, Shroom Hollow</td><td>Royal Slam: leaps onto a 1 s zone (×1.4) and sends two shockwaves rolling outward (×1.0, jump them); Spore Cloud: three blooms (×0.45) that linger 5 s (×0.2 per 0.5 s)</td><td>Calls Cap/Thorn Shrooms (max 3)</td></tr>
-      <tr><td>Frostfang Alpha</td><td>24, Frostfang Cliffs</td><td>Roar: 6 s frenzy (×1.4 speed) and 3 falling icicles; Ground Pound: 650 ms zone in front (×1.4) then a line of 5 icicles, the first on you (×1.3 each); Charge (620 px/s, ×1.3, only the lowest 80 px hurt)</td><td>No adds</td></tr>
+      <tr><td>Frostfang Alpha</td><td>24, Frostfang Cliffs</td><td>Roar: 6 s frenzy (×1.4 speed) and 3 falling icicles; Ground Pound: 650 ms zone in front (×1.4) then a line of 5 icicles, the first on you (×1.3 each); Charge (620 px/s, ×1.3, only the lowest 80 px hurt)</td><td>No adds. Enrages below 30% HP: pink aura, faster actions, and the Ground Pound drops 7 icicles instead of 5</td></tr>
       <tr><td>Magmaw</td><td>34, Cinder Caverns</td><td>Heavy Swing: 900 ms zone in front (×1.55); Geysers: 3 ground spots erupting into columns (×1.3) that leave lava pools</td><td>Enrages below 30% HP: 2 Ember Imps, a geyser volley, faster swings that leave lava, 5 geysers</td></tr>
       <tr><td>Tempest Wyrm</td><td>44, Stormspire Peak</td><td>Dive charge (700 px/s, ×1.4); Storm Call: 4 lightning columns, three around you and one anywhere in the arena (×1.4); Storm Sweep: up to 9 columns marching across the arena</td><td>Hovers 14 px above the floor; keeps 170 px away</td></tr>
     </tbody>

@@ -32,7 +32,7 @@
   <p><strong>Phase 2: the 16-bit pixel pivot.</strong> The smooth look was replaced by SNES-era pixel art from free
     packs (ROADMAP phase 2, commits <code>c6de896</code> for the pipeline, then one commit each for characters, UI,
     monsters, world and VFX). The pivot was written down as five rules
-    (<a data-src="ARCHITECTURE.md#L186">ARCHITECTURE.md:186</a>), summarised:</p>
+    (<a data-src="ARCHITECTURE.md#L198">ARCHITECTURE.md:198</a>), summarised:</p>
   <ol>
     <li><strong>Gameplay code does not change.</strong> Pixel art is sliced, palette-swapped and scaled
       <em>into the existing texture keys, frame layouts and animation keys</em>. <code>Player</code> still plays
@@ -406,7 +406,7 @@ function playerOpts(tier: number): PixelOpts {
   <!-- ===================================================================== -->
   <h3 id="art-licensing">Licensing and credits</h3>
 
-  <p>The pivot's licensing rule is strict (<a data-src="ARCHITECTURE.md#L198">ARCHITECTURE.md:198</a>): only CC0 /
+  <p>The pivot's licensing rule is strict (<a data-src="ARCHITECTURE.md#L210">ARCHITECTURE.md:210</a>): only CC0 /
     public domain, CC-BY 3.0/4.0, OGA-BY, or an explicit "free for personal and commercial use" statement from the
     author. No NonCommercial licences, no sprites ripped from commercial games, no scraped sprite dumps of unclear origin.
     <strong>Downloads are untrusted data</strong>: each pack was downloaded into its own scratch directory, unzipped

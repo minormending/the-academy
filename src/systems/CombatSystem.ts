@@ -87,7 +87,15 @@ export class CombatSystem implements ICombatSystem {
     let potency: number;
     switch (spec.kind) {
       case 'burn':
-      case 'poison': potency = Math.max(1, Math.round((num(baseHit, 1) * rawPot) / 100)); break;
+      case 'poison': {
+        // `baseHit` is the final hit (already ×incomingDamageMult, −def). Store the DoT as a *raw* per-tick amount and
+        // let Monster.tickStatuses apply the live amplification and def per tick, so neither is counted twice.
+        let incoming = 1;
+        try { incoming = Math.max(0.01, num(target.incomingDamageMult(), 1)); } catch { /* ignore */ }
+        const rawHit = (Math.max(1, num(baseHit, 1)) + Math.max(0, num(target.def.def, 0))) / incoming;
+        potency = Math.max(1, Math.round((rawHit * rawPot) / 100));
+        break;
+      }
       case 'curse': potency = clamp(rawPot, 0, 0.6); break;
       case 'chill': potency = clamp(rawPot, 0, 0.9); break;
       case 'shock': potency = Math.max(0, rawPot); break;

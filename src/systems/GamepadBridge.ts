@@ -13,6 +13,12 @@ export interface PadMapping {
   dir?: -1 | 1;
   /** Axis deflection needed (axis inputs only). */
   threshold?: number;
+  /**
+   * Chord: this mapping only fires while the *modifier* button with this index is held, and it replaces the
+   * modifier-less mapping of the same button while the modifier is down. The modifier's own mapping (if any) is
+   * then deferred to a tap: it fires when the modifier is released without a chord having been used.
+   */
+  chord?: number;
   actions: readonly ActionId[];
 }
 
@@ -33,7 +39,10 @@ export const GAMEPAD_MAP: readonly PadMapping[] = [
   { input: 'Right stick ↓', kind: 'axis', index: 3, dir: 1, threshold: 0.6, actions: ['slot8'] },
   { input: 'Right stick ←', kind: 'axis', index: 2, dir: -1, threshold: 0.6, actions: ['slot4'] },
   { input: 'Right stick ↑', kind: 'axis', index: 3, dir: -1, threshold: 0.6, actions: ['slot9'] },
-  { input: 'Back / Select', kind: 'button', index: 8, actions: ['hotbarPage'] },
+  // Back / Select is a chord modifier: tap it to flip the hotbar page, hold it for slots 10 / 11 (the potion keys).
+  { input: 'Back / Select (tap)', kind: 'button', index: 8, actions: ['hotbarPage'] },
+  { input: 'Back + X / Square', kind: 'button', index: 2, chord: 8, actions: ['slot10'] },
+  { input: 'Back + Y / Triangle', kind: 'button', index: 3, chord: 8, actions: ['slot11'] },
   { input: 'Start / Options', kind: 'button', index: 9, actions: ['menu'] },
   { input: 'L3 (press stick)', kind: 'button', index: 10, actions: ['skills'] },
   { input: 'R3 (press stick)', kind: 'button', index: 11, actions: ['inventory'] },
@@ -49,6 +58,9 @@ export const GAMEPAD_MAP: readonly PadMapping[] = [
 
 /** Synthetic events carry this flag so the Controls window's key capture can ignore pad presses. */
 export const GAMEPAD_EVENT_FLAG = '__academyGamepad';
+
+/** Buttons that act as chord modifiers (some mapping names them in `chord`). */
+const MODIFIERS: ReadonlySet<number> = new Set(GAMEPAD_MAP.flatMap(m => (m.chord === undefined ? [] : [m.chord])));
 
 let activePad: { index: number; id: string } | undefined;
 
@@ -92,7 +104,14 @@ export function startGamepadBridge(): () => void {
     window.dispatchEvent(event);
   }
 
+  /** Modifier button index → whether a chord was used during the current hold. */
+  const modifierHeld = new Map<number, { chorded: boolean }>();
+  /** Taps of a modifier (released without a chord) → pressed for exactly one poll. */
+  let pulses = new Map<string, KeyBinding>();
+
   function releaseAll() {
+    modifierHeld.clear();
+    pulses = new Map();
     const released = [...held.values()];
     held.clear();
     for (const binding of released) dispatch('keyup', binding);
@@ -135,11 +154,40 @@ export function startGamepadBridge(): () => void {
     const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
+    const down = (i: number) => !!pad.buttons[i]?.pressed;
+
+    // Chord modifiers: remember whether a chord fired during the hold; a clean tap fires the modifier's own action.
+    for (const mod of MODIFIERS) {
+      const st = modifierHeld.get(mod);
+      if (down(mod)) {
+        const entry = st ?? { chorded: false };
+        if (GAMEPAD_MAP.some(m => m.chord === mod && down(m.index))) entry.chorded = true;
+        modifierHeld.set(mod, entry);
+      } else if (st) {
+        modifierHeld.delete(mod);
+        if (!st.chorded) {
+          for (const m of GAMEPAD_MAP) {
+            if (m.index !== mod || m.chord !== undefined || m.kind !== 'button') continue;
+            for (const action of m.actions) {
+              const binding = bindingFor(action);
+              if (binding) pulses.set(String(binding.keyCode), binding);
+            }
+          }
+        }
+      }
+    }
+
     // Keyed by keyCode: D-pad + stick (or two actions sharing Up) collapse into one held key.
-    const next = new Map<string, KeyBinding>();
+    const next = new Map<string, KeyBinding>(pulses);
+    pulses = new Map();
     for (const m of GAMEPAD_MAP) {
+      if (m.kind === 'button') {
+        if (m.chord !== undefined) { if (!down(m.chord)) continue; }
+        else if (MODIFIERS.has(m.index)) continue; // a modifier's own action is deferred to its tap (above)
+        else if ([...MODIFIERS].some(mod => down(mod) && GAMEPAD_MAP.some(c => c.chord === mod && c.index === m.index))) continue; // replaced by its chord
+      }
       const on = m.kind === 'button'
-        ? !!pad.buttons[m.index]?.pressed
+        ? down(m.index)
         : (pad.axes[m.index] ?? 0) * (m.dir ?? 1) > (m.threshold ?? 0.5);
       if (!on) continue;
       for (const action of m.actions) {

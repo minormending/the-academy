@@ -39,7 +39,7 @@
   /** Best Trial Hall wave reached. */
   arenaBest?: number;
 }</code></pre>
-  <p>(<a data-src="src/core/types.ts#L429">types.ts:429</a>.) Everything else is derived on load: max HP, matk and
+  <p>(<a data-src="src/core/types.ts#L431">types.ts:431</a>.) Everything else is derived on load: max HP, matk and
     the other stats are recomputed from this (<a href="#progression-stats">derived stats</a>), monsters and drops
     are respawned, buffs start empty. Notice what the state refers to by <strong>id</strong>: the job, every
     skill, every item, the map and every quest. That is the root of the
@@ -158,11 +158,14 @@ export const SAVE_SLOTS = 6;</code></pre>
     </tbody>
   </table>
 
-  <pre><code class="lang-ts">/** Persist into the active slot (Progression autosave / manual save / map change all land here). */
-export function writeSave(state: PlayerState): void {
+  <pre><code class="lang-ts">/**
+ * Persist into the active slot (Progression autosave / manual save / map change all land here).
+ * Returns false when nothing was written (storage unavailable, quota exceeded, …).
+ */
+export function writeSave(state: PlayerState): boolean {
   ensureInit();
   const st = storage();
-  if (!st) return;
+  if (!st) return false;
   const slot = activeSlot;
   const savedAt = Date.now();
   try {
@@ -176,12 +179,14 @@ export function writeSave(state: PlayerState): void {
       meta.legacyPending = false;
     }
     writeMeta(meta);
+    return true;
   } catch (e) {
     console.warn('[save] write failed', e);
+    return false;
   }
 }</code></pre>
-  <p>(<a data-src="src/systems/SaveSystem.ts#L321">SaveSystem.ts:321</a>.) The slot is written first, then the
-    meta. Writing also makes this slot the "last played" one, which is how Continue knows where to go.</p>
+  <p>(<a data-src="src/systems/SaveSystem.ts#L324">SaveSystem.ts:324</a>.) It returns whether the write happened;
+    <code>Progression.save()</code> passes that on. The slot is written first, then the meta. Writing also makes this slot the "last played" one, which is how Continue knows where to go.</p>
 
   <!-- ===================================================================== -->
   <h3 id="saves-load">Loading and repair</h3>
@@ -223,7 +228,7 @@ export function writeSave(state: PlayerState): void {
       <tr><td>hp, mp</td><td>Clamped to the derived maximums.</td></tr>
     </tbody>
   </table>
-  <p>(<a data-src="src/systems/SaveSystem.ts#L367">SaveSystem.ts:367</a>.) One case gets special treatment, a save
+  <p>(<a data-src="src/systems/SaveSystem.ts#L372">SaveSystem.ts:372</a>.) One case gets special treatment, a save
     written while the student was dead (the tab was closed at the death prompt):</p>
   <pre><code class="lang-ts">    // Saved while dead (closed/reloaded before pressing respawn): apply the normal respawn —
     // EXP penalty, 50% HP/MP, back in town — instead of reviving in place on a hostile map.
@@ -233,7 +238,7 @@ export function writeSave(state: PlayerState): void {
       out.mp = Math.max(out.mp, Math.ceil(d.maxMp * 0.5));
       if (Registry.map(TOWN_MAP) || Registry.maps().length === 0) out.mapId = TOWN_MAP;
     }</code></pre>
-  <p>(<a data-src="src/systems/SaveSystem.ts#L466">SaveSystem.ts:466</a>, from the progression QA pass
+  <p>(<a data-src="src/systems/SaveSystem.ts#L471">SaveSystem.ts:471</a>, from the progression QA pass
     <code>7faacd7</code>.) It mirrors <code>Progression.respawn()</code> exactly (see
     <a href="#progression-death">death and respawn</a>), so reloading neither skips the penalty nor revives the
     student next to whatever killed them.</p>
@@ -258,7 +263,9 @@ export function writeSave(state: PlayerState): void {
       <li><strong>Failure modes of storage.</strong> If localStorage is unavailable (some private modes, blocked
         site data), <code>storage()</code> returns null: nothing is written and every slot reads empty. A full quota
         makes <code>setItem</code> throw, which <code>writeSave</code> catches and logs as
-        <code>[save] write failed</code>; the game keeps running on the in-memory state.</li>
+        <code>[save] write failed</code>, returning <code>false</code>; the game keeps running on the in-memory state.
+        The automatic saves ignore the result, but the Esc menu's "Save Game" button checks it and logs "Saving
+        failed" instead of "Game saved." (it used to report success unconditionally).</li>
     </ul>
   </details>
 
@@ -308,13 +315,13 @@ export function writeSave(state: PlayerState): void {
     <thead><tr><th>Trigger</th><th>Where</th></tr></thead>
     <tbody>
       <tr><td>Every map change, including the first map load</td><td><a data-src="src/scenes/GameScene.ts#L172">GameScene.ts:172</a></td></tr>
-      <tr><td>Autosave every 30 s of play (<code>AUTOSAVE_MS</code>)</td><td><a data-src="src/systems/Progression.ts#L748">Progression.ts:748</a></td></tr>
+      <tr><td>Autosave every 30 s of play (<code>AUTOSAVE_MS</code>)</td><td><a data-src="src/systems/Progression.ts#L749">Progression.ts:749</a></td></tr>
       <tr><td>Level-up, job advancement, respawn</td><td><code>gainExp</code>, <code>advanceJob</code>, <code>respawn</code></td></tr>
       <tr><td>Quest turn-in (and again after a story step's after-hook)</td><td><code>turnInQuest</code>, <code>storyTurnIn</code></td></tr>
       <tr><td>Merit Exchange purchase</td><td><code>buyWithMerits</code></td></tr>
       <tr><td>End of a Trial Hall run</td><td><code>ArenaSystem.endRun</code></td></tr>
-      <tr><td>Menu: Save Game, Quit to Title</td><td><a data-src="src/ui/miscWindows.ts#L70">miscWindows.ts:70</a></td></tr>
-      <tr><td>Game scene shutdown (teardown)</td><td><a data-src="src/scenes/GameScene.ts#L343">GameScene.ts:343</a></td></tr>
+      <tr><td>Menu: Save Game (reports failure if the write fails), Quit to Title</td><td><a data-src="src/ui/miscWindows.ts#L70">miscWindows.ts:70</a></td></tr>
+      <tr><td>Game scene shutdown (teardown)</td><td><a data-src="src/scenes/GameScene.ts#L344">GameScene.ts:344</a></td></tr>
       <tr><td>A new character, before the game starts</td><td>Title menu <code>begin()</code></td></tr>
     </tbody>
   </table>
@@ -334,7 +341,7 @@ export function writeSave(state: PlayerState): void {
     <li><strong>A student card</strong> shows the slot number, "School of Fire" (or "Core Curriculum" before the
       declaration) tinted in the School's colour, the animated job sprite, the name, a line like
       "Lv 27 · Year 3 · Flamebinder", the map, play time and how long ago it was saved, plus a "Last" badge on the
-      slot Continue would load (<a data-src="src/ui/titleMenu.ts#L292">titleMenu.ts:292</a>). The Year and School
+      slot Continue would load (<a data-src="src/ui/titleMenu.ts#L293">titleMenu.ts:293</a>). The Year and School
       come from <code>yearOfTier</code> and <code>SCHOOL_NAME</code>.</li>
     <li><strong>A damaged card</strong> says "Damaged save", the reason, and "Was Mira · Lv 31" from the meta cache
       when it remembers who was there. It can't be played, only deleted (or replaced by New Game).</li>
@@ -354,7 +361,7 @@ export function writeSave(state: PlayerState): void {
   W --> GO["fade to GameScene"]</pre>
 
   <p>Deleting asks "Withdraw Mira?" with Cancel selected by default, so a stray <kbd>Enter</kbd> never deletes a
-    student (<a data-src="src/ui/titleMenu.ts#L330">titleMenu.ts:330</a>). Playing a slot loads it with
+    student (<a data-src="src/ui/titleMenu.ts#L331">titleMenu.ts:331</a>). Playing a slot loads it with
     <code>loadSlot</code>, calls <code>setActiveSlot</code> and hands the state to <code>TitleScene.startGame</code>,
     which fades out and starts the game scene with <code>{ state }</code>
     (<a data-src="src/scenes/TitleScene.ts#L67">TitleScene.ts:67</a>). Quitting to the title saves first and reopens
@@ -364,7 +371,7 @@ export function writeSave(state: PlayerState): void {
     <ul>
       <li><strong>Never overwrite silently.</strong> <code>begin()</code> re-reads the slots before writing. If the
         slot chosen as empty now has data (another tab wrote it), it moves to another empty slot, or back to
-        replace mode if none is left (<a data-src="src/ui/titleMenu.ts#L451">titleMenu.ts:451</a>).</li>
+        replace mode if none is left (<a data-src="src/ui/titleMenu.ts#L452">titleMenu.ts:452</a>).</li>
       <li><strong>Damaged slots stay put.</strong> They count as taken for <code>firstEmptySlot</code>, so New Game
         never writes over unreadable data without asking. They are preselected in replace mode because they are the
         least valuable thing to overwrite.</li>
@@ -388,8 +395,11 @@ export function writeSave(state: PlayerState): void {
   </table>
   <p>The credits flag is keyed by slot <em>and</em> name (final QA, <code>b2a181f</code>): before that, a second
     student who graduated would never see the roll because the first one already had. Because it lives in the UI
-    layout rather than the save, deleting a slot does not clear it; a new student with the same name in the same
-    slot would skip the roll.</p>
+    layout rather than the save, deleting a slot cannot clear it by itself, so the title menu does it explicitly:
+    <code>forgetCreditsSeen(slot)</code> (<a data-src="src/ui/creditsRoll.ts#L153">creditsRoll.ts:153</a>) removes
+    the slot's <code>creditsSeen:&lt;slot&gt;:*</code> flags when a slot is deleted, when a slot is replaced by a new
+    character, and when a new character is created, so a new student with the same name in the same slot sees the
+    roll again.</p>
 
   <!-- ===================================================================== -->
   <h3 id="saves-ids">Why ids never get renamed</h3>

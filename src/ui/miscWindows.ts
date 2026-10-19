@@ -1,10 +1,10 @@
-/** Esc menu, controls help, job-advancement chooser. */
-import { SCENES } from '../core/constants';
+/** Esc menu, controls help, Year-end Exam (job advancement) chooser. */
+import { GAME_WIDTH, SCENES } from '../core/constants';
 import type { JobDef, JobId } from '../core/types';
 import { Registry } from '../core/registry';
 import type { UICtx } from './context';
 import { h, loadJson, safe, saveJson } from './dom';
-import { BRANCH_COLORS, BRANCH_NAMES } from './info';
+import { BRANCH_COLORS, BRANCH_NAMES, examinerName, schoolName } from './info';
 import { portraitEl } from './uiIcons';
 import { UIWindow } from './window';
 
@@ -78,8 +78,12 @@ export class HelpWindow extends UIWindow {
   protected render() {
     const row = (keys: string[], what: string) => h('div', { class: 'ax-help-row' },
       h('div', { class: 'ax-help-keys' }, keys.map(k => h('kbd', null, k))), h('div', null, what));
+    const jobs = safe(() => Registry.jobs(), [] as JobDef[]);
+    const schools = jobs.filter(j => j.tier === 2).map(j => BRANCH_NAMES[j.branch] ?? j.name);
+    const list = schools.length > 1 ? `${schools.slice(0, -1).join(', ')} or ${schools[schools.length - 1]}` : 'a School';
+    const lv2 = jobs.find(j => j.tier === 2)?.requiredLevel ?? 10;
     this.body.replaceChildren(
-      h('div', { class: 'ax-help-intro' }, 'Welcome to Arcana Story! Every hero here is a mage. Train as an Apprentice, then choose Fire, Ice or Lightning at level 10.'),
+      h('div', { class: 'ax-help-intro' }, `Welcome to The Academy! Every student here is a mage. Study the core curriculum as a Year 1 Apprentice, then pass your Year-end Exam at level ${lv2} and declare your School: ${list}.`),
       h('div', { class: 'ax-help-cols' },
         h('div', null,
           h('div', { class: 'ax-help-head' }, 'Movement'),
@@ -95,15 +99,15 @@ export class HelpWindow extends UIWindow {
           row(['1', '2'], 'Potions (by default)')),
         h('div', null,
           h('div', { class: 'ax-help-head' }, 'Windows'),
-          row(['K'], 'Skills — spend SP'),
+          row(['K'], 'Spellbook — spend SP'),
           row(['I'], 'Inventory'),
           row(['P'], 'Character — spend AP'),
-          row(['J'], 'Quest log'),
+          row(['J'], 'Assignments'),
           row(['M'], 'Minimap'),
           row(['H'], 'This help'),
           row(['Esc'], 'Close window / menu'),
           h('div', { class: 'ax-help-head' }, 'Tips'),
-          h('div', { class: 'ax-help-tip' }, 'Drag skills from the Skills window (or potions from your Inventory) onto the hotbar. Right-click a slot to clear it.'),
+          h('div', { class: 'ax-help-tip' }, 'Drag spells from your Spellbook (or potions from your Inventory) onto the hotbar. Right-click a slot to clear it.'),
           h('div', { class: 'ax-help-tip' }, 'Hold a skill key to keep casting.'))),
       h('div', { class: 'ax-row ax-center' }, h('button', { class: 'ax-btn', onclick: () => this.close() }, 'Got it!')));
   }
@@ -113,7 +117,7 @@ export class HelpWindow extends UIWindow {
 
 export class JobsWindow extends UIWindow {
   constructor(ctx: UICtx) {
-    super(ctx, 'jobs', 'Job Advancement', { width: 560, x: 360, y: 120, className: 'ax-jobs-win' });
+    super(ctx, 'jobs', 'Year-end Exam', { width: 560, x: 360, y: 120, className: 'ax-jobs-win' });
   }
 
   protected signature(): string {
@@ -127,6 +131,13 @@ export class JobsWindow extends UIWindow {
     const avail = safe(() => p.availableAdvancements(), [] as JobId[]);
     const cur = safe(() => p.jobDef(), null);
     const cards = h('div', { class: 'ax-job-cards' });
+    const declaring = (cur?.tier ?? 1) === 1;
+    // Five Schools to choose from in Year 1 → widen the window so every card fits on one row.
+    const winW = avail.length > 3 ? Math.min(940, 40 + avail.length * 180) : 560;
+    this.el.style.width = `${winW}px`;
+    const left = parseFloat(this.el.style.left) || 0;
+    if (left + winW > GAME_WIDTH) this.el.style.left = `${Math.max(0, GAME_WIDTH - winW - 8)}px`;
+    this.setTitle(declaring && avail.length ? 'Year-end Exam — Declare your School' : 'Year-end Exam');
     for (const id of avail) {
       const j = safe(() => Registry.job(id), undefined as JobDef | undefined);
       if (!j) continue;
@@ -134,24 +145,26 @@ export class JobsWindow extends UIWindow {
       cards.appendChild(h('div', { class: 'ax-job-card', style: `--accent:${color}` },
         portraitEl(j.look, 72, j.name),
         h('div', { class: 'ax-job-name' }, j.name),
-        h('div', { class: 'ax-job-branch' }, `${BRANCH_NAMES[j.branch]} · Tier ${j.tier}`),
+        h('div', { class: 'ax-job-branch' }, `${schoolName(j.branch)} · Year ${j.tier}`),
         h('div', { class: 'ax-job-desc' }, j.description || ''),
         h('button', {
           class: 'ax-btn', onclick: () => {
             if (safe(() => p.advanceJob(id), false)) { this.close(); }
             else { this.ctx.sfx('ui_error'); this.ctx.log('You cannot advance right now.', '#ff9b9b'); }
           },
-        }, `Become a ${j.name}`)));
+        }, j.tier === 2 ? `Declare ${BRANCH_NAMES[j.branch] ?? j.name}` : j.tier === 4 ? `Graduate as ${j.name}` : `Begin Year ${j.tier}`)));
     }
     if (!cards.childElementCount) {
       const next = cur ? safe(() => Registry.jobs(), [] as JobDef[]).filter(j => j.parent === cur.id) : [];
       const lvl = next.length ? Math.min(...next.map(j => j.requiredLevel)) : 0;
       cards.appendChild(h('div', { class: 'ax-empty-note' },
-        next.length ? (st.level < lvl ? `Your next advancement unlocks at level ${lvl}. Keep training!` : 'Speak with Elder Maelis in Mistvale to advance.')
-          : 'You have reached the pinnacle of your path.'));
+        next.length ? (st.level < lvl ? `Your Year-end Exam opens at level ${lvl}. Keep studying!` : `Speak with ${examinerName(next[0])} on campus to sit your exam.`)
+          : 'You have graduated — the Academy has nothing left to teach you. (For now.)'));
     }
     this.body.replaceChildren(
-      h('div', { class: 'ax-help-intro' }, cur ? `You are currently ${/^[AEIOU]/i.test(cur.name) ? 'an' : 'a'} ${cur.name}. Choose your path carefully — advancement is permanent.` : ''),
+      h('div', { class: 'ax-help-intro' }, !cur ? '' : declaring
+        ? `Year 1 is over, ${st.name}. Declare the School you will study for the rest of your time at the Academy — this choice is permanent.`
+        : `You are a Year ${cur.tier} ${cur.name}. Pass this exam to begin your next Year.`),
       cards);
   }
 }

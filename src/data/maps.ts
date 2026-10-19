@@ -1,4 +1,4 @@
-// OWNER: A7 (world). The seven maps of Arcana Story.
+// OWNER: A7 (world). The seven maps of The Academy (map ids are save data — never rename them).
 //
 // Conventions (see ARCHITECTURE.md "Coordinates & conventions"):
 //  - platform `y` is the walking surface; the ground floor is a oneWay=false platform spanning the map
@@ -25,22 +25,27 @@ const on = (monsterId: string, p: PlatformDef, count: number, respawnMs = RESPAW
 const span = (monsterId: string, x1: number, x2: number, y: number, count: number, respawnMs = RESPAWN): SpawnDef =>
   ({ monsterId, x1, x2, y, count, respawnMs });
 
-// ───────────────────────────── Mistvale (town) ─────────────────────────────
+// ───────────────────────────── The Academy campus (town; id kept as `mistvale`) ─────────────────────────────
+//
+// West → east: armory (Tilda) · quartermaster (Bram) · dormitory + fountain square · Headmistress tower ·
+// the five School halls (Fire, Ice, Lightning, Holy, Shadow), each professor in front of their hall · east gate.
 
 const mistvale: MapDef = (() => {
-  const W = 3000, H = 1100, G = 980;
+  const W = 3800, H = 1100, G = 980;
   const awning = plat(690, 950, 895);
   const tower1 = plat(1360, 1660, 800);
   const towerTop = plat(1420, 1600, 640);
   const hallWalk = plat(2050, 2300, 895);
   const hallTop = plat(2290, 2440, 810);
+  const cloister = plat(2960, 3180, 895);   // walkway between the Holy and Shadow halls
+  const belfry = plat(3170, 3320, 810);
   return {
-    id: 'mistvale', name: 'Mistvale', region: 'Mistvale Town', theme: 'town', music: 'town',
+    id: 'mistvale', name: 'Academy Grounds', region: 'The Academy', theme: 'town', music: 'town',
     width: W, height: H, levelRange: [1, 50], safe: true,
-    platforms: [ground(0, W, G), awning, tower1, towerTop, hallWalk, hallTop],
+    platforms: [ground(0, W, G), awning, tower1, towerTop, hallWalk, hallTop, cloister, belfry],
     walls: [],
     ropes: [ladder(1392, tower1.y, G), rope(1560, towerTop.y, tower1.y)],
-    portals: [portal('east', 2920, G, 'whisperwood', 'west')],
+    portals: [portal('east', 3720, G, 'whisperwood', 'west')],
     spawns: [],
     npcs: [
       { npcId: 'smith_tilda', x: 400, y: G, facing: 1 },
@@ -49,6 +54,8 @@ const mistvale: MapDef = (() => {
       { npcId: 'pyra', x: 1990, y: G, facing: -1 },
       { npcId: 'glacius', x: 2290, y: G, facing: -1 },
       { npcId: 'voltis', x: 2590, y: G, facing: -1 },
+      { npcId: 'seraphine', x: 2900, y: G, facing: -1 },
+      { npcId: 'morvane', x: 3240, y: G, facing: -1 },
     ],
   };
 })();
@@ -66,7 +73,7 @@ const whisperwood: MapDef = (() => {
   const Q = plat(2960, 3090, 925);
   const hill = wall(1480, 1135, 220, 45);
   return {
-    id: 'whisperwood', name: 'Whisperwood', region: 'Verdant Wilds', theme: 'forest', music: 'forest',
+    id: 'whisperwood', name: 'Whisperwood', region: 'Practicum Grounds', theme: 'forest', music: 'forest',
     width: W, height: H, levelRange: [1, 8],
     platforms: [ground(0, W, G), A, B, C, D, E, F, Gp, O, Hh, I, J, K, L, M, N, R, Q],
     walls: [hill],
@@ -93,7 +100,7 @@ const shroom_hollow: MapDef = (() => {
   const S = plat(1500, 1800, 575), T = plat(2050, 2300, 575);
   const U = plat(140, 260, 1025), V = plat(3380, 3500, 1025);
   return {
-    id: 'shroom_hollow', name: 'Shroom Hollow', region: 'Verdant Wilds', theme: 'mushroom', music: 'cave',
+    id: 'shroom_hollow', name: 'Shroom Hollow', region: 'Herbology Field Site', theme: 'mushroom', music: 'cave',
     width: W, height: H, levelRange: [8, 15],
     platforms: [ground(0, W, G), A, B, C, D, E, F, Gp, Hh, I, J, K, L, M, N, O, P, Q, R, S, T, U, V],
     walls: [wall(1100, 1210, 160, 70), wall(2500, 1200, 200, 80)],
@@ -122,7 +129,7 @@ const frostfang_cliffs: MapDef = (() => {
   const Q = plat(1200, 1500, 695), R = plat(2550, 2900, 695);
   const S = plat(1350, 1950, 520);
   return {
-    id: 'frostfang_cliffs', name: 'Frostfang Cliffs', region: 'Frostfang Range', theme: 'snow', music: 'snow',
+    id: 'frostfang_cliffs', name: 'Frostfang Cliffs', region: 'Frostfang Range · Field Study', theme: 'snow', music: 'snow',
     width: W, height: H, levelRange: [15, 25],
     platforms: [ground(0, W, G), A, B, C, T, D, E, F, Gp, Hh, I, J, K, L, M, N, O, P, Q, R, S],
     walls: [step1, step2, step3],
@@ -152,7 +159,7 @@ const cinder_caverns: MapDef = (() => {
   const S = plat(900, 1300, 690), T = plat(1900, 2400, 690), U = plat(3300, 3700, 690);
   const V = plat(2000, 2700, 515);
   return {
-    id: 'cinder_caverns', name: 'Cinder Caverns', region: 'Emberdeep', theme: 'volcano', music: 'volcano',
+    id: 'cinder_caverns', name: 'Cinder Caverns', region: 'Emberdeep · Field Study', theme: 'volcano', music: 'volcano',
     width: W, height: H, levelRange: [25, 35],
     platforms: [ground(0, W, G), A, B, C, D, E, F, Gp, Hh, I, J, K, L, M, N, O, P, Q, R, S, T, U, V],
     walls: [wall(1300, 1310, 240, 70), wall(2700, 1300, 300, 80)],
@@ -185,7 +192,7 @@ const stormspire_peak: MapDef = (() => {
   const U = plat(1100, 1700, 615), V = plat(2000, 2600, 615);
   const Wp = plat(1650, 2050, 530);
   return {
-    id: 'stormspire_peak', name: 'Stormspire Peak', region: 'Thunderreach', theme: 'storm', music: 'storm',
+    id: 'stormspire_peak', name: 'Stormspire Peak', region: 'Thunderreach Observatory', theme: 'storm', music: 'storm',
     width: W, height: H, levelRange: [35, 45],
     platforms: [ground(0, W, G), A, B, C, D, E, F, Gp, Hh, I, J, K, L, M, N, O, X, Y, P, Q, R, S, T, U, V, Wp],
     walls: [plateau],
@@ -211,7 +218,7 @@ const arcane_sanctum: MapDef = (() => {
   const A2 = plat(2080, 2400, 895), B2 = plat(1840, 2180, 810), D2 = plat(1950, 2350, 640);
   const C = plat(1050, 1550, 700);
   return {
-    id: 'arcane_sanctum', name: 'Arcane Sanctum', region: 'The Shattered Sky', theme: 'sanctum', music: 'boss',
+    id: 'arcane_sanctum', name: 'Arcane Sanctum', region: 'The Forbidden Wing', theme: 'sanctum', music: 'boss',
     width: W, height: H, levelRange: [45, 50],
     platforms: [ground(0, W, G), A, B, D, A2, B2, D2, C],
     walls: [],

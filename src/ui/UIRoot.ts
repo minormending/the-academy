@@ -132,8 +132,8 @@ export class UIRoot implements IUI {
     });
     this.on('player:job', ({ job }) => {
       const def = safe(() => Registry.job(job), undefined);
-      this.banners.jobAdvance(def?.name ?? jobName(job), def?.description ?? '', BRANCH_COLORS[def?.branch ?? 'none']);
-      this.chat.push('New skills await in your Skills window (K).', '#b8c2ff');
+      this.banners.jobAdvance(def?.name ?? jobName(job), def?.description ?? '', BRANCH_COLORS[def?.branch ?? 'none'], def?.tier);
+      this.chat.push('New spells await in your Spellbook (K).', '#b8c2ff');
       if (this.windows.jobs.isOpen) this.windows.jobs.close();
       dirtyAll();
     });
@@ -176,7 +176,7 @@ export class UIRoot implements IUI {
     if (q && now !== prev) {
       // Progression logs accept / ready / turn-in lines; the UI adds the banner + a pointer to the giver.
       const giver = Registry.npc(q.giver)?.name ?? q.giver;
-      if (now === 'complete') { this.chat.push(`Return to ${giver} for your reward.`, '#9fe8a8'); this.banners.showArea('Quest Complete!', `${q.name} — return to ${giver}`, '#9fe8a8'); }
+      if (now === 'complete') { this.chat.push(`Return to ${giver} for your reward.`, '#9fe8a8'); this.banners.showArea('Assignment Complete!', `${q.name} — return to ${giver}`, '#9fe8a8'); }
     }
     this.questStatus.set(questId, now);
     this.windows.quests.markDirty();
@@ -286,7 +286,7 @@ export class UIRoot implements IUI {
     if (brandNew || looksFresh) {
       this.layout.setFlag(flag, true);
       this.windows.help.open();
-      this.chat.push(`Welcome to Arcana Story, ${st.name}!`, '#ffd76a');
+      this.chat.push(`Welcome to The Academy, ${st.name}! Your first year begins.`, '#ffd76a');
       this.chat.push('Press H any time to see the controls.', '#b8c2ff');
     } else {
       this.chat.push(`Welcome back, ${st.name}.`, '#ffd76a');

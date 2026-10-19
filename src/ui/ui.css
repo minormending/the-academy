@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   Arcana Story — DOM UI. Logical 1280×720, scaled by UIScaler.
+   The Academy — DOM UI. Logical 1280×720, scaled by UIScaler.
    All classes are prefixed `ax-`.
 
    16-bit pixel skin (PX5):
@@ -204,7 +204,7 @@ body.ax-dragging, body.ax-dragging * { cursor: grabbing !important; }
 /* ─────────────────────────── Tooltip ─────────────────────────── */
 
 .ax-tooltip {
-  position: absolute; z-index: 60000; max-width: 300px; min-width: 160px; padding: 10px 12px; font-size: 16px; line-height: 1.05; color: var(--ax-ink);
+  position: absolute; z-index: 60000; max-width: 320px; min-width: 160px; padding: 10px 12px; font-size: 16px; line-height: 1.05; color: var(--ax-ink);
   border: 2px solid transparent; border-image: url("/assets/ui/golden/tooltip.png") 4 fill / 8px / 0;
   filter: drop-shadow(4px 4px 0 rgba(8, 6, 22, 0.55));
 }
@@ -220,8 +220,14 @@ body.ax-dragging, body.ax-dragging * { cursor: grabbing !important; }
 .ax-tt-stat b { color: #fff; }
 .ax-tt-stat.ax-dim b { color: var(--ax-ink-dim); }
 .ax-tt-mod { color: #a6f0b4; }
+.ax-tt-stat.ax-mod span, .ax-tt-stat.ax-mod b { color: #a6f0b4; }
+.ax-tt-arrow { color: var(--ax-ink-faint); }
+.ax-tt-next { color: #9fc8ff; }
+.ax-tt-section.ax-gold { color: var(--ax-gold); }
+.ax-tt-skill { min-width: 230px; }
 .ax-tt-req { color: var(--ax-bad); margin-top: 4px; font-size: 16px; }
 .ax-tt-req.ax-ok { color: var(--ax-ink-dim); }
+.ax-tt-reqs .ax-ok { color: var(--ax-good); }
 .ax-tt-foot { margin-top: 6px; font-size: 16px; color: var(--ax-ink-faint); }
 .ax-tt-foot.ax-gold { color: var(--ax-gold); }
 
@@ -424,37 +430,78 @@ body.ax-dragging, body.ax-dragging * { cursor: grabbing !important; }
 /* ─────────────────────────── Skills window ─────────────────────────── */
 
 .ax-skills-win .ax-tabs { flex-wrap: nowrap; }
-.ax-skills-win .ax-tab { flex: 0 1 auto; min-width: 0; padding: 6px 8px; white-space: nowrap; }
-.ax-skills-win .ax-tab-label { overflow: hidden; text-overflow: ellipsis; }
-.ax-skill-list { max-height: 400px; overflow-y: auto; padding-right: 2px; display: flex; flex-direction: column; gap: 4px; }
+.ax-year-tabs { gap: 3px; padding-bottom: 6px; }
+.ax-year-tab { --accent: #c9b8ff; flex: 1 1 0; min-width: 0; padding: 4px 6px 5px; flex-direction: column; align-items: stretch; gap: 2px; white-space: nowrap; }
+.ax-year-tab .ax-tab-label { overflow: hidden; text-overflow: ellipsis; text-align: center; color: var(--accent); }
+.ax-year-tab.ax-active .ax-tab-label { color: var(--ax-k); }
+.ax-year-tab.ax-locked .ax-tab-label { opacity: 0.75; }
+.ax-year-tab-year { display: flex; justify-content: center; align-items: center; gap: 3px; font-size: 16px; line-height: 12px; color: var(--ax-ink-faint); text-transform: uppercase; letter-spacing: 1px; }
+.ax-year-tab.ax-active .ax-year-tab-year { color: #5e3d06; }
+.ax-year-tab-year .ax-lock { transform: scale(0.75); }
+.ax-book-head { --accent: #c9b8ff; display: flex; align-items: center; gap: 10px; padding: 4px 6px 6px; border-bottom: 2px solid var(--ax-line); }
+.ax-book-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ax-ink-faint); }
+.ax-book-title b { font-family: var(--ax-head); color: var(--accent); text-shadow: var(--ax-ts); }
+.ax-book-meta { display: flex; gap: 8px; color: var(--ax-ink-dim); white-space: nowrap; }
+.ax-book-meta b { color: #fff; }
+.ax-book-ready { color: var(--ax-good); }
+.ax-book-sp { display: flex; align-items: baseline; gap: 4px; padding: 2px 8px 3px; background: var(--ax-k); box-shadow: inset 0 0 0 2px var(--ax-gold-dim); color: var(--ax-ink-dim); }
+.ax-book-sp b { font-family: var(--ax-head); font-size: 16px; color: var(--ax-gold); }
+.ax-book-sp.ax-glow { box-shadow: inset 0 0 0 2px var(--ax-gold); animation: ax-sp-pulse 1.2s steps(2) infinite; }
+@keyframes ax-sp-pulse { 50% { box-shadow: inset 0 0 0 2px var(--ax-gold-2); } }
+.ax-book-tools { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 0; }
+.ax-chips { display: flex; gap: 3px; flex-wrap: wrap; }
+.ax-chip {
+  appearance: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px 4px; font-size: 16px; line-height: 1;
+  color: var(--ax-ink-dim); background: var(--ax-indigo-lo); border: none; box-shadow: inset 0 0 0 2px var(--ax-line); text-shadow: var(--ax-ts);
+}
+.ax-chip:hover:not(:disabled) { color: var(--ax-ink); box-shadow: inset 0 0 0 2px var(--ax-indigo-hi); }
+.ax-chip:disabled { opacity: 0.4; cursor: default; }
+.ax-chip.ax-active { color: var(--ax-k); background: var(--ax-gold); box-shadow: inset 0 0 0 2px var(--ax-k); text-shadow: none; }
+.ax-chip-n { color: var(--ax-ink-faint); }
+.ax-chip.ax-active .ax-chip-n { color: #5e3d06; }
+.ax-chip-attack:not(.ax-active) { color: #ffb3a3; }
+.ax-chip-buff:not(.ax-active) { color: #a6f0b4; }
+.ax-chip-passive:not(.ax-active) { color: #d4bfff; }
+.ax-chip-summon:not(.ax-active) { color: #ffe39a; }
+.ax-sort { flex: none; }
+.ax-skill-list { max-height: 352px; overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 4px; }
+.ax-skill-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .ax-locked-note { display: flex; gap: 8px; align-items: center; padding: 8px 10px; color: #cfd2f5; font-size: 16px; line-height: 1.1; background: rgba(181, 140, 255, 0.12); box-shadow: inset 0 0 0 2px #5a4a9a; }
 .ax-skill-group { --accent: #c9b8ff; padding: 6px 2px 4px; color: var(--accent); font-size: 16px; border-bottom: 2px solid var(--ax-line); }
 .ax-skill-group b { font-family: var(--ax-head); font-size: 16px; text-shadow: var(--ax-ts); }
 .ax-skill-group span { color: var(--ax-ink-faint); }
-.ax-skill-group-desc { color: var(--ax-ink-dim); font-size: 16px; margin-top: 2px; }
-.ax-skill-row {
-  display: flex; align-items: center; gap: 10px; padding: 6px 8px;
+.ax-skill-group-desc { color: var(--ax-ink-dim); font-size: 16px; margin-top: 2px; line-height: 1.05; }
+.ax-skill-group-desc.ax-solo { margin: 0 2px 2px; color: var(--ax-ink-faint); }
+.ax-skill-card {
+  position: relative; display: flex; align-items: center; gap: 7px; padding: 5px 6px; min-width: 0;
   border: 2px solid transparent; border-image: url("/assets/ui/golden/well.png") 3 fill / 6px / 0;
 }
-.ax-skill-row:hover { border-image-source: url("/assets/ui/golden/slot_hover.png"); border-image-slice: 4 fill; }
-.ax-skill-row.ax-maxed { box-shadow: inset 0 0 0 2px var(--ax-gold-dim); }
-.ax-skill-row.ax-locked { opacity: 0.62; filter: saturate(0.5); }
-.ax-skill-icon { position: relative; padding: 0; box-shadow: 0 0 0 2px var(--ax-k); }
+.ax-skill-card:hover { border-image-source: url("/assets/ui/golden/slot_hover.png"); border-image-slice: 4 fill; }
+.ax-skill-card.ax-maxed { box-shadow: inset 0 0 0 2px var(--ax-gold-dim); }
+.ax-skill-card.ax-can::after { content: ""; position: absolute; left: 2px; top: 2px; width: 4px; height: 4px; background: var(--ax-good); box-shadow: 0 0 0 1px var(--ax-k); }
+.ax-skill-card.ax-zero:not(.ax-can) .ax-skill-name-t { color: var(--ax-ink-dim); }
+.ax-skill-card.ax-locked { opacity: 0.62; filter: saturate(0.5); }
+.ax-skill-icon { position: relative; padding: 0; flex: none; box-shadow: 0 0 0 2px var(--ax-k); }
 .ax-skill-icon.ax-draggable { cursor: grab; }
 .ax-skill-icon.ax-draggable:hover { box-shadow: 0 0 0 2px var(--ax-gold); }
 .ax-skill-icon.ax-unlearned .ax-icon { filter: grayscale(0.9) brightness(0.6); }
 .ax-skill-main { flex: 1; min-width: 0; }
-.ax-skill-name { font-size: 16px; color: #fff; display: flex; align-items: center; gap: 6px; text-shadow: var(--ax-ts); }
-.ax-kind { font-size: 16px; line-height: 12px; padding: 0 4px 1px; text-transform: uppercase; background: var(--ax-indigo-lo); color: var(--ax-ink-dim); box-shadow: inset 0 0 0 1px var(--ax-line); }
+.ax-skill-name { font-size: 16px; color: #fff; display: flex; align-items: center; gap: 4px; text-shadow: var(--ax-ts); min-width: 0; }
+.ax-skill-name-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ax-on-bar { flex: none; width: 8px; height: 8px; background: var(--ax-gold); box-shadow: 0 0 0 1px var(--ax-k); }
+.ax-kind { flex: none; font-size: 16px; line-height: 12px; padding: 0 3px 1px; text-transform: uppercase; background: var(--ax-indigo-lo); color: var(--ax-ink-dim); box-shadow: inset 0 0 0 1px var(--ax-line); }
 .ax-kind-attack { background: #4a1c26; color: #ffb3a3; }
 .ax-kind-buff { background: #1c3a22; color: #a6f0b4; }
 .ax-kind-passive { background: #2e2050; color: #d4bfff; }
 .ax-kind-movement { background: #1a2e4e; color: #a9dcff; }
 .ax-kind-summon { background: #4a3a14; color: #ffe39a; }
-.ax-skill-lv { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 16px; color: var(--ax-ink-dim); }
-.ax-skill-lv .ax-mini-bar { width: 110px; }
+.ax-skill-lv { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 16px; color: var(--ax-ink-dim); }
+.ax-skill-lv .ax-mini-bar { flex: 1; min-width: 24px; height: 6px; padding: 1px; }
+.ax-skill-lvnum { flex: none; min-width: 34px; text-align: right; }
 .ax-maxed .ax-mini-bar > div { background: linear-gradient(#f4eea0 0 1px, #dad45e 1px); }
-.ax-skill-req { font-size: 16px; color: var(--ax-bad); margin-top: 2px; }
+.ax-maxed .ax-skill-lvnum { color: var(--ax-gold); }
+.ax-skill-req { font-size: 16px; color: var(--ax-bad); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ax-skills-win .ax-win-footer .ax-dim { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .ax-sp { white-space: nowrap; }
 .ax-sp b { color: var(--ax-gold); font-family: var(--ax-head); font-size: 16px; }
 
@@ -623,12 +670,17 @@ body.ax-dragging, body.ax-dragging * { cursor: grabbing !important; }
   linear-gradient(var(--ax-k), var(--ax-k)) center / 10px 10px no-repeat,
   linear-gradient(90deg, transparent 0 6%, var(--ax-gold-dim) 6% 22%, var(--ax-gold) 22% 78%, var(--ax-gold-dim) 78% 94%, transparent 94%) center / 100% 4px no-repeat; }
 .ax-logo-text {
-  font-family: var(--ax-head); font-size: 64px; line-height: 1.1; letter-spacing: 4px; white-space: nowrap;
+  font-family: var(--ax-head); font-size: 72px; line-height: 1.1; letter-spacing: 4px; white-space: nowrap;
   color: #f4eea0;
   background: linear-gradient(#fff8c8 0 24%, #dad45e 24% 50%, #d27d2c 50% 76%, #b85f1c 76%); -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(4px 0 0 var(--ax-k)) drop-shadow(-4px 0 0 var(--ax-k)) drop-shadow(0 4px 0 var(--ax-k)) drop-shadow(0 -4px 0 var(--ax-k)) drop-shadow(0 8px 0 #4a1f6a);
 }
 .ax-logo-text span { background: linear-gradient(#f0f8ff 0 24%, #9fd8ff 24% 50%, #597dce 50% 76%, #3d4fa8 76%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.ax-logo-the {
+  font-family: var(--ax-head); font-size: 32px; line-height: 1; letter-spacing: 16px; padding-left: 16px; margin-bottom: 2px; text-transform: uppercase;
+  background: linear-gradient(#f0f8ff 0 30%, #9fd8ff 30% 60%, #597dce 60%); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(2px 0 0 var(--ax-k)) drop-shadow(-2px 0 0 var(--ax-k)) drop-shadow(0 2px 0 var(--ax-k)) drop-shadow(0 -2px 0 var(--ax-k)) drop-shadow(0 4px 0 #24306a);
+}
 .ax-logo-sub { margin-top: 18px; font-family: var(--ax-head); font-size: 16px; letter-spacing: 6px; text-transform: uppercase; color: #cfc4ff; text-shadow: var(--ax-ts2); }
 .ax-title-panel {
   position: relative; width: 280px; display: flex; flex-direction: column; gap: 10px; align-items: stretch;

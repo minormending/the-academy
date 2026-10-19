@@ -5,7 +5,7 @@ import { Registry } from '../core/registry';
 import { expToNext } from '../core/balance';
 import type { UICtx } from './context';
 import { fmtNum, h, safe } from './dom';
-import { BRANCH_COLORS, BRANCH_NAMES, SLOT_LABELS, derivedRows, itemTooltip, jobName } from './info';
+import { BRANCH_COLORS, SLOT_LABELS, derivedRows, itemTooltip, jobName, jobYear, schoolName } from './info';
 import { iconEl, portraitEl } from './uiIcons';
 import { UIWindow } from './window';
 
@@ -42,7 +42,7 @@ export class StatsWindow extends UIWindow {
     // ── identity
     const ident = h('div', { class: 'ax-char-ident' },
       h('div', { class: 'ax-char-name' }, st.name),
-      h('div', { class: 'ax-char-job', style: `color:${BRANCH_COLORS[branch]}` }, `${jobName(st.job)} · ${BRANCH_NAMES[branch]}`),
+      h('div', { class: 'ax-char-job', style: `color:${BRANCH_COLORS[branch]}` }, `Year ${jobYear(st.job)} ${jobName(st.job)} · ${schoolName(branch)}`),
       h('div', { class: 'ax-char-lv' }, `Level ${st.level}`, this.expSpan));
     this.expSpan.textContent = '';
     this.lastExp = '';

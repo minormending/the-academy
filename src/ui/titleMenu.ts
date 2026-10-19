@@ -55,8 +55,9 @@ export class TitleMenu {
       h('div', { class: 'ax-title-col' },
         h('div', { class: 'ax-logo' },
           h('div', { class: 'ax-logo-orn' }),
-          h('div', { class: 'ax-logo-text' }, 'Arcana', h('span', null, ' Story')),
-          h('div', { class: 'ax-logo-sub' }, 'Every hero is a mage')),
+          h('div', { class: 'ax-logo-the' }, 'The'),
+          h('div', { class: 'ax-logo-text' }, 'Academy'),
+          h('div', { class: 'ax-logo-sub' }, 'Every student is a mage')),
         this.panel),
       h('div', { class: 'ax-title-foot' }, 'Arrows move · Space jumps · Q W E R T cast · H for help'));
     this.el.addEventListener('mousedown', (e) => { if ((e.target as Element | null)?.closest?.('button')) e.preventDefault(); });
@@ -83,13 +84,14 @@ export class TitleMenu {
     if (this.view === 'main') {
       const s = this.save;
       if (this.saveExists) {
-        const job = s ? safe(() => Registry.job(s.job)?.name, '') || s.job : '';
+        const jd = s ? safe(() => Registry.job(s.job), undefined) : undefined;
+        const job = s ? (jd?.name || s.job) + (jd ? ` · Year ${jd.tier}` : '') : '';
         p.appendChild(h('button', { class: 'ax-title-btn ax-primary', onclick: () => this.continue(), disabled: !s },
           h('span', { class: 'ax-tb-label' }, 'Continue'),
           s ? h('span', { class: 'ax-tb-sub' }, `${s.name} · Lv ${s.level} ${job}`) : h('span', { class: 'ax-tb-sub' }, 'Save data could not be read')));
       }
       p.appendChild(h('button', { class: `ax-title-btn${this.saveExists ? '' : ' ax-primary'}`, onclick: () => { this.sfx('ui_click'); this.setView('new'); } },
-        h('span', { class: 'ax-tb-label' }, 'New Game'), h('span', { class: 'ax-tb-sub' }, 'Begin as an Apprentice')));
+        h('span', { class: 'ax-tb-label' }, 'New Game'), h('span', { class: 'ax-tb-sub' }, 'Enrol as a Year 1 Apprentice')));
       if (this.saveExists) {
         p.appendChild(h('button', { class: 'ax-title-link', onclick: () => { this.sfx('ui_click'); this.setView('delete'); } }, 'Delete save'));
       }
@@ -113,7 +115,7 @@ export class TitleMenu {
         e.stopPropagation();
       });
       append(p, [
-        h('div', { class: 'ax-title-h' }, 'Name your mage'),
+        h('div', { class: 'ax-title-h' }, 'Name your student'),
         h('div', { class: 'ax-input-wrap' }, input, counter),
         err,
         this.saveExists && this.save ? h('div', { class: 'ax-title-warn' }, `This will replace ${this.save.name} (Lv ${this.save.level}).`) : null,

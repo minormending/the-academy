@@ -31,10 +31,18 @@ bunting, rope, portal swirl, particles, sun/moon/stars, waterfall/lava strips).
 
 | Theme (map) | Terrain | Parallax (back → front) | Notable decor |
 |---|---|---|---|
-| town (Mistvale) | Sunny Land, wooden log-beam platforms | Woods clouds → Woods mountains → Gothicvania town skyline (blue haze) → Woods tree-line | Sunny Land cottages ×6 (recoloured, widened, element banners), Fort tower, Gothicvania lamps/well/signs, Fort gate |
+| town (Academy campus, map id `mistvale`) | Sunny Land, wooden log-beam platforms | Woods clouds → Woods mountains → Gothicvania town skyline (blue haze) → Woods tree-line | Sunny Land cottages ×6 (recoloured, widened, element banners), Fort tower, Gothicvania lamps/well/signs, Fort gate |
 | forest (Whisperwood) | Sunny Land (greener grass) | Country-side sky → Country-side pine forest → Woods tree-line | Sunnyland trees, country tree, bushes, flowers, waterfall |
 | mushroom (Shroom Hollow) | Sunny Land → purple soil / teal moss | Warped forest silhouettes → Warped cave (night purple + teal) + stars | hand-pixelled giant mushrooms, Warped glow fungus, vines |
 | snow (Frostfang Cliffs) | Sunny Land → snow / ice-slate | Woods clouds (cool) → Fort mountains (icy) → Woods mountains (snow) → Country pines (frosted) | Magical Road + Sunnyland pines with snow caps, Rocky Pass crystals (ice), snowman, icicles |
 | volcano (Cinder Caverns) | Sunny Land → ember crust / basalt | Mountain-at-Dusk sky (red, moonless) → Rocky Pass rocks (dark) → Rocky Pass arches (crimson) | lava spires, obsidian, braziers, burnt pines, lava falls |
 | storm (Stormspire Peak) | Sunny Land → sage grass / slate | Magic Cliffs sky → Dusk mountains → Magic Cliffs clouds (drifting) → Magic Cliffs hills → Dusk tree-line | dead trees, wind pines, runestones, broken pillars, storm flags, 16-bit lightning |
 | sanctum (Arcane Sanctum) | Sunny Land → marble / gold | Fort sky (violet) → Fort mountains (violet) → Grotto ruins (violet) + stars + moon | Church pillars, arcane banners, floating crystals, arcane circle, arcane braziers |
+
+## The Academy additions (derived, no new downloads)
+
+`town/t_hall_holy.png`, `town/t_hall_shadow.png`, `town/t_sign_holy.png`, `town/t_sign_shadow.png`,
+`town/t_banner_holy.png`, `town/t_banner_shadow.png` are palette swaps of the existing pieces above
+(Sunny Land hall, Gothicvania Town hanging sign, Fort of Illusion banner — all CC0, Luis Zuno) with small
+hand-pixelled additions in the same palettes (Holy bell-cote + cross and sun emblem; Shadow gothic spires and
+skull emblem). The Shadow hall is flanked by the existing Gothicvania Church skull pillar (`d_pillar`).

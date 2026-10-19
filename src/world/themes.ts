@@ -167,6 +167,8 @@ export const DECOR_GLOWS: Record<string, { dy: number; dx?: number; r: number; c
   t_hall_fire: { dy: -100, r: 60, color: 0xffb040, alpha: 0.35, pulse: 0.1 },
   t_hall_ice: { dy: -100, r: 60, color: 0xc8f4ff, alpha: 0.35, pulse: 0.1 },
   t_hall_storm: { dy: -100, r: 60, color: 0xffe066, alpha: 0.35, pulse: 0.1 },
+  t_hall_holy: { dy: -100, r: 64, color: 0xfff0b0, alpha: 0.4, pulse: 0.1 },
+  t_hall_shadow: { dy: -100, r: 60, color: 0x7ee88c, alpha: 0.32, pulse: 0.2 },
   t_tower: { dy: -588, dx: 8, r: 70, color: 0x9fd8ff, alpha: 0.6, pulse: 0.2 },
 };
 /** Decor that gently bobs (floating things). */
@@ -191,5 +193,7 @@ export const PIXEL_GLOW_DY: Record<string, { dy: (h: number) => number; dx?: num
   t_hall_fire: { dy: h => -h * 0.38, dx: -40 },
   t_hall_ice: { dy: h => -h * 0.38, dx: -40 },
   t_hall_storm: { dy: h => -h * 0.38, dx: -40 },
+  t_hall_holy: { dy: () => -80, dx: -46 },
+  t_hall_shadow: { dy: () => -80, dx: -46 },
   t_tower: { dy: h => -(h - 12) },
 };

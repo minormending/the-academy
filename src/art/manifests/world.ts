@@ -21,6 +21,8 @@ export const PIXEL_TOWN_KEYS = [
   't_house_potion', 't_house_smith', 't_cottage', 't_cottage_b', 't_hall_fire', 't_hall_ice', 't_hall_storm', 't_tower',
   't_fountain', 't_lantern', 't_bench', 't_crates', 't_barrel', 't_well', 't_bunting', 't_gate',
   't_sign_potion', 't_sign_smith', 't_sign_fire', 't_sign_ice', 't_sign_storm', 't_sign_elder',
+  // The Academy: Holy + Shadow school halls, signs and banners (recoloured from the same packs).
+  't_hall_holy', 't_hall_shadow', 't_sign_holy', 't_sign_shadow', 't_banner_holy', 't_banner_shadow',
 ] as const;
 
 export const PIXEL_FX_KEYS = [

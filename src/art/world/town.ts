@@ -1,4 +1,5 @@
-// OWNER: A7 (world). Mistvale town art: houses, shops, guild halls, mage tower, fountain, lanterns, signboards.
+// OWNER: A7 (world). Academy campus art (map id `mistvale`): houses, shops, school halls, mage tower, fountain,
+// lanterns, signboards. Procedural fallbacks — the pixel PNGs in public/assets/world/town win when they load.
 import Phaser from 'phaser';
 import { DECOR_INFO } from './decor';
 import { type Ctx, circle, css, darken, ellipse, glow, hGrad, lighten, makeTex, poly, rng, rr, roundRect, star4, vGrad } from './util';
@@ -16,6 +17,10 @@ export function generateTownTextures(scene: Phaser.Scene) {
   tt(scene, 't_hall_fire', 270, 310, (c, w, h) => paintHall(c, w, h, 0xe0563a, 0xffb040, 'flame'));
   tt(scene, 't_hall_ice', 270, 310, (c, w, h) => paintHall(c, w, h, 0x4a9ad8, 0xc8f4ff, 'snow'));
   tt(scene, 't_hall_storm', 270, 310, (c, w, h) => paintHall(c, w, h, 0x7a5ad0, 0xffe066, 'bolt'));
+  tt(scene, 't_hall_holy', 270, 340, (c, w, h) => paintHall(c, w, h, 0xe0b040, 0xfff6d8, 'cross', 0xf6f2e8));
+  tt(scene, 't_hall_shadow', 270, 330, (c, w, h) => paintHall(c, w, h, 0x5a3a8a, 0x7ee88c, 'skull', 0x98a096));
+  tt(scene, 't_banner_holy', 84, 240, (c, w, h) => paintSchoolBanner(c, w, h, 0xf2ecdc, 0xe0b040, 'cross'));
+  tt(scene, 't_banner_shadow', 84, 240, (c, w, h) => paintSchoolBanner(c, w, h, 0x4a2478, 0x7ee88c, 'skull'));
   tt(scene, 't_tower', 240, 600, paintTower);
   tt(scene, 't_fountain', 230, 130, paintFountain);
   tt(scene, 't_lantern', 48, 170, paintLanternPost);
@@ -28,7 +33,8 @@ export function generateTownTextures(scene: Phaser.Scene) {
   const signs: [string, string, string, number][] = [
     ['t_sign_potion', 'POTIONS', 'potion', 0x5bb06a], ['t_sign_smith', 'SMITHY', 'anvil', 0x7a7a8a],
     ['t_sign_fire', 'FIRE', 'flame', 0xd8503a], ['t_sign_ice', 'ICE', 'snow', 0x4a8ad0],
-    ['t_sign_storm', 'STORM', 'bolt', 0x7a5ad0], ['t_sign_elder', 'ARCHMAGE', 'star', 0x5a4aa0],
+    ['t_sign_storm', 'STORM', 'bolt', 0x7a5ad0], ['t_sign_elder', 'HEAD', 'star', 0x5a4aa0],
+    ['t_sign_holy', 'HOLY', 'cross', 0xd0a030], ['t_sign_shadow', 'SHADOW', 'skull', 0x5a2a8a],
   ];
   for (const [key, label, glyph, col] of signs) tt(scene, key, 84, 120, (c, w, h) => paintShopSign(c, w, h, label, glyph, col));
 }
@@ -69,6 +75,16 @@ function glyph(ctx: Ctx, kind: string, x: number, y: number, s: number, col: num
       break;
     case 'bolt':
       poly(ctx, [[3, -14], [-8, 2], [-1, 2], [-4, 14], [8, -3], [1, -3]], css(0xffe066), dark, 1.2);
+      break;
+    case 'cross':
+      ctx.fillStyle = dark; ctx.fillRect(-4, -15, 8, 30); ctx.fillRect(-12, -8, 24, 8);
+      ctx.fillStyle = css(0xffe8a0); ctx.fillRect(-2.5, -13.5, 5, 27); ctx.fillRect(-10.5, -6.5, 21, 5);
+      break;
+    case 'skull':
+      ctx.beginPath(); ctx.arc(0, -3, 10, Math.PI, 0); ctx.lineTo(10, 3); ctx.lineTo(6, 6); ctx.lineTo(6, 11); ctx.lineTo(-6, 11); ctx.lineTo(-6, 6); ctx.lineTo(-10, 3); ctx.closePath();
+      ctx.fillStyle = css(0xc4fabe); ctx.fill(); ctx.strokeStyle = dark; ctx.lineWidth = 1.2; ctx.stroke();
+      circle(ctx, -4, -1, 3, css(0x1a0c24)); circle(ctx, 4, -1, 3, css(0x1a0c24));
+      ctx.fillStyle = css(0x1a0c24); ctx.fillRect(-3, 7, 1.5, 4); ctx.fillRect(1.5, 7, 1.5, 4);
       break;
     case 'star':
       star4(ctx, 0, 0, 13, css(0xffe8a0)); star4(ctx, 0, 0, 7, css(0xffffff));
@@ -188,8 +204,8 @@ function paintHouse(ctx: Ctx, w: number, h: number, o: HouseOpts) {
   }
 }
 
-function paintHall(ctx: Ctx, w: number, h: number, color: number, emblem: number, kind: string) {
-  const stone = 0xe6dccb, base = h;
+function paintHall(ctx: Ctx, w: number, h: number, color: number, emblem: number, kind: string, stone = 0xe6dccb) {
+  const base = h;
   const wallTop = h * 0.38;
   // side turrets
   for (const tx of [w * 0.04, w * 0.78]) {
@@ -230,6 +246,18 @@ function paintHall(ctx: Ctx, w: number, h: number, color: number, emblem: number
   // steps
   ctx.fillStyle = css(darken(stone, 0.15)); ctx.fillRect(dx - 16, base - 8, dw + 32, 8);
   ctx.fillStyle = css(lighten(stone, 0.1)); ctx.fillRect(dx - 16, base - 8, dw + 32, 2);
+}
+
+function paintSchoolBanner(ctx: Ctx, w: number, h: number, cloth: number, emblem: number, kind: string) {
+  const cx = w / 2;
+  ctx.fillStyle = css(0x6a4a1a); ctx.fillRect(cx - 3, 0, 6, h);
+  circle(ctx, cx, 4, 6, css(0xd8b050));
+  ctx.fillStyle = css(0xd8b050); ctx.fillRect(4, 14, w - 8, 5);
+  const bh = h * 0.42;
+  poly(ctx, [[8, 18], [w - 8, 18], [w - 8, 18 + bh], [cx, 18 + bh + 18], [8, 18 + bh]],
+    hGrad(ctx, 8, w - 8, [[0, lighten(cloth, 0.2)], [0.5, cloth], [1, darken(cloth, 0.35)]]), css(darken(cloth, 0.55)), 2);
+  ctx.fillStyle = css(emblem); ctx.fillRect(10, 24, w - 20, 3);
+  glyph(ctx, kind, cx, 18 + bh * 0.55, 1.1, darken(cloth, 0.2));
 }
 
 function paintTower(ctx: Ctx, w: number, h: number) {

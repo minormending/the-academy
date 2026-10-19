@@ -1,4 +1,4 @@
-/** Quest log (J): Active / Available / Completed with objective progress. */
+/** Assignments (J; the quest log): In Progress / Available / Handed in, with objective progress. */
 import type { Branch, QuestDef, QuestProgress } from '../core/types';
 import { Registry } from '../core/registry';
 import type { UICtx } from './context';
@@ -12,7 +12,7 @@ export class QuestsWindow extends UIWindow {
   private expanded = new Set<string>();
 
   constructor(ctx: UICtx) {
-    super(ctx, 'quests', 'Quest Log', { width: 380, x: 520, y: 96, className: 'ax-quests-win' });
+    super(ctx, 'quests', 'Assignments', { width: 380, x: 520, y: 96, className: 'ax-quests-win' });
   }
 
   protected signature(): string {
@@ -39,8 +39,8 @@ export class QuestsWindow extends UIWindow {
     const list = h('div', { class: 'ax-quest-list' });
     if (!items.length) {
       list.appendChild(h('div', { class: 'ax-empty-note' },
-        this.tab === 'active' ? 'No active quests. Talk to villagers marked with a quest icon.' :
-          this.tab === 'available' ? 'No new quests for your level right now.' : 'No completed quests yet.'));
+        this.tab === 'active' ? 'No assignments in progress. Talk to staff and students marked with a quest icon.' :
+          this.tab === 'available' ? 'No new assignments for your level right now.' : 'No assignments handed in yet.'));
     }
     for (const q of items) list.appendChild(this.card(q, prog(q)));
 
@@ -48,7 +48,7 @@ export class QuestsWindow extends UIWindow {
       tabStrip<Tab>([
         { id: 'active', label: `In Progress (${active.length})` },
         { id: 'available', label: `Available (${available.length})` },
-        { id: 'done', label: `Completed (${done.length})` },
+        { id: 'done', label: `Handed in (${done.length})` },
       ], this.tab, (t) => { this.tab = t; this.invalidate(); this.ctx.sfx('ui_click'); }),
       list);
   }

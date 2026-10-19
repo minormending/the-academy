@@ -1,4 +1,5 @@
-// OWNER: A8 (ui); pixel pass by PX5. Title screen: animated arcane night sky + mage tower, DOM menu on top.
+// OWNER: A8 (ui); pixel pass by PX5. Title screen for "The Academy": a moonlit (not murky) night sky over the
+// Headmistress's tower, DOM menu on top.
 // 16-bit look: the backdrop is composed from the CC0 pixel parallax art the world agent loads at boot (Fort of
 // Illusion sanctum sky + mountains, Grotto ruins, the mage tower), drifting on integer-scaled TileSprites whose
 // scroll offsets snap to whole source pixels. If those textures are missing it falls back to the old procedural
@@ -98,14 +99,19 @@ export class TitleScene extends Phaser.Scene {
     return ts;
   }
 
-  /** Stepped (banded, non-smooth) dark wash from the left edge so the logo column stays readable. */
-  private logoShade() {
-    const g = this.add.graphics();
-    const steps = 6, x1 = 720;
-    for (let i = 0; i < steps; i++) {
-      const w = Math.round((x1 * (steps - i)) / steps / 8) * 8;
-      g.fillStyle(0x05020f, 0.07);
-      g.fillRect(0, 0, w, H);
+  /**
+   * Pixel-stepped round glow: concentric discs built from `step`-px rows (no smooth gradient, no hard square).
+   * Drawn into one additive Graphics so it can pulse as a whole.
+   */
+  private pixelGlow(cx: number, cy: number, radii: number[], color: number, alpha: number, step = 4) {
+    const g = this.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
+    for (const r of radii) {
+      g.fillStyle(color, alpha);
+      for (let dy = -r; dy < r; dy += step) {
+        const yc = dy + step / 2;
+        const hw = Math.round(Math.sqrt(Math.max(0, r * r - yc * yc)) / step) * step;
+        if (hw > 0) g.fillRect(cx - hw, cy + dy, hw * 2, step);
+      }
     }
     return g;
   }
@@ -118,13 +124,15 @@ export class TitleScene extends Phaser.Scene {
     this.add.rectangle(0, 0, W, H, SKY_COL).setOrigin(0, 0);
     // sky (64×272 @×3), slowest layer
     this.layer(K_SKY, 3, null, 1.5);
+    // lift the sky: an additive twin turns the near-black violet into a clear moonlit indigo
+    this.layer(K_SKY, 3, null, 1.5, { alpha: 0.8, tint: 0x7a78e0 }).setBlendMode(Phaser.BlendModes.ADD);
     if (has(K_STARS)) this.layer(K_STARS, 3, null, 1, { alpha: 0.9 });
 
     // Moon (28×28 @×4) with a stepped square halo
     const MX = 1120, MY = 132;
     const halo = this.add.graphics();
     for (let i = 4; i >= 1; i--) {
-      halo.fillStyle(0xcfd8ff, 0.03);
+      halo.fillStyle(0xcfd8ff, 0.05);
       const r = 56 + i * 14;
       for (let dy = -r; dy < r; dy += 8) { const hw = Math.round(Math.sqrt(r * r - (dy + 4) * (dy + 4)) / 8) * 8; halo.fillRect(MX - hw, MY + dy, hw * 2, 8); }
     }
@@ -150,30 +158,29 @@ export class TitleScene extends Phaser.Scene {
     this.time.addEvent({ delay: 3800, loop: true, callback: () => this.pixelShootingStar(rnd) });
 
     // High cloud bank (storm clouds recoloured arcane violet, flipped so the lit edge faces the moon)
-    if (has(K_CLOUDS)) this.layer(K_CLOUDS, 2, 330, 4, { alpha: 0.28, tint: 0x7a5cc8 });
+    if (has(K_CLOUDS)) this.layer(K_CLOUDS, 2, 330, 4, { alpha: 0.36, tint: 0x9a84e0 });
 
     // Horizon glow: stepped additive violet bands behind the mountains so their silhouettes read
     const glow = this.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
     const gTop = 250, gBands = 10, gH = Math.ceil((H - gTop) / gBands / 8) * 8;
     for (let i = 0; i < gBands; i++) {
-      glow.fillStyle(i % 2 ? 0x5a2fa0 : 0x4a2890, 0.02 + i * 0.012);
+      glow.fillStyle(i % 2 ? 0x6a48c0 : 0x5a3cb0, 0.04 + i * 0.02);
       glow.fillRect(0, gTop + i * gH, W, H - gTop - i * gH);
     }
 
     // Far mountains (256×272 @×2) and ruined mid layer (352×240 @×2); an additive twin lifts the rim light
     this.layer(K_FAR, 2, H + 8, 3);
-    this.layer(K_FAR, 2, H + 8, 3, { alpha: 0.7, tint: 0x9a78ff }).setBlendMode(Phaser.BlendModes.ADD);
-    this.layer(K_MID, 2, H + 6, 6, { tint: 0xd8c8ff });
-    this.layer(K_MID, 2, H + 6, 6, { alpha: 0.6, tint: 0x8a68ee }).setBlendMode(Phaser.BlendModes.ADD);
+    this.layer(K_FAR, 2, H + 8, 3, { alpha: 0.95, tint: 0xa894ff }).setBlendMode(Phaser.BlendModes.ADD);
+    this.layer(K_MID, 2, H + 6, 6);
+    this.layer(K_MID, 2, H + 6, 6, { alpha: 0.8, tint: 0x9a84f4 }).setBlendMode(Phaser.BlendModes.ADD);
 
     // Mage tower on the right: 100×299 @×2, base sunk in the foreground
     const tx = Math.round(TOWER_X / 2) * 2, ty = 702;
     this.add.image(tx, ty, K_TOWER).setOrigin(0.5, 1).setScale(2);
-    // window glow flicker + orb glow (stepped squares, additive)
+    // orb glow: soft, round, pixel-stepped halo (was a hard stacked square)
     const orbY = ty - 299 * 2 + 12;
-    const og = this.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
-    for (let i = 3; i >= 1; i--) { og.fillStyle(0x7fd8ff, 0.07 * (4 - i)); const r = i * 12; og.fillRect(tx - r, orbY - r, r * 2, r * 2); }
-    this.tweens.add({ targets: og, alpha: 0.35, duration: 1300, yoyo: true, repeat: -1, ease: 'Stepped', easeParams: [4] });
+    const og = this.pixelGlow(tx, orbY, [36, 26, 18, 10], 0x7fd8ff, 0.09, 2);
+    this.tweens.add({ targets: og, alpha: 0.55, duration: 1300, yoyo: true, repeat: -1, ease: 'Stepped', easeParams: [4] });
     try {
       this.add.particles(tx, orbY, has(K_SPARK) ? K_SPARK : K_DOT, {
         lifespan: 1600, speed: { min: 10, max: 40 }, scale: { start: 2, end: 1 }, alpha: { start: 1, end: 0 },
@@ -183,7 +190,7 @@ export class TitleScene extends Phaser.Scene {
 
     // Foreground hill silhouette: stepped, so no smooth slopes
     const fg = this.add.graphics();
-    fg.fillStyle(0x07050f, 1);
+    fg.fillStyle(0x1a1238, 1);
     for (let x = 0; x < W; x += 16) {
       const near = Math.max(0, 300 - Math.abs(x - tx)) * 0.12;
       const top = Math.round((660 - Math.sin(x / 210) * 14 - near) / 4) * 4;
@@ -211,7 +218,6 @@ export class TitleScene extends Phaser.Scene {
       });
     } catch (e) { console.warn('[title] particles failed', e); }
 
-    this.logoShade();
   }
 
   private pixelShootingStar(rnd: Phaser.Math.RandomDataGenerator) {

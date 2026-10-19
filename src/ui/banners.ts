@@ -43,8 +43,9 @@ export class Banners {
     this.enqueue({ kind: 'level', title: 'LEVEL UP!', text: `Level ${level}`, sub: 'New AP & SP available — press P / K', color: '#ffd76a', durMs: 2600 });
   }
 
-  jobAdvance(jobName: string, desc: string, color: string) {
-    this.enqueue({ kind: 'job', title: 'JOB ADVANCEMENT', text: jobName, sub: desc, color, durMs: 3400 });
+  jobAdvance(jobName: string, desc: string, color: string, year?: number) {
+    const title = year === 4 ? 'GRADUATED — YEAR 4' : year ? `EXAM PASSED — YEAR ${year}` : 'EXAM PASSED';
+    this.enqueue({ kind: 'job', title, text: jobName, sub: desc, color, durMs: 3400 });
   }
 
   private enqueue(b: BigSpec) {

@@ -1,4 +1,4 @@
-/** Tiny DOM helpers for the Arcana Story UI (A8). */
+/** Tiny DOM helpers for The Academy UI (A8). */
 
 export type Child = Node | string | number | null | undefined | false | Child[];
 type Props = Record<string, unknown> | null | undefined;

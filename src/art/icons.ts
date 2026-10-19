@@ -123,16 +123,94 @@ function sparkle(ctx: Ctx, x: number, y: number, r: number, col = '#ffffff') {
 // ───────────────────────────── glyph painters ─────────────────────────────
 
 const P: Record<IconGlyph, Painter> = {
-  // ── holy / shadow / pet (aliases until bespoke painters land) ──
-  halo: (ctx, c, c2) => P.orb(ctx, c, c2),
-  holy_cross: (ctx, c, c2) => P.arcane_star(ctx, c, c2),
-  sunburst: (ctx, c, c2) => P.explosion(ctx, c, c2),
-  wings: (ctx, c, c2) => P.feather(ctx, c, c2),
-  skull: (ctx, c, c2) => P.bone(ctx, c, c2),
-  scythe: (ctx, c, c2) => P.claw(ctx, c, c2),
-  ghost: (ctx, c, c2) => P.eye(ctx, c, c2),
-  poison: (ctx, c, c2) => P.potion(ctx, c, c2),
-  paw: (ctx, c, c2) => P.heart(ctx, c, c2),
+  // ── holy (procedural fallbacks; the pixel sheet wins once it loads) ──
+  halo: (ctx, c, c2) => {
+    // tilted golden ring over a soft glow, with a sparkle
+    circle(ctx, 16, 17, 13); fill(ctx, rg(ctx, 16, 17, 13, [c2, c], 16, 17, 0.35));
+    ell(ctx, 16, 13, 12, 5, -0.12); stroke(ctx, css(shade(c, -0.35)), 5.2);
+    ell(ctx, 16, 13, 12, 5, -0.12); stroke(ctx, lg(ctx, 4, 8, 28, 18, [shade(c, 0.5), c, shade(c, -0.15)]), 3.2);
+    ctx.beginPath(); ctx.ellipse(16, 13, 12, 5, -0.12, Math.PI * 1.05, Math.PI * 1.55); stroke(ctx, W(0.85), 1.3);
+    sparkle(ctx, 16, 24, 5, css(c2)); sparkle(ctx, 25, 23, 2.6);
+  },
+  holy_cross: (ctx, c, c2) => {
+    circle(ctx, 16, 16, 14); fill(ctx, rg(ctx, 16, 16, 14, [c2, c], 16, 16, 0.3));
+    const bar = (x: number, y: number, w: number, hh: number) => { ctx.beginPath(); ctx.rect(x, y, w, hh); };
+    bar(13, 3, 6, 26); fill(ctx, lg(ctx, 13, 0, 19, 0, [shade(c, 0.45), c, shade(c, -0.2)]));
+    bar(5, 9.5, 22, 6); fill(ctx, lg(ctx, 0, 9.5, 0, 15.5, [shade(c, 0.45), c, shade(c, -0.2)]));
+    circle(ctx, 16, 12.5, 3.3); fill(ctx, rg(ctx, 16, 12.5, 3.3, [0xffffff, c2]));
+    sheen(ctx, 14.6, 4.5, 14.6, 9, 1.2, 0.8);
+  },
+  sunburst: (ctx, c, c2) => {
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2, l = i % 2 ? 11 : 15;
+      ctx.beginPath(); ctx.moveTo(16 + Math.cos(a - 0.16) * 6, 16 + Math.sin(a - 0.16) * 6);
+      ctx.lineTo(16 + Math.cos(a) * l, 16 + Math.sin(a) * l); ctx.lineTo(16 + Math.cos(a + 0.16) * 6, 16 + Math.sin(a + 0.16) * 6); ctx.closePath();
+      fill(ctx, css(i % 2 ? c2 : c));
+    }
+    circle(ctx, 16, 16, 7.5); fill(ctx, rg(ctx, 16, 16, 7.5, [0xffffff, c2, c], 14, 13.5));
+    circle(ctx, 13.8, 13.6, 2); fill(ctx, W(0.85));
+  },
+  wings: (ctx, c, c2) => {
+    for (const sgn of [-1, 1]) {
+      for (let k = 0; k < 3; k++) {
+        const y0 = 9 + k * 5, len = 13 - k * 2.5;
+        ctx.beginPath(); ctx.moveTo(16 + sgn * 2, y0 + 2);
+        ctx.quadraticCurveTo(16 + sgn * (len * 0.6), y0 - 5 + k, 16 + sgn * (len + 1), y0 - 3 + k * 1.5);
+        ctx.quadraticCurveTo(16 + sgn * len * 0.7, y0 + 4, 16 + sgn * 2, y0 + 6);
+        ctx.closePath(); fill(ctx, lg(ctx, 16, y0, 16 + sgn * len, y0, [k === 0 ? 0xffffff : c2, c]));
+      }
+    }
+    ell(ctx, 16, 17, 2.4, 6); fill(ctx, body(ctx, c2, 13, 11, 19, 23));
+    ell(ctx, 16, 6, 4.5, 1.7); stroke(ctx, css(c2), 1.4);
+  },
+  // ── shadow ──
+  skull: (ctx, c, c2) => {
+    ctx.beginPath(); ctx.arc(16, 13, 11, Math.PI * 0.95, Math.PI * 0.05);
+    ctx.lineTo(26, 19); ctx.quadraticCurveTo(23, 21, 22, 23); ctx.lineTo(22, 28); ctx.lineTo(10, 28); ctx.lineTo(10, 23); ctx.quadraticCurveTo(9, 21, 6, 19); ctx.closePath();
+    fill(ctx, rg(ctx, 16, 13, 15, [0xffffff, c, shade(c, -0.35)], 12, 8));
+    for (const x of [11.2, 20.8]) { ell(ctx, x, 16, 3.6, 3.9); fill(ctx, D(0.95)); circle(ctx, x, 16.5, 1.3); fill(ctx, css(c2)); }
+    poly(ctx, [16, 19.5, 14.3, 23, 17.7, 23]); fill(ctx, D(0.9));
+    for (const x of [12.5, 15.2, 17.9]) { ctx.beginPath(); ctx.rect(x, 25, 1.4, 3); fill(ctx, D(0.7)); }
+    sheen(ctx, 9, 8, 12, 5, 1.6, 0.6);
+  },
+  scythe: (ctx, c, c2) => {
+    // haft
+    ctx.beginPath(); ctx.moveTo(8, 30); ctx.lineTo(19, 4); stroke(ctx, css(shade(c2, -0.4)), 4.2);
+    ctx.beginPath(); ctx.moveTo(8, 30); ctx.lineTo(19, 4); stroke(ctx, lg(ctx, 8, 30, 19, 4, [shade(c2, -0.1), c2]), 2.4);
+    // crescent blade
+    ctx.beginPath(); ctx.moveTo(18, 5); ctx.quadraticCurveTo(28, 6, 30, 17); ctx.quadraticCurveTo(26, 10, 17.5, 9.5); ctx.closePath();
+    fill(ctx, lg(ctx, 17, 5, 30, 17, [0xffffff, c, shade(c, -0.3)]));
+    ctx.beginPath(); ctx.moveTo(19, 6); ctx.quadraticCurveTo(26.5, 7.5, 29, 15); stroke(ctx, W(0.8), 1);
+    circle(ctx, 18.6, 6.6, 2); fill(ctx, css(c2));
+    for (const [x, y, r] of [[5, 8, 1.6], [26, 25, 1.3], [12, 18, 1]]) { circle(ctx, x, y, r); fill(ctx, css(c, 0.7)); }
+  },
+  ghost: (ctx, c, c2) => {
+    ctx.beginPath(); ctx.moveTo(6, 28); ctx.lineTo(6, 14); ctx.arc(16, 14, 10, Math.PI, 0); ctx.lineTo(26, 28);
+    for (let i = 0; i < 4; i++) { const x = 26 - i * 5; ctx.quadraticCurveTo(x - 1.2, 24, x - 2.5, 27); ctx.quadraticCurveTo(x - 3.8, 30, x - 5, 26.5); }
+    ctx.closePath(); fill(ctx, rg(ctx, 16, 14, 16, [0xffffff, c, shade(c, -0.3)], 12, 9));
+    for (const x of [12, 20]) { ell(ctx, x, 15, 2.2, 3.2); fill(ctx, D(0.95)); circle(ctx, x - 0.6, 14, 0.8); fill(ctx, css(c2)); }
+    ell(ctx, 16, 21.5, 2.2, 1.6); fill(ctx, D(0.8));
+    sheen(ctx, 9, 13, 11, 8, 1.4, 0.6);
+  },
+  poison: (ctx, c, c2) => {
+    // dripping drop + bubbles
+    ctx.beginPath(); ctx.moveTo(16, 3); ctx.bezierCurveTo(19, 9, 25, 14, 25, 20); ctx.arc(16, 20, 9, 0, Math.PI); ctx.bezierCurveTo(7, 14, 13, 9, 16, 3); ctx.closePath();
+    fill(ctx, rg(ctx, 16, 20, 11, [c2, c, shade(c, -0.4)], 13, 16));
+    // skull mark
+    circle(ctx, 16, 20, 3.6); fill(ctx, D(0.55));
+    for (const x of [14.6, 17.4]) { circle(ctx, x, 19.6, 0.9); fill(ctx, css(c2)); }
+    ctx.beginPath(); ctx.rect(14.8, 23, 2.4, 1.6); fill(ctx, D(0.55));
+    sheen(ctx, 11.5, 15, 13.5, 11, 1.6, 0.7);
+    for (const [x, y, r] of [[25, 6, 2.2], [28, 11, 1.4], [7, 7, 1.6]]) { circle(ctx, x, y, r); fill(ctx, rg(ctx, x, y, r, [0xffffff, c2, c])); }
+  },
+  // ── pet / beast ──
+  paw: (ctx, c, c2) => {
+    ell(ctx, 16, 21, 7.5, 6.5); fill(ctx, rg(ctx, 16, 21, 8, [c2, c, shade(c, -0.3)], 14, 18));
+    for (const [x, y, rx, ry, rot] of [[7, 13, 2.8, 3.6, -0.4], [12.5, 8, 3, 3.9, -0.15], [19.5, 8, 3, 3.9, 0.15], [25, 13, 2.8, 3.6, 0.4]]) {
+      ell(ctx, x, y, rx, ry, rot); fill(ctx, rg(ctx, x, y, ry, [c2, c, shade(c, -0.3)], x - 1, y - 1));
+    }
+    sheen(ctx, 12, 18.5, 14.5, 17, 1.4, 0.6);
+  },
   // ── fire ──
   flame: (ctx, c, c2) => flame(ctx, c, c2),
   fireball: (ctx, c, c2) => {
@@ -603,6 +681,8 @@ const DEFAULT_C2: Partial<Record<IconGlyph, number>> = {
   snowflake: 0xeaf8ff, icicle: 0xf4fbff, ice_shard: 0xeaf8ff, frost_nova: 0xeaf8ff, blizzard: 0xffffff, glacier: 0xf4fbff,
   bolt: 0xfff7b0, chain: 0xfff7b0, storm: 0xffe866, thunder_cloud: 0xffe866, spark: 0xfff7b0, orb: 0xffffff,
   arcane_star: 0xffffff, missile: 0xffffff, claw: 0xffffff, shield: 0xe8d36a, teleport: 0xffffff, book: 0xe8d36a,
+  halo: 0xfff6c8, holy_cross: 0xfff6c8, sunburst: 0xfff6c8, wings: 0xffffff, skull: 0x8af08a, scythe: 0x8a6a4a, ghost: 0x7ee8a0,
+  poison: 0xc8ff8a, paw: 0xffd8c8,
   eye: 0xffe066, wind: 0xffffff, potion: 0xdfe6f5, wand: 0xe8d36a, staff: 0xe8d36a, hat: 0xe8d36a, robe: 0xe8d36a,
   shoes: 0xe8d36a, gloves: 0xe8d36a, ring: 0xf0c94a, amulet: 0xf0c94a, scroll: 0xc03a3a, shell: 0xb9a07a, mushroom: 0xffffff,
 };

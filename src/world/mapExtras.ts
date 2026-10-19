@@ -30,13 +30,13 @@ export interface MapExtras {
   density?: number;
 }
 
-const TG = 980; // mistvale ground
+const TG = 980; // Academy campus (map id `mistvale`) ground
 
 export const MAP_EXTRAS: Record<string, MapExtras> = {
   mistvale: {
     spawn: { x: 1200, y: TG },
     density: 0.6,
-    clearZones: [[2700, 3000]],
+    clearZones: [[3360, 3800]],
     decor: [
       { key: 'd_tree_blossom', x: 90, scale: 1.05 },
       { key: 't_well', x: 200, clear: true },
@@ -55,17 +55,26 @@ export const MAP_EXTRAS: Record<string, MapExtras> = {
       { key: 't_tower', x: 1510, clear: true },
       { key: 't_sign_elder', x: 1680, layer: 'mid' },
       { key: 't_lantern', x: 1770, layer: 'mid' },
+      // the five School halls, each with its hanging sign
       { key: 't_hall_fire', x: 1990, clear: true },
       { key: 't_sign_fire', x: 1895, layer: 'mid' },
       { key: 't_hall_ice', x: 2290, clear: true },
       { key: 't_sign_ice', x: 2195, layer: 'mid' },
       { key: 't_hall_storm', x: 2590, clear: true },
       { key: 't_sign_storm', x: 2495, layer: 'mid' },
-      { key: 't_lantern', x: 2760, layer: 'mid' },
-      { key: 'd_oak', x: 2800, scale: 0.9 },
-      { key: 't_gate', x: 2905, layer: 'back', clear: true },
-      { key: 'd_signpost', x: 2830, layer: 'mid' },
-      { key: 'd_fence', x: 2990, layer: 'mid' },
+      { key: 't_lantern', x: 2745, layer: 'mid' },
+      { key: 't_hall_holy', x: 2900, clear: true },
+      { key: 't_sign_holy', x: 2805, layer: 'mid' },
+      { key: 't_banner_holy', x: 3042, clear: true },
+      { key: 't_banner_shadow', x: 3098, clear: true },
+      { key: 't_hall_shadow', x: 3240, clear: true },
+      { key: 't_sign_shadow', x: 3145, layer: 'mid' },
+      { key: 'd_pillar', x: 3420, clear: true },
+      { key: 'd_lamp', x: 3510, layer: 'mid', tint: 0xb8ffc4 },
+      { key: 'd_oak', x: 3600, scale: 0.9 },
+      { key: 't_gate', x: 3705, layer: 'back', clear: true },
+      { key: 'd_signpost', x: 3630, layer: 'mid' },
+      { key: 'd_fence', x: 3790, layer: 'mid' },
     ],
   },
   whisperwood: {

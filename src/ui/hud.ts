@@ -10,7 +10,7 @@ import { onPixelIconsReady, pixelIconUrl, type PixelIconName } from '../art/icon
 
 /** Pixel-art icons for the quick-menu buttons (CSS-drawn fallbacks stay for help/menu or if the sheet fails). */
 const QUICK_ICONS: Partial<Record<WindowName, PixelIconName>> = { stats: 'C_Hat01', inventory: 'I_Chest01', skills: 'W_Book06', quests: 'I_Scroll' };
-import { itemTooltip, skillTooltip, jobName } from './info';
+import { itemTooltip, skillTooltip, jobName, jobYear } from './info';
 
 // ───────────────────────────── Gauge ─────────────────────────────
 
@@ -87,7 +87,7 @@ export class StatusBar {
       h('div', { class: 'ax-gauges' }, this.hp.el, this.mp.el),
       h('div', { class: 'ax-quickbar' },
         btn('Char', 'P', 'stats', 'Character'), btn('Items', 'I', 'inventory', 'Inventory'), btn('Skills', 'K', 'skills', 'Skills'),
-        btn('Quests', 'J', 'quests', 'Quests'), btn('Help', 'H', 'help', 'Controls'), btn('Menu', 'Esc', 'menu', 'Menu')));
+        btn('Tasks', 'J', 'quests', 'Assignments'), btn('Help', 'H', 'help', 'Controls'), btn('Menu', 'Esc', 'menu', 'Menu')));
     this.expEl = h('div', { class: 'ax-expbar' }, this.exp.el);
     ctx.root.appendChild(this.el);
     ctx.root.appendChild(this.expEl);
@@ -113,7 +113,7 @@ export class StatusBar {
       this.sig = sig;
       setText(this.lvNum, String(st.level));
       setText(this.nameEl, st.name);
-      setText(this.jobEl, jobName(st.job));
+      setText(this.jobEl, `Year ${jobYear(st.job)} · ${jobName(st.job)}`);
     }
   }
 
@@ -186,7 +186,7 @@ export class Hotbar {
     }
     const def = Registry.skill(entry);
     if (!def) return h('div', { class: 'ax-tt' }, entry);
-    return skillTooltip(def, { level: p.state.skills[entry] ?? 0, matk: safe(() => p.derived().matk, 0), hotbar: true });
+    return skillTooltip(def, { level: p.state.skills[entry] ?? 0, matk: safe(() => p.derived().matk, 0), hotbar: true, learned: p.state.skills });
   }
 
   flash(skillId: string, fail = false) {

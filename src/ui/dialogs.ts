@@ -232,7 +232,7 @@ export class DeathModal {
     this.el = h('div', { class: 'ax-death', style: 'display:none' },
       h('div', { class: 'ax-death-panel' },
         h('div', { class: 'ax-death-title' }, 'You have fallen…'),
-        h('div', { class: 'ax-death-text' }, 'Your spirit drifts back toward Mistvale. You will lose a portion of your EXP.'),
+        h('div', { class: 'ax-death-text' }, 'You wake in the Academy infirmary. You will lose a portion of your EXP.'),
         h('button', { class: 'ax-btn ax-btn-large', onclick: () => this.respawn() }, 'Return to Town')));
     ctx.root.appendChild(this.el);
   }

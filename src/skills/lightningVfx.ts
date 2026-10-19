@@ -22,6 +22,7 @@ import {
   skateDepart, skateArrive, skateTrail, channelFocus, channelArc,
   circuitLattice, circuitPulse, reprisalAegis, reprisalFangs,
 } from './lightning/spellbookVfx';
+import { registerLightningYear5Vfx } from './lightning/vfx5';
 
 /** Boot hook: textures are built on first lightning VFX (or in the background while on the Title screen). */
 export function generateLightningTextures(scene: Phaser.Scene): void { scheduleIdle(scene, 'lightning', generateTextures); }
@@ -660,4 +661,5 @@ export function registerLightningVfx(): void {
   registerVfx('ltn_thunderbird', thunderbird);
   registerVfx('ltn_surge_cast', surgeCast);
   registerVfx('ltn_surge_aura', surgeAura);
+  registerLightningYear5Vfx(registerVfx);
 }

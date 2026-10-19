@@ -3,6 +3,7 @@ import type { IconSpec, SkillContext, SkillDef, StatusSpec } from '../core/types
 import { playVfx } from '../core/vfx';
 import { STORM, lerpLv } from './lightning/shared';
 import { SPELLBOOK_LIGHTNING_SKILLS } from './lightning/spellbook';
+import { LIGHTNING_Y5 } from './lightning/year5';
 
 const lin = (a: number, b: number, max: number) => (lv: number) => lerpLv(a, b, lv, max);
 const linR = (a: number, b: number, max: number) => (lv: number) => Math.round(lerpLv(a, b, lv, max));
@@ -553,4 +554,5 @@ export const LIGHTNING_SKILLS: SkillDef[] = [
     ],
   },
   ...SPELLBOOK_LIGHTNING_SKILLS,
+  ...LIGHTNING_Y5,
 ];

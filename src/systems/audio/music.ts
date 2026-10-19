@@ -25,7 +25,7 @@ interface SongDef {
   leadOctaveUpOnRepeat?: boolean;
   counter?: { notes: string; inst: LeadInst; vol?: number; everyOther?: boolean };
   bass: { pattern: string[]; inst: BassInst; octave: number; vol?: number };   // pattern per bar (cycled)
-  pad?: { octave: number; cutoff: number; vol?: number; pattern?: string[]; wave?: OscillatorType };
+  pad?: { octave: number; cutoff: number; vol?: number; pattern?: string[]; wave?: OscillatorType; detune?: number };   // detune: cents either side (default 6)
   arp?: { pattern: string[]; octave: number; inst: LeadInst; vol?: number; everyOther?: boolean };
   drums?: { kick?: string[]; snare?: string[]; hat?: string[]; tick?: string[]; vol?: number; crashOnLoop?: boolean };   // tick: clock click, "x" tick / "o" lower tock
   echo?: { time: number; feedback: number; mix: number };
@@ -220,9 +220,72 @@ const SONGS: Record<MusicKey, SongDef> = {
     drums: { kick: ['x . . . . . . .'], tick: ['x . o . x . o .'], vol: 0.5 },
     echo: { time: 0.268, feedback: 0.25, mix: 0.15 },
   },
-  // Placeholder aliases for the Year 5 zones (replaced by bespoke tracks).
-  get astral() { return SONGS.storm; },
-  get rift() { return SONGS.boss; },
+  // Astral Observatory (Lv 50-57): above the clouds, D lydian (the E major chord and G# carry the lydian
+  // glow). Slow 76 bpm, 16th grid (res 4). Crystal lead + bell counter-pings, a shimmering bell arp, sine drone,
+  // soft triangle pad and a long dotted echo. It BUILDS across the 12-bar loop: the arp thickens (sparse ->
+  // eighths -> 16ths), a hat shimmer enters at bar 5, a soft kick at bar 7, then it thins back out for the loop.
+  astral: {
+    bpm: 76, beats: 4, res: 4,
+    chords: ['Dmaj7', 'E', 'F#m', 'Gmaj7', 'Dmaj7', 'E', 'Bm', 'A', 'Gmaj7', 'E', 'Gmaj7 A', 'Dmaj7'],
+    melody: `A5 - - - - - - - F#5 - - - A5 - - -
+             B5 - - - - - - - G#5 - - - B5 - - -
+             C#6 - - - - - A5 - F#5 - - - - - . .
+             D6 - - - - - - - B5 - - - - - . .
+             F#6 - - - - - - - E6 - - - D6 - - -
+             G#6 - - - - - E6 - B5 - - - - - - -
+             D6 - - - B5 - - - F#5 - - - D5 - - -
+             E5 - - - A5 - - - C#6 - - - E6 - - -
+             D6 - - - - - B5 - D6 - - - F#6 - - -
+             G#6 - - - - - - - B6 - - - - - - -
+             G6 - - - F#6 - - - E6 - - - C#6 - - -
+             D6 - - - - - - - - - - - - - . .`,
+    lead: 'crystal', leadVol: 0.09,
+    counter: { notes: `. . . . . . . . . . . . . . . .
+                       . . . . . . . . . . . . . . . .
+                       . . . . . . . . . . . . . . . .
+                       . . . . . . . . . . . . . . . .
+                       A4 - - - - - - - D5 - - - - - - -
+                       B4 - - - - - - - E5 - - - - - - -
+                       D5 - - - - - - - F#5 - - - - - - -
+                       C#5 - - - - - - - E5 - - - - - - -
+                       B4 - - - - - - - D5 - - - - - - -
+                       G#4 - - - - - - - B4 - - - - - - -
+                       B4 - - - - - - - C#5 - - - - - - -
+                       A4 - - - - - - - - - - - - - - -`, inst: 'bell', vol: 0.05, everyOther: true },
+    bass: { pattern: ['R - - - - - - - - - - - 5 - - -', 'R - - - - - - - - - - - - - - -'], inst: 'sine', octave: 2, vol: 0.34 },
+    pad: { octave: 4, cutoff: 2600, vol: 0.04, wave: 'triangle' },
+    arp: { pattern: [
+      '0 . . . . . 2 . . . . . 3 . . .', '0 . . . . . 2 . . . . . 3 . . .',
+      '0 . 1 . 2 . 3 . 2 . 1 . 2 . 3 .', '0 . 1 . 2 . 3 . 2 . 1 . 2 . 3 .', '0 . 1 . 2 . 3 . 2 . 1 . 2 . 3 .', '0 . 1 . 2 . 3 . 2 . 1 . 2 . 3 .',
+      '0 1 2 3 2 1 2 3 0 1 2 3 4 3 2 1', '0 1 2 3 2 1 2 3 0 1 2 3 4 3 2 1', '0 1 2 3 2 1 2 3 0 1 2 3 4 3 2 1', '0 1 2 3 2 1 2 3 0 1 2 3 4 3 2 1', '0 1 2 3 2 1 2 3 0 1 2 3 4 3 2 1',
+      '0 . . . . . 2 . . . . . 3 . . .',
+    ], octave: 5, inst: 'bell', vol: 0.03 },
+    drums: {
+      kick: [...Array(6).fill('. . . . . . . . . . . . . . . .'), ...Array(5).fill('x . . . . . . . . . . . . . . .'), '. . . . . . . . . . . . . . . .'],
+      hat: [...Array(4).fill('. . . . . . . . . . . . . . . .'), ...Array(7).fill('. . x . . . x . . . x . . . x .'), '. . . . . . . . . . . . . . x .'],
+      vol: 0.3,
+    },
+    echo: { time: 0.592, feedback: 0.45, mix: 0.36 },
+  },
+  // The Void Rift (Lv 57-64): D minor with a chromatic rot (b2 Eb, tritone Ab, C#/Db leading tones, Gdim/A7).
+  // 126 bpm, 12 bars. Driving saw-bass 8th pulse, heavily detuned saw pad (+-18 cents), a saw lead creeping around
+  // a chromatic cell (D Eb D C#), off-beat pluck arp, distant tritone bell stingers (Ab, Db) every 4th bar.
+  rift: {
+    bpm: 126, beats: 4, res: 2,
+    chords: ['Dm', 'Dm', 'Eb', 'Dm', 'Gm', 'Gm', 'Ab', 'A7', 'Dm', 'Eb Dm', 'Bbm Gdim', 'A7'],
+    melody: `D5 - . D5 Eb5 D5 C#5 . | D5 - A4 - Bb4 - A4 . | Eb5 - . Eb5 F5 Eb5 D5 . | D5 - C#5 - D5 - A4 . |
+             G5 - . G5 Ab5 G5 F#5 . | G5 - D5 - Eb5 - D5 . | Ab5 - . Ab5 Bb5 Ab5 G5 . | A5 - G5 - F5 - E5 C#5 |
+             D6 - . D6 Eb6 D6 C#6 . | Eb6 - D6 - A5 - F5 - | Bb5 - F5 - Db6 - Bb5 - | E6 - . E6 F6 E6 C#6 A5`,
+    lead: 'saw', leadVol: 0.07,
+    counter: { notes: `. . . . . . . . | . . . . . . . . | . . . . . . . . | Ab5 - - - - - - - |
+                       . . . . . . . . | . . . . . . . . | . . . . . . . . | Db6 - - - - - - - |
+                       . . . . . . . . | . . . . . . . . | . . . . . . . . | Ab5 - - - - - - -`, inst: 'bell', vol: 0.045 },
+    bass: { pattern: ['R R R R R R R R', 'R R R R R R O R'], inst: 'saw', octave: 1, vol: 0.22 },
+    pad: { octave: 3, cutoff: 900, vol: 0.045, wave: 'sawtooth', detune: 18 },
+    arp: { pattern: ['. 0 . 2 . 0 . 1', '. 0 . 2 . 1 . 2'], octave: 4, inst: 'pluck', vol: 0.03 },
+    drums: { kick: ['x . x . x . x .'], snare: ['. . x . . . x .', '. . x . . . x x'], hat: ['x x x x x x x x'], vol: 0.65, crashOnLoop: true },
+    echo: { time: 0.357, feedback: 0.3, mix: 0.15 },
+  },
 };
 
 // ───────────────────────────── parsing ─────────────────────────────
@@ -378,9 +441,9 @@ function playBass(s: SynthCtx, inst: BassInst, f: number, dur: number, v: number
   }
 }
 
-function playPad(s: SynthCtx, freqs: number[], dur: number, v: number, cutoff: number, wave: OscillatorType = 'sawtooth') {
+function playPad(s: SynthCtx, freqs: number[], dur: number, v: number, cutoff: number, wave: OscillatorType = 'sawtooth', det = 6) {
   for (const f of freqs) {
-    for (const d of [-6, 6]) {
+    for (const d of [-det, det]) {
       tone(s, { type: wave, f, detune: d, dur: dur + 0.35, v, a: Math.min(0.3, dur * 0.3), hold: Math.max(0, dur - 0.3), release: 'lin', filter: { type: 'lowpass', f: cutoff, q: 0.7 } });
     }
   }
@@ -535,10 +598,10 @@ export class SongPlayer {
         if (pp[inBar] === 'x') {
           let len = 1;
           while (pp[inBar + len] === '-') len++;
-          playPad(s, freqs, len * sd * 0.9, def.pad.vol ?? 0.04, def.pad.cutoff, def.pad.wave);
+          playPad(s, freqs, len * sd * 0.9, def.pad.vol ?? 0.04, def.pad.cutoff, def.pad.wave, def.pad.detune);
         }
       } else if (chordStart[step]) {
-        playPad(s, freqs, chordLen[step] * sd, def.pad.vol ?? 0.04, def.pad.cutoff, def.pad.wave);
+        playPad(s, freqs, chordLen[step] * sd, def.pad.vol ?? 0.04, def.pad.cutoff, def.pad.wave, def.pad.detune);
       }
     }
     // arp

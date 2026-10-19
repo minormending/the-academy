@@ -541,6 +541,8 @@ export interface PlayerState {
   honors?: HonorsState;
   /** Story mode: class progress by course id (absent on old saves; CourseSystem grants credit for finished Years). */
   courses?: Record<string, CourseProgress>;
+  /** Set once the Year 5 finale has been held (the story is complete). */
+  storyComplete?: boolean;
 }
 
 /** Persisted Academy Honors state (see src/data/honors.ts, src/systems/HonorsSystem.ts). */

@@ -14,6 +14,7 @@ import { objectiveGoal } from '../core/quest';
 import { FELLOWSHIP_YEAR, FINAL_YEAR, SCHOOL_NAME, SCHOOL_PROFESSOR, isSchool, yearOfTier } from '../data/jobs';
 import { computeDerived, deathExpLoss } from './progression/stats';
 import { newUid, repairState, writeSave } from './SaveSystem';
+import { canAcceptMission, hasGraduated } from './CourseSystem';
 
 /** Max inventory stacks. */
 export const MAX_INVENTORY_STACKS = 48;
@@ -57,6 +58,43 @@ export class Progression implements IProgression {
     Object.assign(this.state, repairState(this.state));
     this.dead = this.state.hp <= 0;
     bus.on('monster:killed', ({ monster }) => this.onMonsterKilled(monster));
+    bus.on('map:changed', ({ mapId }) => this.markObjectives(o => o.kind === 'visit' && o.mapId === mapId));
+    bus.on('npc:talked', ({ npcId }) => this.markObjectives(o => o.kind === 'talk' && o.npcId === npcId));
+  }
+
+  /** Count once-only objectives (`visit` / `talk`) matching `match` on every unfinished quest. */
+  private markObjectives(match: (o: QuestDef['objectives'][number]) => boolean) {
+    try {
+      let any = false;
+      for (const [qid, prog] of Object.entries(this.state.quests)) {
+        if (prog.status === 'turned_in') continue;
+        const q = Registry.quest(qid);
+        if (!q) continue;
+        let touched = false;
+        q.objectives.forEach((o, i) => {
+          if (match(o) && (prog.counts[i] ?? 0) < objectiveGoal(o)) { prog.counts[i] = objectiveGoal(o); touched = true; }
+        });
+        if (touched) { any = true; this.evalQuest(q, true); }
+      }
+      if (any) this.changed();
+    } catch (e) {
+      console.warn('[progression] objective update failed', e);
+    }
+  }
+
+  /**
+   * Story-mode Year gate. null = no classes this Year (legacy exam flow applies); otherwise whether the Year
+   * is passed (enough badges incl. the required kinds). Years only advance through CourseSystem then.
+   */
+  private courseGate(): boolean | null {
+    const c = this.services.courses;
+    if (!c) return null;
+    try {
+      if (!c.catalogue().length) return null;
+      return c.yearProgress().ready;
+    } catch {
+      return null;
+    }
   }
 
   // ─────────────────────────── Stats ───────────────────────────
@@ -129,7 +167,8 @@ export class Progression implements IProgression {
       // Announce a new advancement only on the level-up that first crosses its required level.
       const job = this.jobDef();
       const crossed = Registry.jobs().some(j => j.parent === job.id && startLevel < j.requiredLevel && s.level >= j.requiredLevel);
-      if (crossed) {
+      // Story mode announces the end of a Year when its last badge lands (CourseSystem), not on level-up.
+      if (crossed && this.courseGate() === null) {
         let text = 'You are ready to declare a School! Speak with Headmistress Maelis on campus.';
         if (job.tier > 1) {
           const prof = isSchool(job.branch) ? Registry.npc(SCHOOL_PROFESSOR[job.branch])?.name : undefined;
@@ -333,20 +372,33 @@ export class Progression implements IProgression {
 
   availableAdvancements(): JobId[] {
     const s = this.state;
+    const gate = this.courseGate();
     return Registry.jobs()
       .filter(j => j.parent === s.job && s.level >= j.requiredLevel)
       .filter(j => {
+        if (gate !== null) return this.storyGateAllows(j, gate);
         const qid = JOB_ADVANCEMENT_QUESTS[j.id];
         return !qid || s.quests[qid]?.status === 'turned_in';
       })
       .map(j => j.id);
   }
 
-  /** Validates parent + level (the tier-3/4/5 exam quests are gated by NPC scripts / availableAdvancements). */
+  /** Story mode: the Year must be passed, and the Fellowship (tier 5) admits only graduates. */
+  private storyGateAllows(j: JobDef, gate: boolean): boolean {
+    return gate && (j.tier < FELLOWSHIP_YEAR || hasGraduated(this.state));
+  }
+
+  /**
+   * Validates parent + level. In story mode (classes this Year) it also needs the Year passed, so NPC exam
+   * flows cannot skip a Year; CourseSystem.declareMajor/promote are the way through. Without classes the
+   * tier-3/4/5 exam quests are gated by NPC scripts / availableAdvancements.
+   */
   advanceJob(job: JobId): boolean {
     const def = Registry.job(job);
     const s = this.state;
     if (!def || def.parent !== s.job || s.level < def.requiredLevel) return false;
+    const gate = this.courseGate();
+    if (gate !== null && !this.storyGateAllows(def, gate)) return false;
     s.job = job;
     s.sp += JOB_ADVANCE_BONUS_SP;
     this.cache = null;
@@ -650,13 +702,18 @@ export class Progression implements IProgression {
     if (!q || this.state.quests[questId]) return false;
     if (this.state.level < q.minLevel) return false;
     if (q.requiredJobBranch && q.requiredJobBranch !== 'none' && this.jobDef().branch !== q.requiredJobBranch) return false;
-    return true;
+    // Class missions: course order, the class's Year ≤ the player's, majors only for their School.
+    return canAcceptMission(this.state, questId);
   }
 
   acceptQuest(questId: string) {
     if (!this.canAcceptQuest(questId)) return;
     const q = Registry.quest(questId)!;
-    this.state.quests[questId] = { status: 'active', counts: q.objectives.map(() => 0) };
+    // A `visit` objective for the map the player is already on counts straight away.
+    this.state.quests[questId] = {
+      status: 'active',
+      counts: q.objectives.map(o => (o.kind === 'visit' && o.mapId === this.state.mapId ? 1 : 0)),
+    };
     bus.emit('ui:log', { text: this.isExam(q) ? `${q.name} — good luck!` : `Assignment accepted: ${q.name}`, color: LOG.quest });
     this.evalQuest(q, false);
     bus.emit('quest:updated', { questId });

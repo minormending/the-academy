@@ -1,7 +1,13 @@
 // OWNER: A9 (progression). NPC conversation scripts. Each script emits 'ui:dialog' / 'ui:shop' on the bus.
 // The Academy: Headmistress Maelis lets Year 1 students declare one of five Schools at level 10; each School's
 // Professor runs its Year 3 and Year 4 Exams and the Year 5 Fellowship Exam (the job-advancement quests). NPC ids are unchanged.
-import type { DialogOption, GameServices, JobId, QuestDef } from '../core/types';
+//
+// Story mode (services.courses present): every teacher has a "Classes" section that offers, tracks and hands in the
+// missions of their classes, and pins the badge when a class's last mission is handed in. Quests that belong to a
+// class are offered only there. Years advance only through Headmistress Maelis (report card → Declare my major in
+// Year 1, promotion ceremony in Years 2–4, the finale in Year 5); Year-end Exam hand-ins no longer advance the job.
+// Without the course service (older harnesses) the old flows run unchanged.
+import type { CourseDef, CourseKind, DialogOption, GameServices, ICourses, JobId, QuestDef, YearNo } from '../core/types';
 import { bus } from '../core/events';
 import { Registry } from '../core/registry';
 import { JOB_LEVELS } from '../core/constants';
@@ -81,15 +87,34 @@ function rewardsText(q: QuestDef): string {
   return parts.length ? `Reward: ${parts.join(', ')}` : '';
 }
 
-function sideQuestsFor(npcId: string): QuestDef[] {
+// ─────────────────────────── Story mode switches ───────────────────────────
+
+/** The course service; its presence is what turns story mode on (older harnesses run the old flows). */
+function coursesOf(s: GameServices | undefined): ICourses | undefined { return s?.courses; }
+
+/**
+ * Old flows retired in story mode for new players: the level-10 "Declaration Day" (Maelis's "Declare my major"
+ * replaces it). A save that already has it can still hand it in.
+ */
+const RETIRED_IN_STORY_MODE = new Set(['story_declaration']);
+
+/** In story mode, a quest that belongs to a class is offered only through that class (no double offers). */
+function hiddenFromOldFlows(s: GameServices | undefined, p: Progression, questId: string): boolean {
+  if (!coursesOf(s)) return false;
+  if (Registry.courseOfMission(questId)) return true;
+  return RETIRED_IN_STORY_MODE.has(questId) && !p.state.quests[questId];
+}
+
+function sideQuestsFor(s: GameServices | undefined, p: Progression, npcId: string): QuestDef[] {
   // Story quests (main line + orientation) have their own dialog and gating — see the Story section.
-  return Registry.quests().filter(q => q.giver === npcId && !JOB_QUEST_IDS.has(q.id) && !STORY_QUEST_IDS.has(q.id));
+  return Registry.quests().filter(q => q.giver === npcId && !JOB_QUEST_IDS.has(q.id) && !STORY_QUEST_IDS.has(q.id)
+    && !hiddenFromOldFlows(s, p, q.id));
 }
 
 /** Dialog options for this NPC's Assignments (available / in progress / ready). */
 function questOptions(c: Ctx, back: () => void): DialogOption[] {
   const out: DialogOption[] = [];
-  for (const q of sideQuestsFor(c.npcId)) {
+  for (const q of sideQuestsFor(c.s, c.p, c.npcId)) {
     if (supersededByStory(c.p, q.id)) continue;
     const st = c.p.questStatus(q.id);
     if (st === 'available') out.push(go(`[Assignment] ${q.name}`, () => offerQuest(c, q, back)));
@@ -127,12 +152,35 @@ function offerQuest(c: Ctx, q: QuestDef, back: () => void) {
 }
 
 function turnIn(c: Ctx, q: QuestDef, back: () => void) {
-  if (c.p.turnInQuest(q.id)) {
-    const line = ASSIGNMENT_LINES[q.id]?.done;
-    say(c, `${line ? fill(c, line) : 'Full marks! Thank you, truly.'}\n\n${rewardsText(q)}`, [go('Anything else?', back), bye('Happy to help.')]);
-  } else {
-    say(c, 'Hmm, your satchel is bursting at the seams. Make a little room and come back.', [bye('Okay.')]);
+  const text = handIn(c, q);
+  if (text !== null) say(c, text, [go('Anything else?', back), bye('Happy to help.')]);
+  else say(c, 'Hmm, your satchel is bursting at the seams. Make a little room and come back.', [bye('Okay.')]);
+}
+
+/**
+ * Hand a quest in and return the giver's line plus rewards (story steps use their STORY_SCRIPT lines and after-hooks).
+ * Null when the hand-in failed (satchel full / not complete).
+ */
+function handIn(c: Ctx, q: QuestDef): string | null {
+  if (!c.p.turnInQuest(q.id)) return null;
+  const L = STORY_SCRIPT[q.id];
+  if (L) {
+    if (L.after) {
+      try { L.after(c); } catch (e) { console.warn('[story] after-hook failed', e); }
+      // turnInQuest already saved 'turned_in'; persist what the hook granted (e.g. graduation merits) right away.
+      try { c.p.save(); } catch { /* ignore */ }
+    }
+    const rewards = rewardsText(q);
+    return `${L.done(c)}${rewards ? `\n\n${rewards}` : ''}`;
   }
+  const line = ASSIGNMENT_LINES[q.id]?.done ?? examPassedLine(c, q);
+  return `${line ? fill(c, line) : 'Full marks! Thank you, truly.'}\n\n${rewardsText(q)}`;
+}
+
+/** Story mode: a Year-end Exam handed in to its Professor (the exam is just the major class's last mission now). */
+function examPassedLine(c: Ctx, q: QuestDef): string | undefined {
+  const sc = PROFESSOR_SCHOOL[c.npcId];
+  return sc && JOB_QUEST_IDS.has(q.id) ? PROFESSOR_LINES[sc].examPassed : undefined;
 }
 
 // ─────────────────────────── Story: main questline + Year 1 orientation ───────────────────────────
@@ -156,10 +204,10 @@ function storyHandles(npcId: string, q: QuestDef): boolean {
   return q.giver === npcId || (!!STORY_FLOW[q.id]?.anyProfessor && !!PROFESSOR_SCHOOL[npcId]);
 }
 
-function storyNotice(p: Progression, npcId: string): NpcNotice {
+function storyNotice(s: GameServices, p: Progression, npcId: string): NpcNotice {
   let notice: NpcNotice = null;
   for (const q of STORY_QUESTS) {
-    if (!storyHandles(npcId, q)) continue;
+    if (!storyHandles(npcId, q) || hiddenFromOldFlows(s, p, q.id)) continue;
     const st = storyStatus(p, q);
     if (st === 'complete') return 'turnin';
     if (st === 'available') notice = 'new';
@@ -268,13 +316,16 @@ const STORY_SCRIPT: Record<string, StoryLines> = {
     done: () => 'Textbook! Take these sandals — the trail gets muddy.\n\nFrom here, Year 1 is about practice: my field practicums, assignments from the staff, and levels. The Headmistress has your next assignment — head back to campus and see her.',
   },
   story_declaration: {
+    // Old flow only: in story mode new players never get this step; a save that has it can still hand it in.
     offer: c => fill(c, 'You survived orientation, {name}! Now the real work begins. Study, practise, and reach level 10. Then come back to me and declare your School.\n\nPrefect Finn\'s practicums in Whisperwood will get you there, and Bram, Tilda and the Professors always need a hand.'),
     accepted: () => 'Off you go. And do talk to the Professors before you choose.',
     progress: c => `Level ${c.p.state.level} of 10. Keep at it — Finn always has work for willing hands.`,
-    done: c => c.p.jobDef().tier === 1
-      ? fill(c, 'Level 10. Your Year 1 studies are complete, {name}. This cap marks you as an upperclassman.\n\nNow, the declaration.')
-      : fill(c, 'Declared already, I see! Eager. Take your upperclassman\'s cap all the same, {job}.'),
-    next: (c, back) => c.p.jobDef().tier === 1
+    done: c => c.p.jobDef().tier !== 1
+      ? fill(c, 'Declared already, I see! Eager. Take your upperclassman\'s cap all the same, {job}.')
+      : coursesOf(c.s)
+        ? fill(c, 'Level 10. This cap marks you as an upperclassman, {name}.\n\nThe declaration itself waits on your report card: pass your classes, and we will talk about your major.')
+        : fill(c, 'Level 10. Your Year 1 studies are complete, {name}. This cap marks you as an upperclassman.\n\nNow, the declaration.'),
+    next: (c, back) => c.p.jobDef().tier === 1 && !coursesOf(c.s)
       ? [go('I am ready to declare.', () => chooseSchool(c)), go('Tell me about the Schools.', () => explainSchools(c, back)), bye('I need a moment.')]
       : [go('Anything else?', back), bye('Thank you, Headmistress!')],
   },
@@ -297,7 +348,7 @@ const STORY_SCRIPT: Record<string, StoryLines> = {
     })}\n\nThe faculty keep sealed notes on the Forbidden Wing. Pages are missing from all five Schools' copies, mine included. Their ink-magic drifted to Frostfang Cliffs, and the Ice Wisps there drank it. Bring me 10 Wisp Essences and I will read what they remember.`,
     accepted: () => 'Frostfang Cliffs, past Shroom Hollow. Dress warmly.',
     progress: () => 'The essences are cold and patient. Be the same.',
-    done: () => '...I see a hall of violet glass. Wisps carrying pages, one by one, into the dark. And a voice, counting them.\n\nThe Headmistress must hear this. Pass your Year 3 Exam first — at level 25 — so she can seat you at the faculty table.',
+    done: c => `...I see a hall of violet glass. Wisps carrying pages, one by one, into the dark. And a voice, counting them.\n\nThe Headmistress must hear this.${coursesOf(c.s) ? ' Once she promotes you to Year 3, she will seat you at the faculty table.' : ' Pass your Year 3 Exam first — at level 25 — so she can seat you at the faculty table.'}`,
   },
 
   // ───── Year 3 ─────
@@ -398,14 +449,19 @@ function retireSideArchon(p: Progression) {
 export const GRADUATION_MERITS = 1000;
 
 function storyOffer(c: Ctx, q: QuestDef, back: () => void) {
+  storyOfferWith(c, q, back, '', () => storyTurnIn(c, q, back));
+}
+
+/** A story step's offer page; `header` heads the text (class code), `finish` hands in a talk step on the spot. */
+function storyOfferWith(c: Ctx, q: QuestDef, back: () => void, header: string, finish: () => void) {
   const L = STORY_SCRIPT[q.id];
   const talk = !!STORY_FLOW[q.id]?.talk;
-  const text = [L ? L.offer(c) : q.description, talk ? '' : objectivesText(c.p, q), rewardsText(q)].filter(Boolean).join('\n\n');
+  const text = [header, L ? L.offer(c) : q.description, talk ? '' : objectivesText(c.p, q), rewardsText(q)].filter(Boolean).join('\n\n');
   say(c, text, [
     go(L?.accept ?? 'Accept', () => {
       c.p.acceptQuest(q.id);
       const st = c.p.questStatus(q.id);
-      if (st === 'complete') { storyTurnIn(c, q, back); return; }
+      if (st === 'complete') { finish(); return; }
       if (st !== 'active') { say(c, 'Hmm, not quite yet. Come back a little later.', [go('Back', back), bye()]); return; }
       say(c, L?.accepted?.(c) ?? pick(['Wonderful! Off you go, then.', 'I knew I could count on you!']), [...(L?.extra?.(c) ?? []), bye('On my way!')]);
     }),
@@ -419,26 +475,19 @@ function storyProgress(c: Ctx, q: QuestDef, back: () => void) {
 }
 
 function storyTurnIn(c: Ctx, q: QuestDef, back: () => void) {
-  if (!c.p.turnInQuest(q.id)) {
+  const text = handIn(c, q);
+  if (text === null) {
     say(c, 'Your satchel is bursting at the seams. Make a little room and come back.', [bye('Okay.')]);
     return;
   }
-  const L = STORY_SCRIPT[q.id];
-  if (L?.after) {
-    try { L.after(c); } catch (e) { console.warn('[story] after-hook failed', e); }
-    // turnInQuest already saved 'turned_in'; persist what the hook granted (e.g. graduation merits) right away.
-    try { c.p.save(); } catch { /* ignore */ }
-  }
-  const rewards = rewardsText(q);
-  say(c, `${L ? L.done(c) : 'Well done!'}${rewards ? `\n\n${rewards}` : ''}`,
-    L?.next?.(c, back) ?? [go('Anything else?', back), bye('Thank you!')]);
+  say(c, text, STORY_SCRIPT[q.id]?.next?.(c, back) ?? [go('Anything else?', back), bye('Thank you!')]);
 }
 
 /** Story options for this NPC: available / in progress / ready to hand in, plus a level-gated teaser. */
 function storyOptions(c: Ctx, back: () => void): DialogOption[] {
   const out: DialogOption[] = [];
   for (const q of STORY_QUESTS) {
-    if (!storyHandles(c.npcId, q)) continue;
+    if (!storyHandles(c.npcId, q) || hiddenFromOldFlows(c.s, c.p, q.id)) continue;
     const st = storyStatus(c.p, q);
     const tag = STORY_FLOW[q.id]?.tag ?? 'Story';
     if (st === 'available') out.push(go(`[${tag}] ${q.name}`, () => storyOffer(c, q, back)));
@@ -501,6 +550,212 @@ function forbiddenWingOption(c: Ctx, sc: School, back: () => void): DialogOption
   return [go('What do you make of the Forbidden Wing?', () => say(c, FORBIDDEN_WING_CHAT[sc][phase], [go('Back', back), bye()]))];
 }
 
+// ─────────────────────────── Classes (story mode) ───────────────────────────
+// Each teacher's "Classes" section. A mission is offered and handed in by its giver (usually the teacher; story steps
+// keep their own giver, e.g. Bram's supplies run). The teacher also lists missions that are with someone else, and
+// pins the badge: straight away when the last mission is handed in to them, or from the "[Badge]" option otherwise.
+
+type ClassState = 'offer' | 'soon' | 'active' | 'complete' | 'elsewhere' | 'badge';
+interface ClassEntry { course: CourseDef; mission: QuestDef | null; state: ClassState }
+
+function npcName(id: string) { return Registry.npc(id)?.name ?? pretty(id); }
+
+/** Who runs a mission, for "see X" hints. */
+function missionGiverName(q: QuestDef): string {
+  return STORY_FLOW[q.id]?.anyProfessor ? 'any Professor' : npcName(q.giver);
+}
+
+function allMissionsHandedIn(p: Progression, course: CourseDef): boolean {
+  return course.missions.length > 0 && course.missions.every(id => p.state.quests[id]?.status === 'turned_in');
+}
+
+/** This NPC's open classes this Year: current mission and where it stands. */
+function classEntries(s: GameServices, p: Progression, npcId: string): ClassEntry[] {
+  const cs = coursesOf(s);
+  if (!cs) return [];
+  const out: ClassEntry[] = [];
+  for (const course of cs.catalogue()) {
+    // 'locked' can just mean the first mission is above the student's level; currentMission() filters ineligible classes.
+    if (cs.status(course.id) === 'passed') continue;
+    const teaches = course.teacher === npcId;
+    const m = cs.currentMission(course.id);
+    if (!m) {
+      if (teaches && allMissionsHandedIn(p, course)) out.push({ course, mission: null, state: 'badge' });
+      continue;
+    }
+    if (!storyHandles(npcId, m)) {
+      if (teaches) out.push({ course, mission: m, state: 'elsewhere' });
+      continue;
+    }
+    const st = p.questStatus(m.id);
+    if (st === 'complete') out.push({ course, mission: m, state: 'complete' });
+    else if (st === 'active') out.push({ course, mission: m, state: 'active' });
+    else if (st === 'turned_in') continue; // currentMission should already have moved on
+    else if (p.canAcceptQuest(m.id)) out.push({ course, mission: m, state: 'offer' });
+    else if (p.state.level < m.minLevel) out.push({ course, mission: m, state: 'soon' });
+  }
+  return out;
+}
+
+function classNotice(s: GameServices, p: Progression, npcId: string): NpcNotice {
+  let notice: NpcNotice = null;
+  for (const e of classEntries(s, p, npcId)) {
+    if (e.state === 'complete' || e.state === 'badge') return 'turnin';
+    if (e.state === 'offer') notice = 'new';
+  }
+  return notice;
+}
+
+/** "PYR 101 · Kindling 101 — Mission 2 of 3". */
+function classHeader(course: CourseDef, q: QuestDef | null): string {
+  const k = q ? course.missions.indexOf(q.id) : -1;
+  return `${course.code} · ${course.name}${k >= 0 ? ` — Mission ${k + 1} of ${course.missions.length}` : ''}`;
+}
+
+const CLASSES_INTRO: Record<string, string> = {
+  elder_maelis: 'Your coursework with me this term, {name}. I keep a tidy register.',
+  pyra: 'Class roster! Here\'s where you stand with me, kid.',
+  glacius: 'Your coursework with me. Read it slowly.',
+  voltis: 'Classes! Quick rundown, quick quick quick.',
+  seraphine: 'Let\'s see how your classes are coming along, dear.',
+  morvane: 'Your standing in my classes. Try not to look so worried.',
+  scout_finn: 'Practicum roster! Your name\'s on it — in pen.',
+  smith_tilda: 'Workshop ledger. Your name\'s in it, next to a scorch mark.',
+  merchant_bram: 'Let me check the ledger... ah, here you are.',
+};
+
+const CLASS_STATE_TEXT: Record<ClassState, (e: ClassEntry) => string> = {
+  offer: e => `${e.mission!.name} (new)`,
+  soon: e => `${e.mission!.name} (from Lv ${e.mission!.minLevel})`,
+  active: e => `${e.mission!.name} (in progress)`,
+  complete: e => `${e.mission!.name} (ready to hand in!)`,
+  elsewhere: e => `${e.mission!.name} (with ${missionGiverName(e.mission!)})`,
+  badge: () => 'every mission handed in — your badge is ready',
+};
+
+/** The top-level "Classes" option for an NPC (empty outside story mode or when they have nothing open). */
+function classesOption(c: Ctx, back: () => void): DialogOption[] {
+  const entries = classEntries(c.s, c.p, c.npcId);
+  if (!entries.length) return [];
+  const ready = entries.some(e => e.state === 'complete' || e.state === 'badge');
+  const fresh = entries.some(e => e.state === 'offer');
+  return [go(`Classes${ready ? ' — ready to hand in!' : fresh ? ' — new mission' : ''}`, () => classesMenu(c, back))];
+}
+
+function classesMenu(c: Ctx, back: () => void) {
+  const again = () => classesMenu(c, back);
+  const entries = classEntries(c.s, c.p, c.npcId);
+  if (!entries.length) { back(); return; }
+  const lines = entries.map(e => `• ${e.course.code} · ${e.course.name}\n   ${e.mission ? `Mission ${e.course.missions.indexOf(e.mission.id) + 1}/${e.course.missions.length}: ` : ''}${CLASS_STATE_TEXT[e.state](e)}`);
+  say(c, `${fill(c, CLASSES_INTRO[c.npcId] ?? 'Your classes:')}\n\n${lines.join('\n')}`, [
+    ...entries.map(e => classAction(c, e, again)),
+    go('Back', back),
+    bye(),
+  ]);
+}
+
+function classAction(c: Ctx, e: ClassEntry, back: () => void): DialogOption {
+  const { course } = e;
+  const q = e.mission;
+  if (!q) return go(`[${course.code} · Badge] Collect your badge`, () => awardBadge(c, course, back, ''));
+  const head = classHeader(course, q);
+  switch (e.state) {
+    case 'offer':
+      return go(`[${course.code}] ${q.name}`, () => offerMission(c, course, q, back));
+    case 'soon':
+      return go(`[${course.code}] ${q.name} (Lv ${q.minLevel})`, () => say(c,
+        `${head}\n\n${q.name}\n\n${q.description}\n\nCome back at level ${q.minLevel} — you are level ${c.p.state.level}.`, [go('Back', back), bye()]));
+    case 'active':
+      return go(`[${course.code} · In progress] ${q.name}`, () => missionProgress(c, course, q, back));
+    case 'complete':
+      return go(`[${course.code} · Hand in] ${q.name}`, () => handInMission(c, course, q, back));
+    default: {
+      const giver = missionGiverName(q);
+      const accepted = !!c.p.state.quests[q.id];
+      return go(`[${course.code}] ${q.name} — see ${giver}`, () => say(c,
+        `${head}\n\n${q.name}\n\n${q.description}${accepted ? `\n\n${objectivesText(c.p, q)}` : ''}\n\n${accepted ? `Hand it in to ${giver} when it's done.` : `${giver} has this one for you. Go and see them.`}`,
+        [go('Back', back), bye('On my way.')]));
+    }
+  }
+}
+
+function offerMission(c: Ctx, course: CourseDef, q: QuestDef, back: () => void) {
+  const head = classHeader(course, q);
+  if (STORY_SCRIPT[q.id]) {
+    storyOfferWith(c, q, back, head, () => handInMission(c, course, q, back));
+    return;
+  }
+  say(c, `${head}\n\n${q.name}\n\n${q.description}\n\n${objectivesText(c.p, q)}\n${rewardsText(q)}`, [
+    go('Accept', () => {
+      c.p.acceptQuest(q.id);
+      // A "come and see me" step counts the moment you accept it from the very NPC it names.
+      if (q.objectives.some(o => o.kind === 'talk' && o.npcId === c.npcId)) bus.emit('npc:talked', { npcId: c.npcId });
+      const st = c.p.questStatus(q.id);
+      if (st === 'complete') { handInMission(c, course, q, back); return; }
+      if (st !== 'active') { say(c, 'Hmm, not quite yet. Come back a little later.', [go('Back', back), bye()]); return; }
+      const line = ASSIGNMENT_LINES[q.id]?.accept;
+      say(c, line ? fill(c, line) : pick(['Wonderful! Off you go, then.', 'I knew I could count on you!', 'Splendid. Hand it in when it\'s done.']), [bye('Will do!')]);
+    }),
+    go('Not right now.', back),
+  ]);
+}
+
+function missionProgress(c: Ctx, course: CourseDef, q: QuestDef, back: () => void) {
+  const L = STORY_SCRIPT[q.id];
+  say(c, `${classHeader(course, q)}\n\n${q.name}\n\n${L ? L.progress(c) : q.description}\n\n${objectivesText(c.p, q)}`,
+    [...(L?.extra?.(c) ?? []), go('Back', back), bye('I\'m on it.')]);
+}
+
+/** Hand a class mission in; the last one passes the class (badge from the teacher). */
+function handInMission(c: Ctx, course: CourseDef, q: QuestDef, back: () => void) {
+  const text = handIn(c, q);
+  if (text === null) {
+    say(c, 'Your satchel is bursting at the seams. Make a little room and come back.', [bye('Okay.')]);
+    return;
+  }
+  const cs = coursesOf(c.s);
+  const next = cs?.currentMission(course.id) ?? null;
+  if (next) {
+    const where = storyHandles(c.npcId, next) ? '' : ` — see ${missionGiverName(next)}`;
+    say(c, `${text}\n\nNext in ${course.code}: ${next.name}${where}.`, [go('Anything else?', back), bye('Thank you!')]);
+    return;
+  }
+  if (!cs || !allMissionsHandedIn(c.p, course)) { say(c, text, [go('Anything else?', back), bye('Thank you!')]); return; }
+  if (course.teacher === c.npcId) { awardBadge(c, course, back, text); return; }
+  say(c, `${text}\n\nThat was the last of ${course.code}. ${npcName(course.teacher)} has your badge waiting.`, [go('Anything else?', back), bye('Thank you!')]);
+}
+
+function courseRewardsText(course: CourseDef): string {
+  const r = course.rewards;
+  const parts: string[] = [];
+  if (r.exp) parts.push(`${r.exp.toLocaleString()} EXP`);
+  if (r.mesos) parts.push(`${r.mesos.toLocaleString()} mesos`);
+  if (r.sp) parts.push(`${r.sp} SP`);
+  for (const it of r.items ?? []) parts.push(`${itemName(it.itemId)}${it.qty > 1 ? ` ×${it.qty}` : ''}`);
+  return parts.length ? `Class reward: ${parts.join(', ')}` : '';
+}
+
+/** Pass the class: rewards, badge and the teacher's passLine. */
+function awardBadge(c: Ctx, course: CourseDef, back: () => void, prefix: string) {
+  const cs = coursesOf(c.s);
+  if (!cs?.passCourse(course.id)) {
+    say(c, [prefix, `Your ${course.badge.name} is right here — but your satchel is full to bursting. Make a little room and come back for it.`].filter(Boolean).join('\n\n'), [bye('Okay.')]);
+    return;
+  }
+  const yours = /this is yours/i.test(course.passLine) ? '' : `\n\n…and this is yours: the ${course.badge.name}.`;
+  const yp = cs.yearProgress();
+  const standing = yp.ready
+    ? `Badges this Year: ${yp.have}/${yp.need}. That is enough to pass the Year — ${c.npcId === 'elder_maelis' ? 'come and see me about it.' : 'the Headmistress will want to see you.'}`
+    : `Badges this Year: ${yp.have}/${yp.need}.${yp.missing.length ? ` Still required: ${yp.missing.map(kindName).join(', ')}.` : ''}`;
+  say(c, [prefix, `${course.code} · ${course.name}: passed!`, `${course.passLine}${yours}`, courseRewardsText(course), standing].filter(Boolean).join('\n\n'),
+    [go('Anything else?', back), bye('Thank you!')]);
+}
+
+/** "a core class" / "your major class" / "an elective". */
+function kindName(k: CourseKind): string {
+  return k === 'core' ? 'a core class' : k === 'major' ? 'your major class' : 'an elective';
+}
+
 // ─────────────────────────── Year-end Exam logic ───────────────────────────
 
 /** Graduated (Commencement handed in) — the Fellowship is postgraduate, so its exam waits for this. */
@@ -524,13 +779,22 @@ function pendingExam(p: Progression, school: School): { job: JobId; questId: str
 export function npcNotice(s: GameServices, npcId: string): NpcNotice {
   const p = prog(s);
   if (!p?.state) return null;
-  let notice: NpcNotice = storyNotice(p, npcId);
+  const cs = coursesOf(s);
+  let notice: NpcNotice = cs ? classNotice(s, p, npcId) : null;
   if (notice === 'turnin') return notice;
-  for (const q of sideQuestsFor(npcId)) {
+  const story = storyNotice(s, p, npcId);
+  if (story === 'turnin') return story;
+  notice = notice ?? story;
+  for (const q of sideQuestsFor(s, p, npcId)) {
     if (supersededByStory(p, q.id)) continue;
     const st = p.questStatus(q.id);
     if (st === 'complete') return 'turnin';
     if (st === 'available') notice = 'new';
+  }
+  if (cs) {
+    // Story mode: Years advance only through the Headmistress; Professors no longer run advancement.
+    if (npcId === 'elder_maelis' && ceremonyDue(s, p)) return 'new';
+    return notice;
   }
   if (npcId === 'elder_maelis' && p.jobDef().tier === 1 && p.state.level >= 10) return 'new';
   const sc = PROFESSOR_SCHOOL[npcId];
@@ -598,6 +862,8 @@ function chooseSchool(c: Ctx) {
 }
 
 function elderMaelis(c: Ctx) {
+  const cs = coursesOf(c.s);
+  if (cs) { elderMaelisStory(c, cs); return; }
   const p = c.p;
   const job = p.jobDef();
   const lv = p.state.level;
@@ -668,6 +934,206 @@ function elderMaelis(c: Ctx) {
   ]), [...quests, bye()]);
 }
 
+// ─────────────────────────── Headmistress Maelis · story mode ───────────────────────────
+// Years advance only here: report card → "Declare my major" (Year 1), the promotion ceremony (Years 2–4), the finale (Year 5).
+
+/** One line per School for the declaration page: who teaches it, what it does. */
+const SCHOOL_LINE: Record<School, string> = {
+  fire: 'fireballs, burning ground and explosions. Hit hard, keep pushing.',
+  ice: 'slow, freeze, then shatter. Control the fight and stay safe.',
+  lightning: 'bolts that leap foe to foe, and stuns. Fast, mobile, made for crowds.',
+  holy: 'radiant smiting with healing between the blows. Outlast anything.',
+  shadow: 'poisons, curses, life drain and skeletal servants. Patient and cunning.',
+};
+
+/**
+ * The Year 5 finale has been held this session. CourseSystem's promote() saves no flag in Year 5, so the ceremony
+ * fires once per session; later visits replay the words without promoting again.
+ */
+const FINALE_HELD = new WeakSet<object>();
+
+/** Level the registrar needs before the next Year (null in Year 5). */
+function levelForNextYear(p: Progression, year: YearNo): number | null {
+  if (year >= FELLOWSHIP_YEAR) return null;
+  if (year === 1) return JOB_LEVELS[2];
+  const cur = p.jobDef();
+  return Registry.jobs().find(j => j.parent === cur.id)?.requiredLevel ?? JOB_LEVELS[(year + 1) as 2 | 3 | 4 | 5];
+}
+
+/** Is there a declaration / promotion / finale the student can step forward for right now? */
+function ceremonyDue(s: GameServices, p: Progression): boolean {
+  const cs = coursesOf(s);
+  if (!cs || !cs.yearProgress().ready) return false;
+  const year = cs.year();
+  if (year >= FELLOWSHIP_YEAR) return !p.state.storyComplete && !FINALE_HELD.has(p.state);
+  return p.state.level >= (levelForNextYear(p, year) ?? 0);
+}
+
+/** "The registrar wants you at level 25 first" (empty when the level is fine). */
+function levelGate(c: Ctx, year: YearNo): string {
+  const need = levelForNextYear(c.p, year);
+  return need && c.p.state.level < need
+    ? `Your badges are in order, but the registrar will not seat a Year ${year + 1} student below level ${need}. You are level ${c.p.state.level}. A little more fieldwork, then come back.`
+    : '';
+}
+
+function ceremonyOption(c: Ctx, cs: ICourses, back: () => void): DialogOption[] {
+  if (!cs.yearProgress().ready) return [];
+  const year = cs.year();
+  if (year === 1) return [go('Declare my major.', () => declareMajor(c, cs, back))];
+  if (year < FELLOWSHIP_YEAR) return [go(`My promotion to Year ${year + 1}.`, () => promotion(c, cs, back))];
+  return [go('The Fellowship\'s last ceremony.', () => finale(c, cs, back))];
+}
+
+function reportCard(c: Ctx, cs: ICourses, back: () => void) {
+  const plan = cs.plan();
+  const yp = cs.yearProgress();
+  const year = cs.year();
+  const rows = cs.catalogue().map(course => {
+    const st = cs.status(course.id);
+    const m = st === 'enrolled' ? cs.currentMission(course.id) : null;
+    const k = m ? course.missions.indexOf(m.id) : -1;
+    const detail = st === 'passed' ? course.badge.name
+      : st === 'locked' ? 'locked'
+        : k >= 0 ? `mission ${k + 1} of ${course.missions.length}`
+          : st === 'enrolled' ? 'see your teacher for the badge' : 'not started';
+    const mark = st === 'passed' ? '✓' : st === 'enrolled' ? '•' : st === 'locked' ? '–' : '○';
+    return `${mark} ${course.code} ${course.name} (${course.kind}) — ${detail}`;
+  });
+  const missing = yp.missing.length ? `\nStill required: ${yp.missing.map(kindName).join(', ')}.` : '';
+  const short = Math.max(0, yp.need - yp.have);
+  const gate = yp.ready ? levelGate(c, year) : '';
+  const verdict = !yp.ready
+    ? (short > 0
+      ? `${short} more badge${short === 1 ? '' : 's'} to pass the Year. Every teacher keeps a "Classes" register — ask them.`
+      : 'Enough badges, but not the right ones yet. Mind the required classes.')
+    : gate || (year === 1
+      ? 'A complete report card. You may declare your major whenever you are ready.'
+      : year < FELLOWSHIP_YEAR ? `A complete report card. The faculty is ready to promote you to Year ${year + 1}.`
+        : 'A complete report card, Fellow. There is one ceremony left.');
+  say(c, `Report card — ${plan.title}\n\nBadges: ${yp.have} of ${yp.need}${missing}\n\n${rows.join('\n')}\n\n${verdict}`, [
+    ...(yp.ready && !gate ? ceremonyOption(c, cs, back) : []),
+    go('Back', back),
+    bye('Thank you, Headmistress.'),
+  ]);
+}
+
+function declareMajor(c: Ctx, cs: ICourses, back: () => void) {
+  const gate = levelGate(c, 1);
+  if (gate) { say(c, gate, [go('Back', back), bye()]); return; }
+  const choose = () => declareMajor(c, cs, back);
+  const outro = cs.plan(1).outro;
+  const lines = SCHOOLS.map(sc => `• ${SCHOOL_NAME[sc]} — ${professorName(sc)}: ${SCHOOL_LINE[sc]}`).join('\n');
+  say(c, `${outro ? `${outro}\n\n` : ''}Five Schools, one declaration. Your School's Professor teaches your major from Year 2 on.\n\n${lines}`, [
+    ...SCHOOLS.map(sc => go(`The ${SCHOOL_NAME[sc]} School.`, () => confirmMajor(c, cs, sc, choose, back))),
+    go('Tell me more about them.', () => explainSchools(c, choose)),
+    bye('I need more time.'),
+  ]);
+}
+
+function confirmMajor(c: Ctx, cs: ICourses, sc: School, choose: () => void, back: () => void) {
+  const target = BRANCH_ROOT_JOB[sc];
+  say(c, `${SCHOOL_INFO[sc]}\n\nA declaration is for life — there are no transfers at this Academy. Will you begin Year 2 as ${aJob(jobName(target))}?`, [
+    go(`Yes — I declare ${SCHOOL_NAME[sc]}!`, () => {
+      if (!cs.declareMajor(sc)) {
+        say(c, 'Hmm. The registrar\'s ledger will not take the ink yet. Come back when you are ready.', [go('Back', back), bye()]);
+        return;
+      }
+      // A save that still has the old "Declaration Day" open hands it in here (cap + mesos).
+      let extra = '';
+      const decl = Registry.quest('story_declaration');
+      if (decl && c.p.questStatus(decl.id) === 'complete' && c.p.turnInQuest(decl.id)) extra = `\n\nAnd your upperclassman's cap. ${rewardsText(decl)}`;
+      const intro = Registry.yearPlan(2)?.intro;
+      say(c, `It is done. Welcome to Year 2 and the ${SCHOOL_NAME[sc]} School, ${c.p.jobDef().name}.${intro ? `\n\n${intro}` : ''}\n\n${professorName(sc)} teaches your major class, and your new classes are on every teacher's register. Mine first, if you please. You have fresh SP, too — open your spellbook with {key:skills}.${extra}`,
+        [go('Anything else?', back), bye('Thank you, Headmistress!')]);
+    }),
+    go('Let me reconsider.', choose),
+  ]);
+}
+
+function promotion(c: Ctx, cs: ICourses, back: () => void) {
+  const year = cs.year();
+  const gate = levelGate(c, year);
+  if (gate) { say(c, gate, [go('Back', back), bye()]); return; }
+  const next = (year + 1) as YearNo;
+  const outro = cs.plan().outro || fill(c, 'Students, faculty: Year {year} is over, and {name} has every badge it asked for.').replace('{year}', String(year));
+  say(c, `${outro}\n\n${c.p.state.name}, step forward.`, [
+    go('Step forward.', () => {
+      if (!cs.promote()) {
+        say(c, 'Hmm. The registrar\'s ledger will not take the ink yet. Come back in a moment.', [go('Back', back), bye()]);
+        return;
+      }
+      const intro = Registry.yearPlan(next)?.intro;
+      say(c, `By the authority of the Academy, I name you ${aJob(c.p.jobDef().name)}.\n\n${yearLine(c.p.state.job)}${intro ? `\n\n${intro}` : ''}`,
+        [go('Anything else?', back), bye('Thank you, Headmistress!')]);
+    }),
+    bye('Not just yet.'),
+  ]);
+}
+
+function finale(c: Ctx, cs: ICourses, back: () => void) {
+  const outro = cs.plan(FELLOWSHIP_YEAR as YearNo).outro;
+  say(c, `${outro ? `${outro}\n\n` : ''}${fill(c, 'Fellows! Faculty! Prefect Finn, put the telescope down.\n\nForty years ago a Headmaster tried to write himself into forever, and the book went on without him. Tonight it has an ending, and {name} of the {school} School wrote it.\n\n{name}, step forward.')}`, [
+    go('Step forward.', () => {
+      // promote() in Year 5 fires the finale ('year:promoted') on every call and saves nothing, so once per session.
+      if (!FINALE_HELD.has(c.p.state)) { FINALE_HELD.add(c.p.state); cs.promote(); }
+      say(c, fill(c, 'By the authority of the Academy, I name you {job}, Fellow of the {school} School, now and always.\n\nThe stars are quiet. The Wing is quiet. Even Professor Voltis is quiet, which I did not know was possible.\n\nGo and write something of your own. And do visit — the biscuits are a permanent fixture.'),
+        [go('Anything else?', back), bye('Thank you — for everything.')]);
+    }),
+    bye('Not just yet.'),
+  ]);
+}
+
+function elderMaelisStory(c: Ctx, cs: ICourses) {
+  const p = c.p;
+  const job = p.jobDef();
+  const home = () => elderMaelis(c);
+  const year = cs.year();
+  const yp = cs.yearProgress();
+  const sc = schoolOf(p);
+  const gate = yp.ready ? levelGate(c, year) : '';
+  const options: DialogOption[] = [
+    ...(gate ? [] : ceremonyOption(c, cs, home)),
+    ...classesOption(c, home),
+    go('My report card.', () => reportCard(c, cs, home)),
+    ...storyOptions(c, home), ...questOptions(c, home), ...archonRenewOptions(c, home),
+    ...(year === 1 ? [go('Tell me about the Schools.', () => explainSchools(c, home))] : []),
+    bye(),
+  ];
+  const tally = `${yp.have} of ${yp.need} badges so far.`;
+  let text: string;
+  if (year === 1 && !p.state.quests.story_orientation) {
+    text = `A new face! Welcome to the Academy, ${p.state.name}. Classes start the moment you're ready — shall we begin with orientation?`;
+  } else if (yp.ready) {
+    text = gate || (year === 1
+      ? `Your report card is in order, ${p.state.name}. It is time to declare your major.`
+      : year < FELLOWSHIP_YEAR
+        ? `${yp.have} badges, every one of them earned. The faculty has gathered for your promotion, ${job.name}.`
+        : 'The stars are quiet, Fellow. Come — there is one last ceremony, and it is yours.');
+  } else if (year === 1) {
+    text = pick([
+      `Ah, ${p.state.name}. Your staff still smells of the Academy kiln. Pass your classes — Orientation among them — and you may declare your major. ${tally}`,
+      `Patience, little spark. Every Professor teaches a sampler this term; try them before you choose. ${tally}`,
+    ]);
+  } else if (year >= FELLOWSHIP_YEAR) {
+    text = pick([
+      `Archon ${p.state.name}. The faculty still stands when you enter a room — I have stopped telling them not to. ${tally}`,
+      `A Fellow of the ${sc ? SCHOOL_NAME[sc] : 'Arcane'} School. The Observatory has been restless, ${job.name}. I am glad it is yours to watch now. ${tally}`,
+    ]);
+  } else if (year >= FINAL_YEAR) {
+    const thesisDone = p.state.quests.story_final_thesis?.status === 'turned_in';
+    text = (thesisDone
+      ? `${job.name}... the Lich Archon has fallen, ${p.state.name}, and the whole Academy knows it.`
+      : `${job.name}... I have watched many students graduate, ${p.state.name}, but few who shone like you. The Lich Archon still broods in the Arcane Sanctum. Consider it your final thesis.`) + ` ${tally}`;
+  } else {
+    text = pick([
+      `How is Year ${year} treating our ${job.name}? ${tally}`,
+      `The ${sc ? SCHOOL_NAME[sc] : 'arcane'} School suits you, ${p.state.name}. ${tally}`,
+    ]);
+  }
+  say(c, text, options);
+}
+
 // ─────────────────────────── Professors ───────────────────────────
 
 /** Year 5: each Professor's invitation to the Fellowship (for graduates) and their line for a Fellow. */
@@ -702,6 +1168,8 @@ interface ProfessorLines {
   offerExam: (job: string) => string;
   examProgress: string;
   examDone: (job: string) => string;
+  /** Story mode: the exam handed in as the major class's last mission (no advancement here). */
+  examPassed: string;
   advanced: (job: string) => string;
   graduate: string[];
 }
@@ -724,6 +1192,7 @@ const PROFESSOR_LINES: Record<School, ProfessorLines> = {
     offerExam: job => `You've grown hot enough to forge. Pass my exam, and I'll make you ${aJob(job)}.`,
     examProgress: 'Still working on it? Fire waits for no one — get moving!',
     examDone: job => `Ha! Look at that haul! Top marks. Ready to become ${aJob(job)}?`,
+    examPassed: 'Ha! Look at that haul! Top marks. The Headmistress does the promoting these days — I just do the grading. Loudly.',
     advanced: job => `Burn bright, ${job}! New spells await — check them with {key:skills}.`,
     graduate: ['An Inferno Sage. Honestly? I\'m a little jealous. Go melt something magnificent.'],
   },
@@ -744,6 +1213,7 @@ const PROFESSOR_LINES: Record<School, ProfessorLines> = {
     offerExam: job => `Your frost has deepened. Pass my exam and I will name you ${job}.`,
     examProgress: 'Patience. But not too much patience. The exam still waits.',
     examDone: job => `Exquisite work. The cold is pleased. Shall I name you ${job}?`,
+    examPassed: 'Exquisite work. The cold is pleased. The rest is the Headmistress\'s ceremony, not mine.',
     advanced: job => `Welcome, ${job}. Let the world slow around you. Press {key:skills} to learn new spells.`,
     graduate: ['A Glacial Sage stands before me. The stillness at the heart of the storm... is you.'],
   },
@@ -764,6 +1234,7 @@ const PROFESSOR_LINES: Record<School, ProfessorLines> = {
     offerExam: job => `You're crackling, kid! Pass my exam and I'll make you ${aJob(job)}. Deal?`,
     examProgress: 'Not done yet? Speed it up! Zip zap!',
     examDone: job => `BOOM! That's an A-plus! Ready to become ${aJob(job)}?`,
+    examPassed: 'BOOM! That\'s an A-plus! Go show the Headmistress — fast!',
     advanced: job => `Say hello to the new ${job}! Go check your spells — {key:skills}, quick!`,
     graduate: ['A Tempest Sage. You ARE the storm now. Try not to set the campus on fire. That\'s Pyra\'s job.'],
   },
@@ -785,6 +1256,7 @@ const PROFESSOR_LINES: Record<School, ProfessorLines> = {
     offerExam: job => `Your light has grown steady. Pass this exam and you'll rise as ${aJob(job)}.`,
     examProgress: 'Take your time — but not too much. The chapel lamps won\'t light themselves.',
     examDone: job => `Oh, well done! Radiant work. Are you ready to become ${aJob(job)}?`,
+    examPassed: 'Oh, well done! Radiant work. I\'ll send word to the Headmistress — she\'ll want to see you.',
     advanced: job => `Rise, ${job}. May your light never gutter. New spells await — press {key:skills}.`,
     graduate: ['A Hierophant of the Academy. When the Lich Archon sees you coming, I hope it feels the sunrise.'],
   },
@@ -806,6 +1278,7 @@ const PROFESSOR_LINES: Record<School, ProfessorLines> = {
     offerExam: job => `You've become a respectable little menace. Pass my exam and I'll name you ${aJob(job)}.`,
     examProgress: 'Still at it? Good. Suffering builds character. Ideally someone else\'s.',
     examDone: job => `Oh, that is delightfully grim. Well done. Shall I make you ${aJob(job)}?`,
+    examPassed: 'Oh, that is delightfully grim. Well done. The Headmistress will want to hear about it. Leave out the jars.',
     advanced: job => `Welcome to the dark, ${job}. Press {key:skills} — your new spells are waiting, and they bite.`,
     graduate: ['An Umbral Sage. I taught you everything, and you still surprised me. Tell no one I said that.'],
   },
@@ -817,7 +1290,7 @@ function professor(c: Ctx) {
   const p = c.p;
   const job = p.jobDef();
   const home = () => professor(c);
-  const quests = [...storyOptions(c, home), ...questOptions(c, home), ...forbiddenWingOption(c, sc, home)];
+  const quests = [...classesOption(c, home), ...storyOptions(c, home), ...questOptions(c, home), ...forbiddenWingOption(c, sc, home)];
 
   if (job.tier === 1) { say(c, pick(L.apprentice), [...quests, bye()]); return; }
 
@@ -831,6 +1304,12 @@ function professor(c: Ctx) {
   }
 
   if (job.tier >= FELLOWSHIP_YEAR) { say(c, pick(FELLOWSHIP_LINES[sc].fellow), [...quests, bye()]); return; }
+
+  // Story mode: the Year-end Exam is the major class's last mission (Classes section); promotion is the Headmistress's.
+  if (coursesOf(c.s)) {
+    say(c, job.tier >= FINAL_YEAR && hasGraduated(p) ? pick(L.graduate) : pick(L.ownChat), [...quests, bye()]);
+    return;
+  }
 
   const exam = pendingExam(p, sc);
   if (job.tier >= FINAL_YEAR && !exam) {
@@ -908,6 +1387,7 @@ function merchantBram(c: Ctx) {
     'Welcome, welcome! Every bottle brewed this morning. Well. This week. Ish. Don\'t tell the Headmistress.',
     'Heading out on a practicum? Never leave campus without a stack of potions. Trust old Bram.',
   ]), [
+    ...classesOption(c, home),
     ...storyOptions(c, home),
     { label: 'Let me see the supplies.', closes: true, action: () => bus.emit('ui:shop', { npcId: c.npcId, npcName: c.npcName, items: shopEntries(POTION_SHOP) }) },
     go('Merit Exchange', () => meritExchange(c, home)),
@@ -1012,6 +1492,7 @@ function smithTilda(c: Ctx) {
     'Your uniform\'s looking a bit singed. Practicum? Let\'s fix that.',
     'I don\'t do magic. I do the things magic needs to not explode in your hands.',
   ]), [
+    ...classesOption(c, home),
     ...storyOptions(c, home),
     { label: 'Show me the armory.', closes: true, action: () => bus.emit('ui:shop', { npcId: c.npcId, npcName: c.npcName, items }) },
     ...questOptions(c, home),
@@ -1042,6 +1523,7 @@ function renewOptions(
   for (const qid of qids) {
     const q = Registry.quest(qid);
     if (!q || c.p.questStatus(qid) !== 'turned_in' || c.p.state.level < q.minLevel) continue;
+    if (hiddenFromOldFlows(c.s, c.p, qid)) continue; // a class mission is done once; re-posting would reopen the class
     out.push(go(label(q), () => {
       // Objectives as a fresh quest would show them (without the old turned-in counts).
       const old = c.p.state.quests[qid];
@@ -1084,7 +1566,7 @@ function scoutFinn(c: Ctx) {
     lastFinnTip = i;
     say(c, FINN_TIPS[i], [go('Another tip?', tips), go('Back', home), bye('Thanks!')]);
   };
-  const quests = [...storyOptions(c, home), ...questOptions(c, home), ...bountyRenewOptions(c, home)];
+  const quests = [...classesOption(c, home), ...storyOptions(c, home), ...questOptions(c, home), ...bountyRenewOptions(c, home)];
   const firstYear = (Registry.job(c.p.state.job)?.tier ?? 1) <= 1;
   say(c, pick([
     'Prefect Finn, field practicums. Whisperwood is our classroom — stay on the path, mind the slimes, and don\'t eat the mushrooms.',
@@ -1115,7 +1597,7 @@ export function runNpcScript(s: GameServices, npcId: string, portraitKey?: strin
     if (fn) fn(c);
     else {
       const back = () => runNpcScript(s, npcId, portraitKey);
-      const quests = [...storyOptions(c, back), ...questOptions(c, back)];
+      const quests = [...classesOption(c, back), ...storyOptions(c, back), ...questOptions(c, back)];
       say(c, 'Lovely weather for spellcasting, isn\'t it? Shouldn\'t you be in class?', [...quests, bye()]);
     }
   } catch (e) {

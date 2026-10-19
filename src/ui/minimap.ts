@@ -5,6 +5,7 @@ import type { UICtx } from './context';
 import { getBinding, keyLabel, onBindingsChanged } from '../core/bindings';
 import { h, safe, setText } from './dom';
 import { isMobileLayout, onMobileLayoutChanged } from './mobile';
+import { guidePortals } from '../world/missionGuide';
 
 const MAX_W = 216, MAX_H = 112, DPR = 2;
 /** Phones: the minimap hides behind a map button; tapping it shows this large overlay (logical 720×405 px). */
@@ -165,6 +166,14 @@ export class Minimap {
       const boss = !!m.def.boss;
       g.fillStyle = boss ? '#ff4f9a' : '#ff6a5a';
       g.beginPath(); g.arc(m.x * s, (m.y - m.def.size.h / 2) * s, (boss ? 3.6 : 1.9) * D, 0, Math.PI * 2); g.fill();
+    }
+    // Mission guidance: gold pulsing marker on the portal that leads toward the active mission's map.
+    for (const { portal } of safe(() => guidePortals(def.id), [])) {
+      const gx = portal.x * s, gy = (portal.y - 30) * s, r = 4.2 * D * (1 + Math.sin(time / 220) * 0.18);
+      g.fillStyle = 'rgba(255,210,74,0.3)';
+      g.beginPath(); g.arc(gx, gy, r * 1.7, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#ffd24a'; g.strokeStyle = '#4a3200'; g.lineWidth = D * 0.8;
+      g.beginPath(); g.moveTo(gx, gy - r); g.lineTo(gx + r, gy); g.lineTo(gx, gy + r); g.lineTo(gx - r, gy); g.closePath(); g.fill(); g.stroke();
     }
     const pl = this.ctx.s.player;
     const px = safe(() => pl.x, 0) * s, py = (safe(() => pl.y, 0) - 30) * s;

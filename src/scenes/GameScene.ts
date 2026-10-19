@@ -11,6 +11,7 @@ import { setServices } from '../core/services';
 import { Registry } from '../core/registry';
 import { playVfx } from '../core/vfx';
 import { expToNext } from '../core/balance';
+import { objectiveGoal } from '../core/quest';
 import { HOTBAR_PAGE_SIZE, HOTBAR_SIZE, type GameServices, type IGameApi, type IMapInstance, type JobId, type PlayerState } from '../core/types';
 import { Player } from '../entities/Player';
 import { SkillSystem } from '../systems/SkillSystem';
@@ -24,6 +25,7 @@ import { UIRoot } from '../ui/UIRoot';
 import { PetSystem } from '../systems/PetSystem';
 import { ArenaSystem } from '../systems/ArenaSystem';
 import { HonorsSystem } from '../systems/HonorsSystem';
+import { CourseSystem } from '../systems/CourseSystem';
 import { loadMap } from '../world/MapLoader';
 import { cameraZoom, isMobileLayout, onMobileLayoutChanged } from '../ui/mobile';
 
@@ -32,6 +34,7 @@ export class GameScene extends Phaser.Scene implements IGameApi {
   private pet: PetSystem | null = null;
   private arena: ArenaSystem | null = null;
   private honors: HonorsSystem | null = null;
+  private courses: CourseSystem | null = null;
   private map: IMapInstance | null = null;
   private initialState!: PlayerState;
   private inputBlocked = false;
@@ -70,6 +73,8 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     s.game = this;
     s.audio = getAudio();
     s.progression = new Progression(s, state);
+    this.courses = new CourseSystem(s);
+    s.courses = this.courses;
     this.honors = new HonorsSystem(this, s);
     s.combat = new CombatSystem(this, s);
     s.skills = new SkillSystem(this, s);
@@ -371,10 +376,11 @@ export class GameScene extends Phaser.Scene implements IGameApi {
     const s = this.s;
     try { s.progression.save(); } catch { /* ignore */ }
     for (const fn of [() => s.ui.destroy(), () => s.skills.clearWorld(), () => s.monsters.clear(), () => s.drops.clear(),
-      () => s.npcs.clear(), () => this.pet?.destroy(), () => this.arena?.destroy(), () => this.honors?.destroy(), () => s.player.destroy(), () => this.map?.destroy()]) {
+      () => s.npcs.clear(), () => this.pet?.destroy(), () => this.arena?.destroy(), () => this.honors?.destroy(), () => this.courses?.destroy(), () => s.player.destroy(), () => this.map?.destroy()]) {
       try { fn(); } catch (e) { console.warn('[game] teardown step failed', e); }
     }
     this.map = null;
+    this.courses = null;
     this.pendingDest = null;
     bus.removeAll();
     setServices(null);
@@ -404,6 +410,27 @@ export class GameScene extends Phaser.Scene implements IGameApi {
       pet: (on?: boolean) => { const p = this.pet; if (!p) return false; p.setEnabled(on ?? !p.isEnabled()); return p.isEnabled(); },
       depth: DEPTH,
       honors: this.honors?.debugApi(),
+      /** Story mode: hand in every mission of a class (cheat) and pass it. */
+      passClass: (id: string) => {
+        const c = Registry.course(id);
+        const cs = s.courses;
+        if (!c || !cs) return false;
+        for (const m of c.missions) {
+          const q = Registry.quest(m);
+          if (q) s.progression.state.quests[m] = { status: 'turned_in', counts: q.objectives.map(objectiveGoal) };
+        }
+        return cs.passCourse(id);
+      },
+      /** Story mode: this Year's classes with status, current mission and the Year's badge progress. */
+      classes: () => {
+        const cs = s.courses;
+        if (!cs) return null;
+        return {
+          year: cs.year(),
+          progress: cs.yearProgress(),
+          classes: cs.catalogue().map(c => ({ id: c.id, code: c.code, name: c.name, kind: c.kind, status: cs.status(c.id), mission: cs.currentMission(c.id)?.id ?? null })),
+        };
+      },
     };
     (window as unknown as { arcana: typeof api }).arcana = api;
   }

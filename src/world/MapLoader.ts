@@ -14,6 +14,7 @@ import { hashStr, rng } from '../art/world/util';
 import { Ambient } from './ambient';
 import { MAP_EXTRAS, type DecorPlace } from './mapExtras';
 import { PortalVisual } from './portals';
+import { MissionGuide } from './missionGuide';
 import { DECOR_BOB, DECOR_GLOWS, LOOK_RUNTIME, PIXEL_GLOW_DY, THEME_RUNTIME, type ThemeRuntime } from './themes';
 
 /** One-way platform body thickness (px) at the top surface. */
@@ -58,6 +59,7 @@ export class MapInstance implements IMapInstance {
   private bobbers: Bobber[] = [];
   private scrollers: { obj: Phaser.GameObjects.TileSprite; vy: number }[] = [];
   private portalVisuals: PortalVisual[] = [];
+  private guide: MissionGuide | null = null;
   private ambient: Ambient | null = null;
   private destroyed = false;
   private elapsed = 0;
@@ -94,6 +96,7 @@ export class MapInstance implements IMapInstance {
       ['terrain', () => this.buildTerrain()],
       ['ropes', () => this.buildRopes()],
       ['portals', () => this.buildPortals()],
+      ['mission guide', () => { this.guide = new MissionGuide(scene, def.id); }],
       ['ambient', () => { this.ambient = new Ambient(scene, this.theme.ambient); }],
     ];
     for (const [name, fn] of steps) {
@@ -187,6 +190,7 @@ export class MapInstance implements IMapInstance {
       let player: { x: number; y: number } | null = null;
       try { const pl = maybeServices()?.player; if (pl) player = { x: pl.x, y: pl.y }; } catch { player = null; }
       for (const pv of this.portalVisuals) pv.update(time, delta, player);
+      this.guide?.update(time);
       this.ambient?.update(time, delta);
     } catch (e) {
       if (!(this as unknown as { _warned?: boolean })._warned) { console.warn('[map] update error', e); (this as unknown as { _warned?: boolean })._warned = true; }
@@ -198,6 +202,8 @@ export class MapInstance implements IMapInstance {
     this.destroyed = true;
     try { this.ambient?.destroy(); } catch { /* ignore */ }
     for (const pv of this.portalVisuals) { try { pv.destroy(); } catch { /* ignore */ } }
+    try { this.guide?.destroy(); } catch { /* ignore */ }
+    this.guide = null;
     for (const o of this.visuals) { try { o.destroy(); } catch { /* ignore */ } }
     try { this.solids.destroy(true); } catch { /* ignore */ }
     try { this.platforms.destroy(true); } catch { /* ignore */ }

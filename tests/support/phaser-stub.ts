@@ -10,7 +10,7 @@ class EventEmitter {
   once(ev: string, fn: (...a: unknown[]) => void) { this.ee.once(ev, fn); return this; }
   off(ev: string, fn?: (...a: unknown[]) => void) { if (fn) this.ee.off(ev, fn); else this.ee.removeAllListeners(ev); return this; }
   emit(ev: string, ...a: unknown[]) { return this.ee.emit(ev, ...a); }
-  removeAllListeners(ev?: string) { this.ee.removeAllListeners(ev); return this; }
+  removeAllListeners(ev?: string) { if (ev === undefined) this.ee.removeAllListeners(); else this.ee.removeAllListeners(ev); return this; }
 }
 
 function inert(name: string): unknown {

@@ -1,5 +1,5 @@
 // OWNER: A9 (progression); save slots by P7a. New character + localStorage persistence (versioned, defensive, 6 slots).
-import type { Appearance, BaseStats, EquipSlot, HonorsState, ItemStack, JobId, PlayerState, QuestProgress } from '../core/types';
+import type { Appearance, BaseStats, CourseProgress, EquipSlot, HonorsState, ItemStack, JobId, PlayerState, QuestProgress } from '../core/types';
 import { HOTBAR_PAGE_SIZE, HOTBAR_SIZE } from '../core/types';
 import { MAX_LEVEL, SAVE_KEY, START_MAP, TOWN_MAP } from '../core/constants';
 import { Registry } from '../core/registry';
@@ -396,6 +396,24 @@ function repairHonors(v: unknown): HonorsState | undefined {
  * Coerce anything into a valid PlayerState. Missing/invalid fields fall back to new-character
  * values; unknown items are dropped; unknown skills refund their SP. Never throws.
  */
+/** Class progress: keep only `{status: 'enrolled' | 'passed', passedAt?: number, credit?: true}` for known classes. */
+export function repairCourses(input: unknown): Record<string, CourseProgress> | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
+  const loaded = Registry.courses().length > 0;
+  const out: Record<string, CourseProgress> = {};
+  for (const [id, raw] of Object.entries(input as Record<string, unknown>)) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    if (loaded && !Registry.course(id)) continue;
+    const v = raw as Partial<CourseProgress>;
+    if (v.status !== 'enrolled' && v.status !== 'passed') continue;
+    const cp: CourseProgress = { status: v.status };
+    if (typeof v.passedAt === 'number' && Number.isFinite(v.passedAt) && v.passedAt >= 0) cp.passedAt = v.passedAt;
+    if (v.credit === true) cp.credit = true;
+    out[id] = cp;
+  }
+  return out;
+}
+
 export function repairState(input: unknown): PlayerState {
   const fresh = newPlayerState('Apprentice');
   if (!input || typeof input !== 'object') return fresh;
@@ -419,6 +437,7 @@ export function repairState(input: unknown): PlayerState {
     out.playTimeMs = num(s.playTimeMs, 0, 0);
     out.merits = Math.floor(num(s.merits, 0, 0));
     { const ap = repairAppearance(s.appearance); if (ap) out.appearance = ap; else delete out.appearance; }
+    if (s.storyComplete === true) out.storyComplete = true; else delete out.storyComplete;
     out.arenaBest = Math.floor(num(s.arenaBest, 0, 0));
     const honors = repairHonors(s.honors);
     if (honors) out.honors = honors; else delete out.honors;
@@ -493,6 +512,10 @@ export function repairState(input: unknown): PlayerState {
         out.quests[id] = { status, counts };
       }
     }
+
+    // Story-mode classes. Absent (or not an object) stays absent so CourseSystem can grant credit to old saves.
+    const courses = repairCourses(s.courses);
+    if (courses) out.courses = courses; else delete out.courses;
 
     // Vitals: clamp to derived max.
     const d = computeDerived(out);

@@ -2,6 +2,7 @@
 import Phaser from 'phaser';
 import type { CharacterLook, GameServices, IMapInstance, INpcManager, NpcDef } from '../core/types';
 import { Registry } from '../core/registry';
+import { bus } from '../core/events';
 import { DEPTH } from '../core/constants';
 import { npcTextureKey } from '../art/characters';
 import { npcNotice, runNpcScript, type NpcNotice } from '../data/npcScripts';
@@ -133,6 +134,7 @@ export class NpcManager implements INpcManager {
       if (pl) n.sprite.setFlipX(pl.x < n.x); // face the player (art faces right by default)
     }
     try { this.services.audio?.play('ui_open'); } catch { /* ignore */ }
+    bus.emit('npc:talked', { npcId }); // before the script, so a finished `talk` objective shows as ready to hand in
     runNpcScript(this.services, npcId, n?.textureKey);
     this.noticeAcc = NOTICE_REFRESH_MS; // re-evaluate markers right away
   }

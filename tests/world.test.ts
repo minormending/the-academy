@@ -218,7 +218,9 @@ describe('quests', () => {
         } else if (o.kind === 'collect') {
           p.check(Registry.item(o.itemId) || YEAR5_ITEMS.has(o.itemId), `${q.id}: collects unknown item ${o.itemId}`);
           p.check(o.count >= 1, `${q.id} collect count`);
-        } else p.check(o.level >= 1 && o.level <= MAX_LEVEL, `${q.id} level objective ${o.level}`);
+        } else if (o.kind === 'level') p.check(o.level >= 1 && o.level <= MAX_LEVEL, `${q.id} level objective ${o.level}`);
+        else if (o.kind === 'visit') p.check(Registry.map(o.mapId), `${q.id}: visits unknown map ${o.mapId}`);
+        else p.check(Registry.npc(o.npcId), `${q.id}: talks to unknown NPC ${o.npcId}`);
       }
       for (const r of q.rewards.items ?? []) {
         p.check(Registry.item(r.itemId), `${q.id}: rewards unknown item ${r.itemId}`);

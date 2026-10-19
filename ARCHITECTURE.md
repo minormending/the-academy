@@ -290,3 +290,12 @@ re-bind live (`onBindingsChanged`). Never hard-code key letters in new UI text â
 `src/core/settings.ts` (`academy-settings-v1`): screen shake on/reduced/off (applied by patching the main
 camera's shake/flash in GameScene), damage-number size, familiar on/off. Saves live in six slots
 (`arcana-story-save-v1:slot0..5` + `:meta`) behind the same SaveSystem API (active slot).
+
+### Lazy art generation (Phase 8 perf)
+
+Boot builds only what the Title and a new Apprentice need (~40 ms). Everything else is generated **on first use or
+in the background on the Title screen** via `src/art/lazy.ts` (`ensureOnce`, `scheduleIdle`, `defineSchool`,
+`lazyRegister`): player sheets (`playerTextureKey` builds on demand), per-School VFX textures (first VFX play of a
+School builds them), monster sheets (`ensureMonsterTexture` on map bind / spawn), particle sheets (`ensureSheet`).
+New art code must follow this: never assume a texture exists â€” ensure it. Timings: `performance.getEntriesByType
+('measure')` entries named `gen:*`. Build splits Phaser into its own chunk.

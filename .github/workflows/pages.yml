@@ -1,4 +1,4 @@
-# Typecheck, build and deploy The Academy to GitHub Pages on every push to main.
+# Test, typecheck, build and deploy The Academy to GitHub Pages on every push to main.
 # One build serves three pages: the game (index.html), the handbook (guide.html)
 # and the developer docs (devdocs.html).
 name: Deploy to GitHub Pages
@@ -28,6 +28,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Test
+        run: |
+          npm run typecheck:tests
+          npm test
       - name: Typecheck and bundle
         run: npm run build
       - uses: actions/configure-pages@v6

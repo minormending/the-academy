@@ -11,7 +11,7 @@
 import type { MusicKey } from '../../core/types';
 import { bell, midiFreq, noise, noteMidi, tone, type SynthCtx } from './synth';
 
-type LeadInst = 'flute' | 'pluck' | 'brass' | 'square' | 'bell' | 'musicbox' | 'saw';
+type LeadInst = 'flute' | 'pluck' | 'brass' | 'square' | 'bell' | 'musicbox' | 'saw' | 'marimba' | 'kalimba' | 'crystal' | 'harpsichord';
 type BassInst = 'sine' | 'tri' | 'saw' | 'pluck';
 
 interface SongDef {
@@ -27,7 +27,7 @@ interface SongDef {
   bass: { pattern: string[]; inst: BassInst; octave: number; vol?: number };   // pattern per bar (cycled)
   pad?: { octave: number; cutoff: number; vol?: number; pattern?: string[]; wave?: OscillatorType };
   arp?: { pattern: string[]; octave: number; inst: LeadInst; vol?: number; everyOther?: boolean };
-  drums?: { kick?: string[]; snare?: string[]; hat?: string[]; vol?: number; crashOnLoop?: boolean };
+  drums?: { kick?: string[]; snare?: string[]; hat?: string[]; tick?: string[]; vol?: number; crashOnLoop?: boolean };   // tick: clock click, "x" tick / "o" lower tock
   echo?: { time: number; feedback: number; mix: number };
 }
 
@@ -145,10 +145,81 @@ const SONGS: Record<MusicKey, SongDef> = {
     arp: { pattern: ['0 1 2 1 0 1 2 3'], octave: 4, inst: 'pluck', vol: 0.03, everyOther: true },
     drums: { kick: ['x . x . x . x .'], snare: ['. . x . . . x x', '. . x . . x x x'], hat: ['x x x x x x x x'], vol: 0.75, crashOnLoop: true },
   },
-  // Placeholder aliases for the Phase 9 zones (replaced by bespoke tracks).
-  get marsh() { return SONGS.forest; },
-  get grotto() { return SONGS.cave; },
-  get library() { return SONGS.title; },
+  // Moonlit Marsh (Lv 12-18): night bog in G dorian, a gentle 12/8 swing (triplet grid), marimba lead,
+  // kalimba droplets, hollow reed pad, cricket-ish hats. A (bars 1-4) / B (5-8, owl-like flute answers) / A'.
+  marsh: {
+    bpm: 100, beats: 4, res: 3,
+    chords: ['Gm', 'C', 'Gm', 'Dm', 'Ebmaj7', 'Bb', 'Cm', 'D7', 'Gm', 'C', 'Eb D7', 'Gm'],
+    melody: `D5 - - | . . Bb4 | D5 - - | G5 - F5 |
+             E5 - - | . . D5 | C5 - - | . . G4 |
+             Bb4 - D5 | G5 - - | F5 - D5 | Bb4 - - |
+             A4 - - | . . D5 | F5 - E5 | D5 - - |
+             G5 - - | - - - | F5 - Eb5 | D5 - - |
+             D5 - - | - - - | C5 - Bb4 | D5 - F5 |
+             Eb5 - - | G5 - Eb5 | D5 - C5 | Eb5 - - |
+             F#5 - A5 | D6 - - | C6 - A5 | F#5 - - |
+             D5 - - | . . Bb4 | D5 - - | G5 - F5 |
+             E5 - - | . . D5 | C5 - E5 | G5 - - |
+             G5 - - F5 - Eb5 D5 - - F#5 - A5 |
+             G5 - - | - - - | D5 - - | . . .`,
+    lead: 'marimba', leadVol: 0.12,
+    counter: { notes: `. . . . . . . . . . . . | . . . . . . . . . . . . | . . . . . . . . . . . . | . . . . . . . . . . . . |
+                       Bb4 - - - - - - - - - - - | F4 - - - - - - - - - - - | G4 - - - - - - - - - - - | A4 - - - - - - - - - - - |
+                       D5 - - - - - - - - - - - | E5 - - - - - - - - - - - | Bb4 - - - - - A4 - - - - - | G4 - - - - - - - - - - -`,
+               inst: 'flute', vol: 0.05, everyOther: true },
+    bass: { pattern: ['R - - | . . . | 5 - - | . . .', 'R - - | . . . | 5 - - | 3 - 5'], inst: 'sine', octave: 2, vol: 0.32 },
+    pad: { octave: 3, cutoff: 520, vol: 0.045, wave: 'square' },
+    arp: { pattern: ['. . . | . . 2 | . . . | 4 . .', '. . . | . . . | . 3 . | . . 5'], octave: 5, inst: 'kalimba', vol: 0.045 },
+    drums: { kick: ['x . . | . . . | x . .  | . . .'], hat: ['x x . | . . . | . . x | x . .', '. . x | x . . | x x . | . . .'], vol: 0.4 },
+    echo: { time: 0.4, feedback: 0.3, mix: 0.2 },
+  },
+  // Glacier Grotto (Lv 22-30): deep ice cave in C# minor, slow and reverberant. Sparse crystal-bell melody,
+  // continuous 16th minor arpeggio shimmer (res 4), sine-drone bass + sine pad, long dotted echo, glacial boom.
+  grotto: {
+    bpm: 66, beats: 4, res: 4,
+    chords: ['C#m', 'Amaj7', 'E', 'B', 'C#m', 'F#m', 'Amaj7', 'Bsus4 G#7'],
+    melody: `G#5 - - - - - - - | E5 - - - F#5 - G#5 - |
+             A5 - - - - - - - | G#5 - - - E5 - - - |
+             B5 - - - - - G#5 - | E5 - - - - - - - |
+             F#5 - - - D#5 - - - | F#5 - G#5 - B5 - - - |
+             C#6 - - - - - - - | B5 - G#5 - E5 - - - |
+             A5 - - - - - C#6 - | B5 - - - A5 - - - |
+             C#6 - - - - - - - | B5 - A5 - G#5 - - - |
+             E5 - - - F#5 - - - | D#5 - - - C5 - . .`,
+    lead: 'crystal', leadVol: 0.09,
+    bass: { pattern: ['R - - - - - - - - - - - 5 - - -', 'R - - - - - - - - - - - - - - -'], inst: 'sine', octave: 2, vol: 0.34 },
+    pad: { octave: 4, cutoff: 3000, vol: 0.04, wave: 'sine' },
+    arp: { pattern: ['0 . 1 . 2 . 3 . 4 . 3 . 2 . 1 .', '0 . 1 2 . 3 . 4 . 5 . 4 3 . 2 .'], octave: 5, inst: 'crystal', vol: 0.032 },
+    drums: { kick: ['x . . . . . . . . . . . . . . .', '. . . . . . . . . . . . . . . .'], hat: ['. . . . . . . . . . . x . . . .', '. . . . . . . . . . . . . . x .'], vol: 0.3 },
+    echo: { time: 0.682, feedback: 0.5, mix: 0.42 },
+  },
+  // The Restricted Stacks (Lv 32-42): C minor, harpsichord lead, ticking clock. The title theme's opening
+  // (G C E G / F E D) returns in minor at double speed (bars 1, 9). A (1-4) / B (5-8 rising sequence) / A' (9-12).
+  library: {
+    bpm: 112, beats: 4, res: 2,
+    chords: ['Cm', 'Fm', 'G7', 'Cm', 'Ab', 'Fm', 'Ddim', 'G7', 'Cm', 'Fm', 'Ab Ddim', 'Fm G7'],
+    melody: `G4 C5 Eb5 G5 F5 Eb5 D5 . |
+             Ab4 C5 F5 Ab5 G5 F5 Eb5 . |
+             B4 D5 F5 G5 F5 D5 B4 . |
+             C5 - - - . . G4 C5 |
+             Eb5 - C5 Eb5 Ab5 - G5 F5 |
+             F5 - Ab5 - C6 - Bb5 Ab5 |
+             Ab5 F5 D5 F5 Ab5 F5 D5 . |
+             G5 - F5 - D5 - B4 - |
+             G4 C5 Eb5 G5 C6 Bb5 Ab5 . |
+             Ab4 C5 F5 Ab5 G5 - F5 - |
+             C6 - Ab5 - F5 - D5 - |
+             Ab5 - F5 - D5 B4 G4 .`,
+    lead: 'harpsichord', leadVol: 0.1,
+    counter: { notes: `Eb4 - - - - - - - | F4 - - - - - - - | D4 - - - - - - - | Eb4 - - - - - - - |
+                       C4 - - - - - - - | Ab4 - - - - - - - | F4 - - - - - - - | D4 - - - B3 - - - |
+                       G4 - - - - - - - | C5 - - - - - - - | Eb4 - - - Ab4 - - - | F4 - - - D4 - - -`, inst: 'flute', vol: 0.05, everyOther: true },
+    bass: { pattern: ['R . 3 . 5 . 3 .', 'R . . R 5 . . 5'], inst: 'tri', octave: 2, vol: 0.3 },
+    pad: { octave: 3, cutoff: 1100, vol: 0.06, wave: 'sawtooth' },
+    arp: { pattern: ['2 . . . . . 4 .', '. . . . 3 . . .'], octave: 6, inst: 'musicbox', vol: 0.025, everyOther: true },
+    drums: { kick: ['x . . . . . . .'], tick: ['x . o . x . o .'], vol: 0.5 },
+    echo: { time: 0.268, feedback: 0.25, mix: 0.15 },
+  },
 };
 
 // ───────────────────────────── parsing ─────────────────────────────
@@ -266,6 +337,26 @@ function playLead(s: SynthCtx, inst: LeadInst, f: number, dur: number, v: number
       tone(s, { type: 'triangle', f: f * 2, dur: 0.25, v: v * 0.25, dest });
       bell(s, f * 2, 0, 0.35, v * 0.2, 4, 0.8, dest);
       break;
+    case 'marimba':
+      tone(s, { type: 'sine', f, dur: Math.min(0.6, dur + 0.15), v, a: 0.004, dest });
+      tone(s, { type: 'sine', f: f * 4, dur: 0.1, v: v * 0.3, a: 0.003, dest });
+      tone(s, { type: 'triangle', f: f * 0.5, dur: 0.18, v: v * 0.25, a: 0.004, dest });
+      break;
+    case 'kalimba':
+      tone(s, { type: 'sine', f, dur: Math.max(0.5, Math.min(1.0, dur * 1.2)), v, a: 0.003, dest });
+      tone(s, { type: 'sine', f: f * 5.4, dur: 0.07, v: v * 0.3, a: 0.002, dest });
+      break;
+    case 'crystal':
+      bell(s, f, 0, Math.max(1.4, dur * 1.3), v * 0.7, 4.2, 1.1, dest);
+      tone(s, { type: 'sine', f, dur: Math.max(1.4, dur * 1.3), v: v * 0.45, a: 0.004, dest });
+      tone(s, { type: 'sine', f: f * 2, detune: 7, dur: 0.7, v: v * 0.15, a: 0.004, dest });
+      break;
+    case 'harpsichord':
+      tone(s, { type: 'sawtooth', f, dur: Math.min(0.45, dur + 0.1), v: v * 0.55, a: 0.002, filter: { type: 'lowpass', f: 5000, f2: 900, at: 0.25, q: 1.5 }, dest });
+      tone(s, { type: 'square', f: f * 2, dur: 0.16, v: v * 0.2, a: 0.002, filter: { type: 'lowpass', f: 4000 }, dest });
+      tone(s, { type: 'triangle', f, dur: Math.min(0.4, dur + 0.08), v: v * 0.35, a: 0.002, dest });
+      noise(s, { dur: 0.012, v: v * 0.5, filter: { type: 'bandpass', f: 3500, q: 1 }, dest });
+      break;
   }
 }
 
@@ -302,6 +393,12 @@ function snare(s: SynthCtx, v: number) {
 }
 function hat(s: SynthCtx, v: number, open: boolean) {
   noise(s, { dur: open ? 0.16 : 0.04, v: (open ? 0.12 : 0.1) * v, filter: { type: 'highpass', f: 7500 } });
+}
+/** Clock click: short bandpassed noise + pitched blip; `tock` is the lower, softer beat. */
+function clockTick(s: SynthCtx, v: number, tock: boolean) {
+  const f = tock ? 1700 : 2700;
+  noise(s, { dur: 0.03, v: 0.18 * v, filter: { type: 'bandpass', f, q: 3 } });
+  tone(s, { type: 'sine', f, f2: f * 0.6, glide: 0.02, dur: 0.035, v: 0.12 * v });
 }
 function crash(s: SynthCtx, v: number) {
   noise(s, { dur: 1.4, v: 0.14 * v, filter: { type: 'highpass', f: 4500 }, filter2: { type: 'bandpass', f: 8000, q: 0.5 } });
@@ -463,6 +560,8 @@ export class SongPlayer {
       if (k === 'x' || k === 'o') kick(s, dv * (k === 'o' ? 1.2 : 1));
       if (sn === 'x' || sn === 'o') snare(s, dv * (sn === 'o' ? 1.2 : 1));
       if (h === 'x' || h === 'o') hat({ ...s, t0: t + hz() }, dv * (inBar % 2 ? 0.7 : 1), h === 'o');
+      const tk = at(d.tick);
+      if (tk === 'x' || tk === 'o') clockTick(s, dv * (tk === 'o' ? 0.8 : 1), tk === 'o');
       if (d.crashOnLoop && step === 0 && this.pass > 0) crash(s, dv);
     }
   }
